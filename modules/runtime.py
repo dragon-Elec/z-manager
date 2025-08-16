@@ -12,7 +12,7 @@ import logging
 from pathlib import Path
 from typing import List, Optional
 
-from core.system import sysfs_read, sysfs_write
+from core.os_utils import sysfs_read, sysfs_write
 
 _LOGGER = logging.getLogger(__name__)
 

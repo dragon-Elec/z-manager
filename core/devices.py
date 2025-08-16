@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional, Dict, Any, List, Tuple
 
-from .system import (
+from core.os_utils import (
     run,
     SystemCommandError,
     ValidationError,

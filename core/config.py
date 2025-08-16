@@ -5,7 +5,7 @@ from typing import Dict, Any, Optional, Tuple
 import configparser
 import io
 
-from .system import systemd_daemon_reload, systemd_try_restart, SystemCommandError
+from core.os_utils import systemd_daemon_reload, systemd_try_restart, SystemCommandError
 
 # Canonical config path for systemd zram-generator
 CONFIG_PATH = "/etc/systemd/zram-generator.conf"

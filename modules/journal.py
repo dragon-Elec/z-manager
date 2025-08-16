@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Optional, Dict, Any, Tuple
 
-from .system import run
+from core.os_utils import run
 
 
 @dataclass(frozen=True)

@@ -5,7 +5,7 @@ import platform
 from dataclasses import dataclass
 from typing import Optional, List
 
-from .system import run
+from core.os_utils import run
 
 
 @dataclass(frozen=True)
