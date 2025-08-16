@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- zman/ui/tune_page.ui -->
+<interface>
+
+  <!-- 
+    Part 1: The Template/Blueprint for the "Tune" Page
+  -->
+  <template class="TunePage" parent="AdwPreferencesPage">
+    <property name="title">Tune System</property>
+    <property name="icon-name">emblem-synchronizing-symbolic</property>
+
+    <!-- Group 1: Basic Profile -->
+    <child>
+      <object class="AdwPreferencesGroup">
+        <property name="title">Performance Profile</property>
+        <property name="description">Apply sysctl settings for improved desktop and gaming responsiveness.</property>
+        <child>
+          <object class="AdwSwitchRow" id="performance_profile_switch">
+            <property name="title">Enable Recommended Performance Profile</property>
+            <property name="subtitle">Sets vm.swappiness=180 and vm.page-cluster=0</property>
+          </object>
+        </child>
+      </object>
+    </child>
+    
+    <!-- Group 2: Advanced Kernel Tuning -->
+    <child>
+      <object class="AdwPreferencesGroup">
+        <property name="title">Advanced Kernel Tuning</property>
+        <property name="description">Adjust core kernel parameters. Incorrect settings may impact performance. Changes are applied instantly.</property>
+
+        <child>
+          <object class="AdwSpinRow" id="vfs_cache_row">
+            <property name="title">Filesystem Cache Pressure</property>
+            <property name="subtitle">Controls how aggressively the kernel reclaims filesystem cache. Default: 100.</property>
+            <property name="adjustment">
+              <object class="GtkAdjustment">
+                <property name="lower">0</property>
+                <property name="upper">500</property>
+                <property name="value">100</property>
+                <property name="step-increment">10</property>
+              </object>
+            </property>
+          </object>
+        </child>
+
+        <child>
+          <object class="AdwComboRow" id="cpu_governor_row">
+            <property name="title">CPU Scaling Governor</property>
+            <property name="subtitle">'performance' for responsiveness, 'schedutil' for balance.</property>
+            <property name="model">
+              <object class="GtkStringList">
+                <items>
+                  <item>performance</item>
+                  <item>schedutil</item>
+                  <item>powersave</item>
+                </items>
+              </object>
+            </property>
+          </object>
+        </child>
+      </object>
+    </child>
+    
+    <!-- Group 3: Writeback Device Tuning -->
+    <child>
+      <object class="AdwPreferencesGroup">
+        <property name="title">Writeback Device Tuning</property>
+        <property name="description">Optimize I/O for the physical disk used for writeback. These settings only have an effect if a 'writeback-device' is set in the Configure tab.</property>
+        <child>
+          <object class="AdwComboRow" id="io_scheduler_row">
+            <property name="title">I/O Scheduler</property>
+            <property name="subtitle">'none' or 'kyber' for NVMe, 'bfq' for HDD.</property>
+            <property name="model">
+              <object class="GtkStringList">
+                <items>
+                  <item>mq-deadline</item>
+                  <item>kyber</item>
+                  <item>bfq</item>
+                  <item>none</item>
+                </items>
+              </object>
+            </property>
+          </object>
+        </child>
+      </object>
+    </child>
+
+    <!-- Group 4: PSI Monitoring -->
+    <child>
+      <object class="AdwPreferencesGroup">
+        <property name="title">PSI (Pressure Stall Information) Monitoring</property>
+        <property name="description">Enable or disable PSI monitoring. This allows the system to report on CPU, memory, and I/O pressure.</property>
+        <child>
+          <object class="AdwSwitchRow" id="psi_cpu_switch">
+            <property name="title">Enable CPU Pressure Monitoring</property>
+            <property name="subtitle">Monitors for CPU resource contention.</property>
+          </object>
+        </child>
+        <child>
+          <object class="AdwSwitchRow" id="psi_memory_switch">
+            <property name="title">Enable Memory Pressure Monitoring</property>
+            <property name="subtitle">Monitors for memory pressure and potential OOM issues.</property>
+          </object>
+        </child>
+        <child>
+          <object class="AdwSwitchRow" id="psi_io_switch">
+            <property name="title">Enable I/O Pressure Monitoring</property>
+            <property name="subtitle">Monitors for I/O contention and block device delays.</property>
+          </object>
+        </child>
+      </object>
+    </child>
+
+    <!-- Group 5: ZSwap Conflict Resolution -->
+    <child>
+      <object class="AdwPreferencesGroup">
+        <property name="title">ZSwap Conflict Resolution</property>
+        <property name="description">Permanently disable ZSwap for best ZRAM performance. This requires manual steps and a reboot.</property>
+        
+        <child>
+          <object class="AdwActionRow" id="disable_zswap_row">
+            <property name="title">Permanently Disable ZSwap</property>
+            <property name="subtitle">Adds 'zswap.enabled=0' to kernel boot parameters</property>
+            <child>
+              <object class="GtkButton" id="disable_zswap_button">
+                <property name="label">Disable...</property>
+                <property name="valign">center</property>
+                <property name="css-classes">destructive-action</property>
+              </object>
+            </child>
+          </object>
+        </child>
+
+        <child>
+            <object class="AdwBanner" id="zswap_warning_banner">
+                <property name="title">⚠️ Final Steps Required!</property>
+                <property name="button-label">Show Command</property>
+                <property name="revealed">false</property>
+            </object>
+        </child>
+      </object>
+    </child>
+
+  </template>
+
+
+  <!-- 
+    Part 2: The Window Wrapper for Cambalache
+  -->
+  <object class="AdwApplicationWindow" id="main_window">
+    <property name="default-width">600</property>
+    <property name="default-height">800</property>
+    <property name="content">
+      <object class="GtkBox">
+        <property name="orientation">vertical</property>
+        <child>
+          <object class="AdwHeaderBar" />
+        </child>
+        <child>
+          <object class="TunePage"/>
+        </child>
+      </object>
+    </property>
+  </object>
+
+</interface>

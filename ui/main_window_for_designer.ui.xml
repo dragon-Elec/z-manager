@@ -1,0 +1,204 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <!-- 
+    The file should ONLY contain the template definition.
+    Cambalache can open this directly. Your Python code will load it.
+  -->
+  <template class="ConfigurePage" parent="AdwPreferencesPage">
+    <property name="title">Configure ZRAM</property>
+    <property name="icon-name">preferences-system-symbolic</property>
+
+    <!-- Group 0: Profiles -->
+    <child>
+      <object class="AdwPreferencesGroup">
+        <property name="title">Configuration Profiles</property>
+        <property name="description">Load a preset or save your custom settings.</property>
+        <child>
+          <object class="AdwComboRow" id="profile_row">
+            <property name="title">Profile</property>
+            <property name="model">
+              <object class="GtkStringList">
+                <items>
+                  <item>Current System Settings</item>
+                  <item>Desktop / Gaming (Recommended)</item>
+                  <item>Server (Conservative)</item>
+                  <item>Custom Profile 1</item>
+                </items>
+              </object>
+            </property>
+          </object>
+        </child>
+      </object>
+    </child>
+
+    <!-- Group 1: Basic Settings -->
+    <child>
+      <object class="AdwPreferencesGroup">
+        <property name="title">Basic Settings</property>
+        <property name="description">Configure the primary zram0 device.</property>
+        
+        <child>
+          <object class="AdwComboRow" id="size_mode_row">
+            <property name="title">ZRAM Size</property>
+            <property name="model">
+              <object class="GtkStringList">
+                <items>
+                  <item>50% of RAM</item>
+                  <item>100% of RAM</item>
+                  <item>Custom</item>
+                </items>
+              </object>
+            </property>
+            <property name="selected">0</property>
+          </object>
+        </child>
+        <child>
+          <object class="AdwEntryRow" id="custom_size_row">
+            <property name="title">Custom Size (e.g., 8G, 2048M)</property>
+            <property name="text"></property>
+            <property name="visible">false</property> 
+          </object>
+        </child>
+
+        <child>
+          <object class="AdwComboRow" id="algorithm_row">
+            <property name="title">Compression Algorithm</property>
+            <property name="model">
+              <object class="GtkStringList">
+                <items>
+                  <item>zstd</item>
+                  <item>lzo-rle</item>
+                  <item>lz4</item>
+                </items>
+              </object>
+            </property>
+            <property name="selected">0</property>
+          </object>
+        </child>
+
+        <child>
+          <object class="AdwSpinRow" id="priority_row">
+            <property name="title">Swap Priority</property>
+            <property name="subtitle">Higher values are used first. 100 is a good default.</property>
+            <property name="adjustment">
+              <object class="GtkAdjustment">
+                <property name="lower">0</property>
+                <property name="upper">32767</property>
+                <property name="value">100</property>
+                <property name="step-increment">1</property>
+              </object>
+            </property>
+          </object>
+        </child>
+      </object>
+    </child>
+    
+    <!-- Group 2: Activation Rules (This is the host limit feature) -->
+    <child>
+      <object class="AdwPreferencesGroup">
+          <property name="title">Activation Rules</property>
+          <child>
+              <object class="AdwSwitchRow" id="host_memory_limit_switch">
+                  <property name="title">Only enable if host has enough RAM</property>
+                  <property name="subtitle">Prevents ZRAM setup on memory-limited systems</property>
+              </object>
+          </child>
+          <child>
+              <object class="AdwSpinRow" id="host_memory_limit_value">
+                  <property name="title">Minimum Host RAM (MB)</property>
+                  <property name="adjustment">
+                      <object class="GtkAdjustment">
+                          <property name="lower">1024</property>
+                          <property name="upper">65536</property>
+                          <property name="value">2048</property>
+                          <property name="step-increment">512</property>
+                      </object>
+                  </property>
+                  <property name="visible">false</property>
+              </object>
+          </child>
+      </object>
+    </child>
+
+    <!-- Group 3: Advanced Settings -->
+    <child>
+      <object class="AdwPreferencesGroup">
+        <property name="title">Advanced Settings</property>
+        <child>
+          <object class="AdwExpanderRow" id="advanced_expander">
+            <property name="title">Advanced Device Options</property>
+            <property name="subtitle">Configure writeback and filesystem usage</property>
+            
+            <child>
+              <object class="AdwActionRow">
+                <property name="title">Use as Filesystem (not Swap)</property>
+                <property name="subtitle">Formats the device for temporary storage.</property>
+                <child>
+                    <object class="GtkSwitch" id="fs_mode_switch">
+                      <property name="valign">center</property>
+                    </object>
+                </child>
+              </object>
+            </child>
+
+            <child>
+              <object class="AdwComboRow" id="fs_type_row">
+                <property name="title">Filesystem Type</property>
+                <property name="model">
+                  <object class="GtkStringList">
+                    <items><item>ext2</item><item>ext4</item><item>btrfs</item></items>
+                  </object>
+                </property>
+                <property name="visible">false</property>
+              </object>
+            </child>
+
+            <child>
+              <object class="AdwEntryRow" id="mount_point_row">
+                <property name="title">Mount Point</property>
+                <property name="text">/tmp/zram_fs</property>
+                <property name="visible">false</property>
+              </object>
+            </child>
+
+            <child>
+              <object class="AdwEntryRow" id="writeback_row">
+                <property name="title">Writeback Device</property>
+                <!-- 
+                  FIX: The 'subtitle' and 'placeholder-text' properties were removed from here.
+                  'subtitle' is not supported on AdwEntryRow.
+                  'placeholder-text' caused a compatibility error with the designer.
+                  The description can be added via a tooltip or handled in code if needed.
+                -->
+                <property name="tooltip-text">Device for incompressible pages (e.g., /dev/nvme0n1p3)</property>
+              </object>
+            </child>
+          </object>
+        </child>
+      </object>
+    </child>
+
+    <!-- Bottom Action Bar for Apply/Revert -->
+    <child>
+      <object class="AdwHeaderBar">
+          <property name="css-classes">flat</property>
+          <child type="start">
+              <object class="GtkButton" id="revert_button">
+                  <property name="label">Revert</property>
+                  <property name="css-classes">destructive-action</property>
+                  <property name="sensitive">false</property>
+                  <property name="tooltip-text">Undo changes and reload current system settings</property>
+              </object>
+          </child>
+          <child type="end">
+              <object class="GtkButton" id="apply_button">
+                  <property name="label">Apply Changes</property>
+                  <property name="css-classes">suggested-action</property>
+                  <property name="sensitive">false</property>
+                  <property name="tooltip-text">Write configuration and restart ZRAM service</property>
+              </object>
+          </child>
+      </object>
+    </child>
+  </template>
+</interface>
