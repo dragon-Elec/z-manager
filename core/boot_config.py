@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Optional
 
 from core.os_utils import run, SystemCommandError
-from .utils import atomic_write_to_file, read_file_content
+from ..utils import atomic_write_to_file, read_file_content
 
 _LOGGER = logging.getLogger(__name__)
 

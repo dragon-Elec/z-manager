@@ -5,14 +5,14 @@ import tempfile
 from typing import List, Dict, Any
 
 # Prefer core system primitives; utils will no longer duplicate them.
-from .core.system import (
+from .core.os_utils import (
     run as core_run,
     is_block_device as core_is_block_device,
     sysfs_read as core_sysfs_read,
     sysfs_write as core_sysfs_write,
 )
 # Device listings should come from core
-from .core.devices import list_devices
+from .core.zdevice_ctl import list_devices
 
 def format_bytes(size_bytes: int) -> str:
     if size_bytes == 0:

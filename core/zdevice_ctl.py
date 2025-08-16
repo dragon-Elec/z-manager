@@ -302,7 +302,72 @@ def persist_writeback(device_name: str, writeback_device: Optional[str], apply_n
     except Exception as e:
         return PersistResult(success=False, device=device_name, applied=False, message=f"Unexpected error: {e}")
 
-# ============ Orchestration API ============
+# ============ Orchestration API ============ 
+
+def _get_live_writeback_device(device_name: str) -> str:
+    """Reads sysfs to get the current backing device for a zram device."""
+    current_backing = _get_sysfs(device_name, "backing_dev")
+    # Some kernels use an empty string when none; normalize to empty string.
+    return current_backing if current_backing is not None else ""
+
+def _is_writeback_state_correct(current_backing_device: str, desired_writeback_device: Optional[str]) -> bool:
+    """Compares the live state to the desired state."""
+    if desired_writeback_device is None:
+        # We want no writeback, so state is correct if there is no current backing device
+        return not bool(current_backing_device)
+    else:
+        # We want a specific writeback device
+        return current_backing_device == desired_writeback_device
+
+def _apply_live_writeback_change(
+    device_name: str,
+    desired_writeback: Optional[str],
+    force: bool,
+    active: bool,
+) -> Tuple[bool, List[Action]]:
+    """
+    Performs the zramctl --reset and zramctl --create operations.
+    Returns a tuple of (success, list_of_actions).
+    """
+    actions: List[Action] = []
+
+    if active and not force:
+        actions.append(Action(name="precondition", success=False, message=f"{device_name} is active; use force to recreate"))
+        return False, actions
+
+    params = _read_params_best_effort(device_name)
+    size = params.get("disksize") or "1G"
+    algorithm = params.get("algorithm")
+    streams = params.get("streams")
+
+    dev_path = f"/dev/{device_name}"
+
+    if active:
+        try:
+            zramctl_reset(dev_path)
+            actions.append(Action(name="reset", success=True, message="zramctl --reset"))
+        except SystemCommandError as e:
+            actions.append(Action(name="reset", success=False, message=str(e)))
+            return False, actions
+
+    try:
+        zramctl_create(
+            dev_path,
+            size=size,
+            algorithm=algorithm,
+            streams=streams,
+            writeback_device=desired_writeback,
+        )
+        actions.append(Action(
+            name="recreate",
+            success=True,
+            message=f"size={size} algo={algorithm or 'default'} streams={streams or 'default'} writeback={desired_writeback or 'None'}",
+        ))
+    except SystemCommandError as e:
+        actions.append(Action(name="recreate", success=False, message=str(e)))
+        return False, actions
+
+    return True, actions
 
 def restart_device_unit(device_name: str, mode: str = "try") -> UnitResult:
     """
@@ -343,7 +408,7 @@ def ensure_writeback_state(
     """
     actions: List[Action] = []
 
-    # Validate desired target if provided
+    # 1. Validate desired target if provided
     if desired_writeback:
         if not is_block_device(desired_writeback):
             return OrchestrationResult(
@@ -354,21 +419,12 @@ def ensure_writeback_state(
                 message="validation failed",
             )
 
-    # Detect current state best-effort from sysfs
-    current_backing = _get_sysfs(device_name, "backing_dev")
-    if current_backing is None:
-        # Some kernels use empty string when none; normalize
-        current_backing = ""
+    # 2. Get live state
+    current_backing = _get_live_writeback_device(device_name)
 
-    need_change = False
-    if desired_writeback is None:
-        need_change = bool(current_backing)
-    else:
-        need_change = (current_backing != desired_writeback)
-
-    if not need_change:
+    # 3. Check if state is already correct
+    if _is_writeback_state_correct(current_backing, desired_writeback):
         actions.append(Action(name="noop-already-desired", success=True, message=f"backing_dev already '{current_backing or 'None'}'"))
-        # Optionally restart unit if requested even when no change
         unit_res = restart_device_unit(device_name, mode=restart_mode)
         actions.append(Action(name=f"restart({restart_mode})", success=unit_res.success, message=unit_res.message))
         return OrchestrationResult(
@@ -379,64 +435,21 @@ def ensure_writeback_state(
             message="no changes required",
         )
 
-    # Change needed
+    # 4. Apply the change
     active = _device_active(device_name)
-    if active and not force:
-        return OrchestrationResult(
-            success=False,
-            device=device_name,
-            desired_writeback=desired_writeback,
-            actions=[Action(name="precondition", success=False, message=f"{device_name} is active; use force to recreate")],
-            message="device active",
-        )
+    success, apply_actions = _apply_live_writeback_change(device_name, desired_writeback, force, active)
+    actions.extend(apply_actions)
 
-    params = _read_params_best_effort(device_name)
-    size = params.get("disksize") or "1G"
-    algorithm = params.get("algorithm")
-    streams = params.get("streams")
-
-    dev_path = f"/dev/{device_name}"
-
-    # Reset if active
-    if active:
-        try:
-            zramctl_reset(dev_path)
-            actions.append(Action(name="reset", success=True, message="zramctl --reset"))
-        except SystemCommandError as e:
-            actions.append(Action(name="reset", success=False, message=str(e)))
-            return OrchestrationResult(
-                success=False,
-                device=device_name,
-                desired_writeback=desired_writeback,
-                actions=actions,
-                message="reset failed",
-            )
-
-    # Re-create with or without writeback
-    try:
-        zramctl_create(
-            dev_path,
-            size=size,
-            algorithm=algorithm,
-            streams=streams,
-            writeback_device=desired_writeback if desired_writeback else None,
-        )
-        actions.append(Action(
-            name="recreate",
-            success=True,
-            message=f"size={size} algo={algorithm or 'default'} streams={streams or 'default'} writeback={desired_writeback or 'None'}",
-        ))
-    except SystemCommandError as e:
-        actions.append(Action(name="recreate", success=False, message=str(e)))
+    if not success:
         return OrchestrationResult(
             success=False,
             device=device_name,
             desired_writeback=desired_writeback,
             actions=actions,
-            message="recreate failed",
+            message="failed to apply live changes",
         )
 
-    # Optional restart
+    # 5. Optional restart
     unit_res = restart_device_unit(device_name, mode=restart_mode)
     actions.append(Action(name=f"restart({restart_mode})", success=unit_res.success, message=unit_res.message))
 
@@ -447,3 +460,4 @@ def ensure_writeback_state(
         actions=actions,
         message="applied",
     )
+
