@@ -3,7 +3,8 @@ from __future__ import annotations
 import os
 import subprocess
 from dataclasses import dataclass
-from typing import Optional, Tuple, Dict, Any, List
+from pathlib import Path
+from typing import Optional, Tuple, Dict, Any, List, Union
 
 
 # ============ Domain Errors ============
@@ -61,8 +62,10 @@ def is_block_device(path: str) -> bool:
 
 # ============ Sysfs helpers ============
 
-def sysfs_read(path: str) -> Optional[str]:
+def sysfs_read(path: Union[str, Path]) -> Optional[str]:
+    """Safely reads a sysfs file, accepting either a string or Path object."""
     try:
+        # The Path object can read itself, no need to convert if it's already one.
         with open(path, "r", encoding="utf-8") as f:
             return f.read().strip()
     except FileNotFoundError:
@@ -71,7 +74,8 @@ def sysfs_read(path: str) -> Optional[str]:
         return None
 
 
-def sysfs_write(path: str, value: str) -> Tuple[bool, Optional[str]]:
+def sysfs_write(path: Union[str, Path], value: str) -> Tuple[bool, Optional[str]]:
+    """Safely writes to a sysfs file, accepting either a string or Path object."""
     try:
         with open(path, "w", encoding="utf-8") as f:
             f.write(value)
