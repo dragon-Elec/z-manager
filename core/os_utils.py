@@ -231,3 +231,13 @@ def parse_size_to_bytes(size_str: str) -> int:
         return int(size_str)
     except (ValueError, TypeError):
         return 0
+
+def get_swappiness() -> int | None:
+    """Reads the current system swappiness value."""
+    content = read_file("/proc/sys/vm/swappiness")
+    if content:
+        try:
+            return int(content.strip())
+        except (ValueError, TypeError):
+            return None
+    return None
