@@ -1,3 +1,4 @@
+# zman/core/monitoring.py
 """
 Provides real-time monitoring functions (generators) for system statistics.
 These are intended to be used by a UI for live-updating dashboards.
@@ -31,7 +32,7 @@ def watch_device_usage(device_name: str, interval: float = 1.0) -> Iterator[int]
     while True:
         try:
             status = get_writeback_status(device_name)
-            
+
             # The sysfs file might not exist if the device is reset
             if status and status.orig_data_size is not None:
                 # The value from sysfs is a string representing bytes. Convert to int.
@@ -41,7 +42,7 @@ def watch_device_usage(device_name: str, interval: float = 1.0) -> Iterator[int]
                 # If status is None or size is not available, the device might be gone.
                 _LOGGER.warning(f"Stopping usage watch for '{device_name}': device or stats are no longer available.")
                 break
-                
+
             time.sleep(interval)
         except (ValueError, TypeError) as e:
             _LOGGER.error(f"Could not parse usage for '{device_name}': {e}. Stopping watch.")

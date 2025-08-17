@@ -1,3 +1,4 @@
+# zman/core/runtime.py
 """
 Manages live, volatile system settings.
 
@@ -42,7 +43,7 @@ def set_cpu_governor(governor: str) -> bool:
     cpu_glob_path = Path("/sys/devices/system/cpu/")
     for gov_path in cpu_glob_path.glob("cpu*/cpufreq/scaling_governor"):
         found_any_governor_files = True
-        
+
         success, _ = sysfs_write(gov_path, governor)
         if not success:
             all_success = False
@@ -51,7 +52,7 @@ def set_cpu_governor(governor: str) -> bool:
     if not found_any_governor_files:
         _LOGGER.error("Could not find any CPU governor files in /sys. Is cpufreq enabled?")
         return False
-        
+
     return all_success
 
 

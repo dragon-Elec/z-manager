@@ -1,3 +1,5 @@
+# zman/core/health.py
+
 from __future__ import annotations
 
 import os
@@ -153,7 +155,7 @@ def get_all_swaps() -> List[SwapDevice]:
             size_kb = int(parts[2])
             used_kb = int(parts[3])
             priority = int(parts[4])
-            
+
             swap_devices.append(SwapDevice(
                 name=name,
                 type=swap_type,
@@ -164,5 +166,5 @@ def get_all_swaps() -> List[SwapDevice]:
         except (ValueError, IndexError):
             # Gracefully skip any line that can't be parsed
             continue
-            
+
     return swap_devices

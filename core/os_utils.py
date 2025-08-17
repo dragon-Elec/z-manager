@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Optional, Tuple, Dict, Any, List, Union
 
 
-# ============ Domain Errors ============ 
+# ============ Domain Errors ============
 
 class SystemCommandError(RuntimeError):
     def __init__(self, cmd: List[str], returncode: int, stdout: str, stderr: str):
@@ -30,7 +30,7 @@ class NotBlockDeviceError(ValidationError):
     pass
 
 
-# ============ Low-level helpers ============ 
+# ============ Low-level helpers ============
 
 @dataclass(frozen=True)
 class CmdResult:
@@ -64,7 +64,7 @@ def is_block_device(path: str) -> bool:
         return False
 
 
-# ============ Sysfs helpers ============ 
+# ============ Sysfs helpers ============
 
 def read_file(path: Union[str, Path]) -> Optional[str]:
     """Safely reads a sysfs file, accepting either a string or Path object."""
@@ -93,7 +93,7 @@ def zram_sysfs_dir(device_name: str) -> str:
     return f"/sys/block/{device_name}"
 
 
-# ============ zramctl wrappers ============ 
+# ============ zramctl wrappers ============
 
 
 def zramctl_reset(device_path: str) -> None:
@@ -132,7 +132,7 @@ def zramctl_info_json() -> Optional[str]:
     return None
 
 
-# ============ systemd wrappers ============ 
+# ============ systemd wrappers ============
 
 def systemd_daemon_reload() -> None:
     run(["systemctl", "daemon-reload"], check=True)
@@ -149,7 +149,7 @@ def systemd_try_restart(service: str) -> Tuple[bool, Optional[str]]:
     return False, r.err.strip() or r.out.strip() or f"restart {service} failed"
 
 
-# ============ discovery helpers ============ 
+# ============ discovery helpers ============
 
 def parse_zramctl_table() -> List[Dict[str, Any]]:
     """
