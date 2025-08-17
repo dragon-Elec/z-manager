@@ -1,17 +1,21 @@
+# zman/core/os_utils.py
+
 from __future__ import annotations
 
 import os
 import subprocess
+import shutil
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Tuple, Dict, Any, List, Union
 
 
-# ============ Domain Errors ============
+# ============ Domain Errors ============ 
 
 class SystemCommandError(RuntimeError):
     def __init__(self, cmd: List[str], returncode: int, stdout: str, stderr: str):
-        super().__init__(f"Command failed: {' '.join(cmd)} (code {returncode})\n{stderr.strip()}")
+        super().__init__(f"Command failed: {" ".join(cmd)} (code {returncode})\n{stderr.strip()}")
         self.cmd = cmd
         self.returncode = returncode
         self.stdout = stdout
@@ -26,7 +30,7 @@ class NotBlockDeviceError(ValidationError):
     pass
 
 
-# ============ Low-level helpers ============
+# ============ Low-level helpers ============ 
 
 @dataclass(frozen=True)
 class CmdResult:
@@ -60,9 +64,9 @@ def is_block_device(path: str) -> bool:
         return False
 
 
-# ============ Sysfs helpers ============
+# ============ Sysfs helpers ============ 
 
-def sysfs_read(path: Union[str, Path]) -> Optional[str]:
+def read_file(path: Union[str, Path]) -> Optional[str]:
     """Safely reads a sysfs file, accepting either a string or Path object."""
     try:
         # The Path object can read itself, no need to convert if it's already one.
@@ -89,7 +93,8 @@ def zram_sysfs_dir(device_name: str) -> str:
     return f"/sys/block/{device_name}"
 
 
-# ============ zramctl wrappers ============
+# ============ zramctl wrappers ============ 
+
 
 def zramctl_reset(device_path: str) -> None:
     run(["zramctl", "--reset", device_path], check=True)
@@ -127,7 +132,7 @@ def zramctl_info_json() -> Optional[str]:
     return None
 
 
-# ============ systemd wrappers ============
+# ============ systemd wrappers ============ 
 
 def systemd_daemon_reload() -> None:
     run(["systemctl", "daemon-reload"], check=True)
@@ -144,7 +149,7 @@ def systemd_try_restart(service: str) -> Tuple[bool, Optional[str]]:
     return False, r.err.strip() or r.out.strip() or f"restart {service} failed"
 
 
-# ============ discovery helpers ============
+# ============ discovery helpers ============ 
 
 def parse_zramctl_table() -> List[Dict[str, Any]]:
     """
@@ -186,3 +191,43 @@ def parse_zramctl_table() -> List[Dict[str, Any]]:
         # ratio is not always present in table; compute elsewhere if needed
         devices.append(info)
     return devices
+
+
+def is_root() -> bool:
+    """Checks if the script is running with root privileges."""
+    return os.geteuid() == 0
+
+def atomic_write_to_file(file_path: str, content: str) -> tuple[bool, str | None]:
+    """Safely writes content to a system file using an atomic move operation."""
+    try:
+        dir_name = os.path.dirname(file_path)
+        os.makedirs(dir_name, exist_ok=True)
+        fd, temp_path = tempfile.mkstemp(dir=dir_name, text=True)
+        with os.fdopen(fd, 'w') as f:
+            f.write(content)
+        shutil.move(temp_path, file_path)
+        os.chmod(file_path, 0o644)
+        return True, None
+    except Exception as e:
+        if 'temp_path' in locals() and os.path.exists(temp_path):
+            os.remove(temp_path)
+        return False, str(e)
+
+def parse_size_to_bytes(size_str: str) -> int:
+    """Converts a size string like '4G' or '512M' to bytes."""
+    if not isinstance(size_str, str):
+        return 0
+    size_str = size_str.upper().strip()
+    unit_multipliers = {'B': 1, 'K': 1024, 'M': 1024**2, 'G': 1024**3, 'T': 1024**4}
+    unit = size_str[-1] if size_str else ''
+    if unit in unit_multipliers:
+        try:
+            numeric_part = size_str[:-1].strip()
+            value = float(numeric_part)
+            return int(value * unit_multipliers[unit])
+        except (ValueError, IndexError):
+            return 0
+    try:
+        return int(size_str)
+    except (ValueError, TypeError):
+        return 0

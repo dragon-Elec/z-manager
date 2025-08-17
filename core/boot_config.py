@@ -1,4 +1,4 @@
-# zman/core/persist.py
+# zman/core/boot_config.py
 """
 Manages persistent, boot-time system configuration.
 
@@ -13,8 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from core.os_utils import run, SystemCommandError
-from ..utils import atomic_write_to_file, read_file_content
+from .os_utils import run, SystemCommandError, atomic_write_to_file, read_file
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -63,7 +62,7 @@ def apply_sysctl_profile(enable: bool) -> TuneResult:
     Idempotently enables or disables the optimal sysctl performance profile.
     """
     if enable:
-        current_content = read_file_content(SYSCTL_CONFIG_PATH)
+        current_content = read_file(SYSCTL_CONFIG_PATH)
         if current_content and current_content.strip() == GAMING_PROFILE_CONTENT:
             _LOGGER.info("Sysctl profile file is already correctly configured.")
             # You might still want to apply it if live settings are different,
@@ -147,4 +146,3 @@ def set_psi_in_grub(enabled: bool) -> TuneResult:
             return TuneResult(success=True, changed=True, message="GRUB configuration to enable PSI was removed.", action_needed="update-grub")
         except Exception as e:
             return TuneResult(success=False, changed=False, message=f"Failed to remove GRUB PSI config: {e}")
-
