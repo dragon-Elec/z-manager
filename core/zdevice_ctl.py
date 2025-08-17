@@ -302,7 +302,7 @@ def persist_writeback(device_name: str, writeback_device: Optional[str], apply_n
     except Exception as e:
         return PersistResult(success=False, device=device_name, applied=False, message=f"Unexpected error: {e}")
 
-# ============ Orchestration API ============ 
+# ============ Orchestration API ============
 
 def _get_live_writeback_device(device_name: str) -> str:
     """Reads sysfs to get the current backing device for a zram device."""
@@ -460,4 +460,3 @@ def ensure_writeback_state(
         actions=actions,
         message="applied",
     )
-

@@ -114,3 +114,41 @@ def apply_config_with_restart(device: str, restart_mode: str = "try") -> ConfigR
     if ok:
         return ConfigResult(success=True, device=device, applied=True, message="restarted", rendered="")
     return ConfigResult(success=False, device=device, applied=False, message=f"restart failed: {err or ''}".strip(), rendered="")
+
+def update_host_limit_config(device: str, min_ram_mb: Optional[int]) -> Tuple[bool, Optional[str], str]:
+    """
+    Update the host-memory-limit for the given device in zram-generator.conf.
+    The value is specified in megabytes.
+    Returns (ok, error, rendered_config_string).
+    """
+    updates: Dict[str, Any] = {}
+    if min_ram_mb is not None and min_ram_mb > 0:
+        # zram-generator expects the value with an M suffix for megabytes.
+        updates["host-memory-limit"] = f"{min_ram_mb}M"
+    else:
+        # If the value is None or 0, we remove the setting from the config.
+        updates["host-memory-limit"] = None
+
+    ok, err, rendered = update_zram_config(device, updates)
+    return ok, err, rendered
+
+
+def update_filesystem_config(device: str, fs_type: Optional[str], mount_point: Optional[str]) -> Tuple[bool, Optional[str], str]:
+    """
+    Update the filesystem settings (fs-type, mount-point) for the given device.
+    If fs_type or mount_point is None, both settings will be removed to disable
+    filesystem mode.
+    Returns (ok, error, rendered_config_string).
+    """
+    updates: Dict[str, Any] = {}
+    if fs_type and mount_point:
+        # Both values are present, so we set them.
+        updates["fs-type"] = fs_type
+        updates["mount-point"] = mount_point
+    else:
+        # One or both are missing, so we ensure both are removed for consistency.
+        updates["fs-type"] = None
+        updates["mount-point"] = None
+
+    ok, err, rendered = update_zram_config(device, updates)
+    return ok, err, rendered

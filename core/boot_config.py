@@ -125,6 +125,9 @@ def set_psi_in_grub(enabled: bool) -> TuneResult:
     """
     Manages the kernel parameter to enable/disable PSI permanently via GRUB.
     This function only writes the file; it does not run update-grub.
+
+    Note: This enables or disables the entire PSI subsystem globally. Individual
+    resources (CPU, memory, I/O) cannot be controlled separately at boot time.
     """
     if enabled:
         if is_kernel_param_active("psi=1"):
@@ -144,3 +147,4 @@ def set_psi_in_grub(enabled: bool) -> TuneResult:
             return TuneResult(success=True, changed=True, message="GRUB configuration to enable PSI was removed.", action_needed="update-grub")
         except Exception as e:
             return TuneResult(success=False, changed=False, message=f"Failed to remove GRUB PSI config: {e}")
+

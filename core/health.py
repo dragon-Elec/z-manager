@@ -9,6 +9,16 @@ from core.os_utils import run
 
 
 @dataclass(frozen=True)
+class SwapDevice:
+    """Represents a single entry from /proc/swaps."""
+    name: str
+    type: str
+    size_kb: int
+    used_kb: int
+    priority: int
+
+
+@dataclass(frozen=True)
 class ZswapStatus:
     available: bool
     enabled: Optional[bool]
@@ -118,3 +128,41 @@ def check_system_health() -> HealthReport:
         devices_summary=_devices_summary(),
         notes=notes,
     )
+
+def get_all_swaps() -> List[SwapDevice]:
+    """
+    Parses /proc/swaps to get a list of all active swap devices on the system.
+    """
+    swap_devices: List[SwapDevice] = []
+    try:
+        with open("/proc/swaps", "r", encoding="utf-8") as f:
+            lines = f.readlines()
+    except FileNotFoundError:
+        return [] # No /proc/swaps means no swaps active
+
+    # Skip the header line (lines[0])
+    for line in lines[1:]:
+        parts = line.strip().split()
+        if len(parts) < 5:
+            continue # Skip malformed lines
+
+        try:
+            # Typical format: /dev/dm-1 partition 8388604 0 -2
+            name = parts[0]
+            swap_type = parts[1]
+            size_kb = int(parts[2])
+            used_kb = int(parts[3])
+            priority = int(parts[4])
+            
+            swap_devices.append(SwapDevice(
+                name=name,
+                type=swap_type,
+                size_kb=size_kb,
+                used_kb=used_kb,
+                priority=priority
+            ))
+        except (ValueError, IndexError):
+            # Gracefully skip any line that can't be parsed
+            continue
+            
+    return swap_devices
