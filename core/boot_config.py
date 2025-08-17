@@ -55,6 +55,17 @@ def is_kernel_param_active(param: str) -> bool:
         return False
 
 
+def get_swappiness() -> int | None:
+    """Reads the current system swappiness value."""
+    content = read_file("/proc/sys/vm/swappiness")
+    if content:
+        try:
+            return int(content.strip())
+        except (ValueError, TypeError):
+            return None
+    return None
+
+
 # --- Core Tuning Functions ---
 
 def apply_sysctl_profile(enable: bool) -> TuneResult:
