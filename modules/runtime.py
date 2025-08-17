@@ -1,4 +1,4 @@
-# zman/core/runtime.py
+# zman/modules/runtime.py
 """
 Manages live, volatile system settings.
 

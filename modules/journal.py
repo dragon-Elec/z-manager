@@ -1,4 +1,4 @@
-# zman/core/journal.py
+# zman/modules/journal.py
 
 from __future__ import annotations
 

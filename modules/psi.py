@@ -1,4 +1,4 @@
-# zman/core/psi.py
+# zman/modules/psi.py
 """
 Provides functions for monitoring Pressure Stall Information (PSI).
 

@@ -1,4 +1,4 @@
-# zman/core/profiles.py
+# zman/modules/profiles.py
 """
 Manages configuration profiles for ZRAM and system tuning.
 

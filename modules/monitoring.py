@@ -1,4 +1,4 @@
-# zman/core/monitoring.py
+# zman/modules/monitoring.py
 """
 Provides real-time monitoring functions (generators) for system statistics.
 These are intended to be used by a UI for live-updating dashboards.
