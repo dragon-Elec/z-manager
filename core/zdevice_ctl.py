@@ -11,7 +11,7 @@ from core.os_utils import (
     ValidationError,
     NotBlockDeviceError,
     is_block_device,
-    sysfs_read,
+    read_file,
     sysfs_write,
     zram_sysfs_dir,
     zramctl_reset,
@@ -88,7 +88,7 @@ class OrchestrationResult:
 
 def _get_sysfs(device_name: str, node: str) -> Optional[str]:
     base = zram_sysfs_dir(device_name)
-    return sysfs_read(f"{base}/{node}")
+    return read_file(f"{base}/{node}")
 
 
 def _compute_ratio(orig: Optional[str], comp: Optional[str]) -> Optional[str]:
@@ -164,12 +164,12 @@ def list_devices() -> List[DeviceInfo]:
 
 def get_writeback_status(device_name: str) -> WritebackStatus:
     base = zram_sysfs_dir(device_name)
-    backing = sysfs_read(f"{base}/backing_dev")
-    mem_used_total = sysfs_read(f"{base}/mem_used_total")
-    orig_data_size = sysfs_read(f"{base}/orig_data_size")
-    compr_data_size = sysfs_read(f"{base}/compr_data_size")
-    num_writeback = sysfs_read(f"{base}/num_writeback")
-    writeback_failed = sysfs_read(f"{base}/writeback_failed")
+    backing = read_file(f"{base}/backing_dev")
+    mem_used_total = read_file(f"{base}/mem_used_total")
+    orig_data_size = read_file(f"{base}/orig_data_size")
+    compr_data_size = read_file(f"{base}/compr_data_size")
+    num_writeback = read_file(f"{base}/num_writeback")
+    writeback_failed = read_file(f"{base}/writeback_failed")
 
     return WritebackStatus(
         device=device_name,
@@ -275,7 +275,7 @@ def persist_writeback(device_name: str, writeback_device: Optional[str], apply_n
     # Prefer Python import if available and side-effect free
     try:
         # Late import to avoid circular deps if project refactors later
-        from ..config_handler import update_zram_config
+        from core.config import update_zram_config
         updates: Dict[str, Any] = {}
         if writeback_device is None:
             updates["writeback-device"] = None

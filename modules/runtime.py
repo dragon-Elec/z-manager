@@ -13,7 +13,7 @@ import logging
 from pathlib import Path
 from typing import List, Optional
 
-from core.os_utils import sysfs_read, sysfs_write
+from core.os_utils import read_file, sysfs_write
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -23,13 +23,13 @@ _LOGGER = logging.getLogger(__name__)
 def get_available_cpu_governors() -> List[str]:
     """Gets the list of available CPU governors from the first CPU core."""
     path = Path("/sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors")
-    content = sysfs_read(path)
+    content = read_file(path)
     return content.split() if content else []
 
 def get_current_cpu_governor() -> str:
     """Gets the current CPU governor of the first CPU core."""
     path = Path("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor")
-    return sysfs_read(path) or "unknown"
+    return read_file(path) or "unknown"
 
 def set_cpu_governor(governor: str) -> bool:
     """Sets the CPU governor for all online CPU cores."""
@@ -61,13 +61,13 @@ def set_cpu_governor(governor: str) -> bool:
 def get_available_io_schedulers(device_name: str) -> List[str]:
     """Gets the list of available I/O schedulers for a block device."""
     path = Path(f"/sys/block/{device_name}/queue/scheduler")
-    content = sysfs_read(path)
+    content = read_file(path)
     return content.replace("[", "").replace("]", "").split() if content else []
 
 def get_current_io_scheduler(device_name: str) -> str:
     """Gets the currently active I/O scheduler for a block device."""
     path = Path(f"/sys/block/{device_name}/queue/scheduler")
-    content = sysfs_read(path)
+    content = read_file(path)
     if not content:
         return "unknown"
 
@@ -96,7 +96,7 @@ def set_io_scheduler(device_name: str, scheduler: str) -> bool:
 def get_vfs_cache_pressure() -> int:
     """Gets the current vm.vfs_cache_pressure value."""
     path = Path("/proc/sys/vm/vfs_cache_pressure")
-    val = sysfs_read(path)
+    val = read_file(path)
     return int(val) if val and val.isdigit() else 100
 
 def set_vfs_cache_pressure(value: int) -> bool:
