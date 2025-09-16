@@ -15,7 +15,7 @@ from typing import Optional, Tuple, Dict, Any, List, Union
 
 class SystemCommandError(RuntimeError):
     def __init__(self, cmd: List[str], returncode: int, stdout: str, stderr: str):
-        super().__init__(f"Command failed: {" ".join(cmd)} (code {returncode})\n{stderr.strip()}")
+        super().__init__(f"Command failed: {' '.join(cmd)} (code {returncode})\n{stderr.strip()}")
         self.cmd = cmd
         self.returncode = returncode
         self.stdout = stdout

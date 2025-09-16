@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- zman/ui/status_health_page.ui -->
 <interface>
-  <template class="StatusHealthPage" parent="AdwPreferencesPage">
+  <template class="StatusPage" parent="AdwPreferencesPage">
     <property name="title">Status &amp; Health</property>
     <property name="icon-name">system-run-symbolic</property>
 

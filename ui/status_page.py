@@ -7,6 +7,8 @@ from gi.repository import Gtk, Adw, GObject
 
 from core import health
 from core import zdevice_ctl
+from core.os_utils import parse_size_to_bytes
+from modules import journal
 
 import xml.etree.ElementTree as ET
 import os
@@ -92,15 +94,10 @@ class StatusHealthPage(Adw.PreferencesPage):
 
     def _populate_zram_devices(self):
         """Populates the list of active ZRAM devices with real-time stats."""
-        # 1. Clear existing device rows, but keep the template and status page
-        children_to_remove = []
-        child = self.device_list_group.get_first_child()
-        while child:
+        # 1. Clear existing device rows safely
+        for child in list(self.device_list_group):
             if child != self.zram0_expander_template and child != self.no_devices_status_page:
-                children_to_remove.append(child)
-            child = child.get_next_sibling()
-        for c in children_to_remove:
-            self.device_list_group.remove(c)
+                self.device_list_group.remove(child)
 
         devices: List[zdevice_ctl.DeviceInfo] = zdevice_ctl.list_devices()
 
@@ -113,64 +110,51 @@ class StatusHealthPage(Adw.PreferencesPage):
         # 4. If devices exist, hide status page and populate list
         self.no_devices_status_page.set_visible(False)
         if not self._device_template_xml:
-            # Fallback or error handling if XML couldn't be parsed
             self.no_devices_status_page.set_visible(True)
             self.no_devices_status_page.set_title("UI Error")
             self.no_devices_status_page.set_description("Could not parse device template from UI file.")
             return
 
         for device in devices:
-            # a. Create a new row from the serialized XML
             builder = Gtk.Builder.new_from_string(self._device_template_xml, -1)
             new_row: Adw.ExpanderRow = builder.get_object("zram0_expander_template")
 
-            # b. Set title and subtitle
             new_row.set_title(device.name)
-            
+
             usage_percent = 0
-            if device.disksize and device.data_size:
-                try:
-                    # Assuming disksize and data_size are in bytes or compatible units
-                    # A more robust implementation would parse units (e.g., GiB, MiB)
-                    # For now, we extract numbers. This is a simplification.
-                    disk_val = float(device.disksize.split()[0])
-                    data_val = float(device.data_size.split()[0])
-                    if disk_val > 0:
-                        usage_percent = int((data_val / disk_val) * 100)
-                except (ValueError, IndexError, ZeroDivisionError):
-                    usage_percent = 0
+            try:
+                disk_bytes = parse_size_to_bytes(device.disksize or '0')
+                data_bytes = parse_size_to_bytes(device.data_size or '0')
+                if disk_bytes > 0:
+                    usage_percent = int((data_bytes / disk_bytes) * 100)
+            except (ValueError, ZeroDivisionError):
+                usage_percent = 0
 
             subtitle = f"{usage_percent}% Used | {device.ratio or 'N/A'}x Ratio"
             new_row.set_subtitle(subtitle)
 
-            # c. Update child widgets
-            # Helper to get widget from the new builder instance
             def get_widget(name):
                 return builder.get_object(name)
 
-            # Update usage bar
             usage_bar: Gtk.LevelBar = get_widget("zram0_usage_bar")
             if usage_bar:
                 usage_bar.set_value(usage_percent)
 
-            # Update detail rows
             details = {
                 "zram0_disk_size_row": device.disksize,
                 "zram0_algorithm_row": device.algorithm,
                 "zram0_compr_size_row": device.compr_size,
                 "zram0_data_size_row": device.data_size,
                 "zram0_streams_row": str(device.streams) if device.streams else "N/A",
-                "zram0_writeback_row": "(none)", # Placeholder
+                "zram0_writeback_row": "(none)",  # Placeholder
             }
             for name, value in details.items():
                 row: Adw.ActionRow = get_widget(name)
                 if row:
                     row.set_subtitle(value or "N/A")
 
-            # d. Add the new row to the group
             self.device_list_group.add(new_row)
 
-        # 5. Ensure the original template is hidden
         self.zram0_expander_template.set_visible(False)
 
     def _populate_swap_list(self):
@@ -188,36 +172,32 @@ class StatusHealthPage(Adw.PreferencesPage):
         for swap in swaps:
             # a. Create a new Adw.ActionRow
             row = Adw.ActionRow()
-            
+
             # b. Set title
             row.set_title(swap.name)
-            
+
             # c. Convert sizes to human-readable format
             size_hr = _kb_to_human(swap.size_kb)
             used_hr = _kb_to_human(swap.used_kb)
-            
+
             # d. Set subtitle
             subtitle = f"Size: {size_hr} | Used: {used_hr} | Priority: {swap.priority}"
             row.set_subtitle(subtitle)
-            
+
             # e. Add to the group
             self.swap_list_group.add(row)
 
     def _populate_event_log(self):
         """Populates the System Health Events log."""
         # Clear the container, keeping the status page
-        children_to_remove = []
-        child = self.event_log_container.get_first_child()
-        while child:
-            if child != self.no_events_status_page:
-                children_to_remove.append(child)
-            child = child.get_next_sibling()
-        for c in children_to_remove:
-            self.event_log_container.remove(c)
+        while (child := self.event_log_container.get_first_child()):
+            if child == self.no_events_status_page:
+                break  # Stop if we hit the status page
+            self.event_log_container.remove(child)
 
         devices = zdevice_ctl.list_devices()
         all_logs: List[journal.JournalRecord] = []
-        
+
         if not devices:
             self.no_events_status_page.set_visible(True)
             self.no_events_status_page.set_title("No Active ZRAM Devices")
@@ -227,10 +207,10 @@ class StatusHealthPage(Adw.PreferencesPage):
         for device in devices:
             unit = f"systemd-zram-setup@{device.name}.service"
             all_logs.extend(journal.list_zram_logs(unit=unit, count=50))
-        
+
         # Sort all collected logs by timestamp, newest first
         all_logs.sort(key=lambda r: r.timestamp, reverse=True)
-        
+
         # Limit to the most recent 25 entries overall
         logs_to_display = all_logs[:25]
 
@@ -243,19 +223,19 @@ class StatusHealthPage(Adw.PreferencesPage):
             for log_entry in logs_to_display:
                 row = Adw.ActionRow()
                 row.set_title(log_entry.message)
-                
+
                 # Format timestamp for subtitle
                 ts_str = log_entry.timestamp.strftime("%Y-%m-%d %H:%M:%S")
                 row.set_subtitle(ts_str)
-                
+
                 # Add an icon based on log priority
                 icon_name = "dialog-information-symbolic"
                 if log_entry.priority <= 3: # Error
                     icon_name = "dialog-error-symbolic"
                 elif log_entry.priority <= 4: # Warning
                     icon_name = "dialog-warning-symbolic"
-                
+
                 icon = Gtk.Image.new_from_icon_name(icon_name)
                 row.add_prefix(icon)
-                
+
                 self.event_log_container.append(row)
