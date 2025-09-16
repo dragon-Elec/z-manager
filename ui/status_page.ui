@@ -7,17 +7,18 @@
 
     <!-- Group 1: Actionable Health Alerts -->
     <child>
-      <object class="AdwPreferencesGroup" id="health_alerts_group">
-        <!-- The banner is hidden by default. Python code will reveal it and set its content if health issues are found. -->
-        <child>
-          <object class="AdwBanner" id="health_alert_banner">
-            <property name="title">Health Alert</property>
-            <property name="button-label">Fix It</property>
-            <property name="revealed">false</property>
-          </object>
-        </child>
+  <object class="AdwPreferencesGroup" id="health_alerts_group">
+    <property name="title">Health Alerts</property>
+    <!-- The banner is hidden by default. Python code will reveal it and set its content if health issues are found. -->
+    <child>
+      <object class="AdwBanner" id="health_alert_banner">
+        <property name="title">Health Alert</property>
+        <property name="button-label">Fix It</property>
+        <property name="revealed">false</property>
       </object>
     </child>
+  </object>
+</child>
 
     <!-- Group 2: Real-time Device Status -->
     <child>
@@ -93,10 +94,10 @@
       </object>
     </child>
 
-    <!-- Group 3: Moved "ZSwap Conflict Resolution" from Tune page -->
     <child>
       <object class="AdwPreferencesGroup" id="zswap_health_group">
-        <property name="title">System Conflicts</property>
+        <property name="title">ZSwap Conflict Resolution</property>
+        <property name="description">Permanently disable ZSwap for best ZRAM performance. This requires manual steps and a reboot.</property>
         <child>
           <object class="AdwActionRow" id="disable_zswap_row">
             <property name="title">ZSwap Status</property>
@@ -120,6 +121,13 @@
               </object>
             </child>
           </object>
+        </child>
+        <child>
+            <object class="AdwBanner" id="zswap_warning_banner">
+                <property name="title">⚠️ Final Steps Required!</property>
+                <property name="button-label">Show Command</property>
+                <property name="revealed">false</property>
+            </object>
         </child>
       </object>
     </child>
@@ -162,12 +170,5 @@
     </child>
   </template>
 
-  <!-- This wrapper allows Cambalache to open the file -->
-  <object class="AdwApplicationWindow" id="main_window">
-    <property name="default-width">600</property>
-    <property name="default-height">800</property>
-    <property name="content">
-      <object class="GtkBox"><property name="orientation">vertical</property><child><object class="AdwHeaderBar" /></child><child><object class="StatusHealthPage"/></child></object>
-    </property>
-  </object>
+  
 </interface>

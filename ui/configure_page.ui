@@ -180,25 +180,24 @@
 
     <!-- Bottom Action Bar for Apply/Revert -->
     <child>
-      <object class="AdwHeaderBar">
-          <property name="css-classes">flat</property>
-          <child type="start">
-              <object class="GtkButton" id="revert_button">
-                  <property name="label">Revert</property>
-                  <property name="css-classes">destructive-action</property>
-                  <property name="sensitive">false</property>
-                  <property name="tooltip-text">Undo changes and reload current system settings</property>
-              </object>
-          </child>
-          <child type="end">
-              <object class="GtkButton" id="apply_button">
-                  <property name="label">Apply Changes</property>
-                  <property name="css-classes">suggested-action</property>
-                  <property name="sensitive">false</property>
-                  <property name="tooltip-text">Write configuration and restart ZRAM service</property>
-              </object>
-          </child>
-      </object>
-    </child>
+  <object class="GtkActionBar">
+      <child type="start">
+          <object class="GtkButton" id="revert_button">
+              <property name="label">Revert</property>
+              <property name="css-classes">destructive-action</property>
+              <property name="sensitive">false</property>
+              <property name="tooltip-text">Undo changes and reload current system settings</property>
+          </object>
+      </child>
+      <child type="end">
+          <object class="GtkButton" id="apply_button">
+              <property name="label">Apply Changes</property>
+              <property name="css-classes">suggested-action</property>
+              <property name="sensitive">false</property>
+              <property name="tooltip-text">Write configuration and restart ZRAM service</property>
+          </object>
+      </child>
+  </object>
+</child>
   </template>
 </interface>

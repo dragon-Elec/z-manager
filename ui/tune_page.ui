@@ -112,56 +112,11 @@
       </object>
     </child>
 
-    <!-- Group 5: ZSwap Conflict Resolution -->
-    <child>
-      <object class="AdwPreferencesGroup">
-        <property name="title">ZSwap Conflict Resolution</property>
-        <property name="description">Permanently disable ZSwap for best ZRAM performance. This requires manual steps and a reboot.</property>
-        
-        <child>
-          <object class="AdwActionRow" id="disable_zswap_row">
-            <property name="title">Permanently Disable ZSwap</property>
-            <property name="subtitle">Adds 'zswap.enabled=0' to kernel boot parameters</property>
-            <child>
-              <object class="GtkButton" id="disable_zswap_button">
-                <property name="label">Disable...</property>
-                <property name="valign">center</property>
-                <property name="css-classes">destructive-action</property>
-              </object>
-            </child>
-          </object>
-        </child>
-
-        <child>
-            <object class="AdwBanner" id="zswap_warning_banner">
-                <property name="title">⚠️ Final Steps Required!</property>
-                <property name="button-label">Show Command</property>
-                <property name="revealed">false</property>
-            </object>
-        </child>
-      </object>
-    </child>
+    
 
   </template>
 
 
-  <!-- 
-    Part 2: The Window Wrapper for Cambalache
-  -->
-  <object class="AdwApplicationWindow" id="main_window">
-    <property name="default-width">600</property>
-    <property name="default-height">800</property>
-    <property name="content">
-      <object class="GtkBox">
-        <property name="orientation">vertical</property>
-        <child>
-          <object class="AdwHeaderBar" />
-        </child>
-        <child>
-          <object class="TunePage"/>
-        </child>
-      </object>
-    </property>
-  </object>
+  
 
 </interface>
