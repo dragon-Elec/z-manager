@@ -45,7 +45,7 @@ class StatusPage(Adw.Bin):
 
     # Device Status group
     device_list_group: Adw.PreferencesGroup = Gtk.Template.Child()
-    no_devices_status_page: Adw.StatusPage = Gtk.Template.Child()
+    no_devices_status_page: Gtk.Box = Gtk.Template.Child()
     zram0_expander_template: Adw.ExpanderRow = Gtk.Template.Child()
 
     # Swap List group

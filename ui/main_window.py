@@ -4,7 +4,7 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Gtk, Adw
+from gi.repository import Gtk, Adw, Gdk
 
 # We ONLY import the StatusPage class.
 from .status_page import StatusPage
@@ -93,6 +93,20 @@ class MainWindow(Gtk.ApplicationWindow):
         config_button.connect("toggled", self.on_nav_button_toggled)
         tune_button.connect("toggled", self.on_nav_button_toggled)
 
+        self.load_css()
+
+    def load_css(self):
+        """Loads the application's CSS file."""
+        provider = Gtk.CssProvider()
+        # Make sure the path to your style.css is correct
+        provider.load_from_path('css/style.css')
+        
+        display = Gdk.Display.get_default()
+        Gtk.StyleContext.add_provider_for_display(
+            display,
+            provider,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        )
 
     def on_nav_button_toggled(self, button: Gtk.ToggleButton):
         """

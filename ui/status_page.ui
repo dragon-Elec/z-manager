@@ -1,6 +1,10 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Created with Cambalache 0.96.1 -->
 <!-- zman/ui/status_health_page.ui -->
 <interface>
+  <!-- interface-name status_page.ui -->
+  <requires lib="gtk" version="4.10"/>
+  <requires lib="libadwaita" version="1.7"/>
   <template class="StatusPage" parent="AdwBin">
     <child>
       <object class="GtkScrolledWindow">
@@ -8,142 +12,165 @@
         <property name="vscrollbar-policy">automatic</property>
         <child>
           <object class="GtkBox">
+            <property name="margin-bottom">12</property>
+            <property name="margin-end">12</property>
+            <property name="margin-start">12</property>
+            <property name="margin-top">12</property>
             <property name="orientation">vertical</property>
             <property name="spacing">12</property>
-            <property name="margin-top">12</property>
-            <property name="margin-bottom">12</property>
-            <property name="margin-start">12</property>
-            <property name="margin-end">12</property>
             <child>
               <object class="AdwPreferencesGroup" id="health_alerts_group">
                 <property name="title">Health Alerts</property>
                 <child>
                   <object class="AdwBanner" id="health_alert_banner">
-                    <property name="title">Health Alert</property>
                     <property name="button-label">Fix It</property>
                     <property name="revealed">false</property>
+                    <property name="title">Health Alert</property>
                   </object>
                 </child>
               </object>
             </child>
             <child>
-              <object class="GtkStack" id="device_status_stack">
+              <object class="AdwPreferencesGroup" id="device_list_group">
+                <property name="description">Real-time usage and statistics for each device.</property>
+                <property name="title">Active ZRAM Devices</property>
                 <child>
-                  <object class="GtkStackPage">
-                    <property name="name">devices_view</property>
-                    <property name="child">
-                      <object class="AdwPreferencesGroup" id="device_list_group">
-                        <property name="title">Active ZRAM Devices</property>
-                        <property name="description">Real-time usage and statistics for each device.</property>
-                        <child>
-                          <object class="AdwExpanderRow" id="zram0_expander_template">
-                            <property name="title">zram0</property>
-                            <property name="subtitle">45% Used | 3.51x Ratio</property>
-                            <child type="suffix">
-                              <object class="GtkLevelBar" id="zram0_usage_bar">
-                                <property name="width-request">150</property>
-                                <property name="valign">center</property>
-                                <property name="min-value">0</property>
-                                <property name="max-value">100</property>
-                                <property name="value">45</property>
-                              </object>
-                            </child>
-                            <child>
-                              <object class="AdwActionRow" id="zram0_disk_size_row"><property name="title">Disk Size</property><property name="subtitle">4.0 GiB</property></object>
-                            </child>
-                            <child>
-                              <object class="AdwActionRow" id="zram0_algorithm_row"><property name="title">Compression Algorithm</property><property name="subtitle">zstd</property></object>
-                            </child>
-                            <child>
-                              <object class="AdwActionRow" id="zram0_compr_size_row"><property name="title">Compressed Size</property><property name="subtitle">512.2 MiB</property></object>
-                            </child>
-                            <child>
-                              <object class="AdwActionRow" id="zram0_data_size_row"><property name="title">Uncompressed Data Size</property><property name="subtitle">1.8 GiB</property></object>
-                            </child>
-                            <child>
-                              <object class="AdwActionRow" id="zram0_streams_row"><property name="title">Streams</property><property name="subtitle">4</property></object>
-                            </child>
-                            <child>
-                              <object class="AdwActionRow" id="zram0_writeback_row"><property name="title">Writeback Device</property><property name="subtitle">(none)</property></object>
-                            </child>
-                            <child>
-                              <object class="AdwActionRow">
-                                <property name="title">Recent Activity (60s)</property>
-                                <child type="suffix">
-                                  <object class="GtkFrame">
-                                    <property name="valign">center</property>
-                                    <child>
-                                      <object class="GtkDrawingArea" id="zram0_sparkline_graph">
-                                        <property name="content-width">200</property>
-                                        <property name="height-request">40</property>
-                                        <property name="tooltip-text">Live ZRAM usage over the last minute.</property>
-                                      </object>
-                                    </child>
-                                  </object>
-                                </child>
-                              </object>
-                            </child>
-                          </object> 
-                        </child>
-                      </object>
-                    </property>
-                  </object>
-                </child>
-                <child>
-                  <object class="GtkStackPage">
-                    <property name="name">no_devices_view</property>
-                    <property name="child">
-                      <object class="AdwStatusPage" id="no_devices_status_page">
-                        <property name="title">No Active ZRAM Devices</property>
-                        <property name="description">ZRAM may not be configured or the kernel module is not loaded.</property>
-                        <property name="icon-name">drive-multidisk-symbolic</property>
-                      </object>
-                    </property>
-                  </object>
-                </child>
-              </object>
-            </child>
-            <child>
-              <object class="AdwPreferencesGroup" id="zswap_health_group">
-                <property name="title">ZSwap Conflict Resolution</property>
-                <property name="description">Permanently disable ZSwap for best ZRAM performance. This requires manual steps and a reboot.</property>
-                <child>
-                  <object class="AdwActionRow" id="disable_zswap_row">
-                    <property name="title">ZSwap Status</property>
-                    <property name="subtitle">ZSwap should be disabled for optimal ZRAM performance.</property>
+                  <object class="AdwExpanderRow" id="zram0_expander_template">
+                    <property name="subtitle">45% Used | 3.51x Ratio</property>
+                    <property name="title">zram0</property>
                     <child type="suffix">
-                      <object class="GtkBox">
+                      <object class="GtkLevelBar" id="zram0_usage_bar">
+                        <property name="max-value">100</property>
+                        <property name="min-value">0</property>
                         <property name="valign">center</property>
-                        <child>
-                            <object class="GtkImage" id="zswap_status_icon">
-                                <property name="icon-name">emblem-ok-symbolic</property>
-                            </object>
-                        </child>
-                        <child>
-                            <object class="GtkButton" id="disable_zswap_button">
-                                <property name="label">Disable...</property>
-                                <property name="css-classes">destructive-action</property>
-                                <property name="visible">false</property>
-                                <property name="margin-start">12</property>
-                            </object>
+                        <property name="value">45</property>
+                        <property name="width-request">150</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="AdwActionRow" id="zram0_disk_size_row">
+                        <property name="subtitle">4.0 GiB</property>
+                        <property name="title">Disk Size</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="AdwActionRow" id="zram0_algorithm_row">
+                        <property name="subtitle">zstd</property>
+                        <property name="title">Compression Algorithm</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="AdwActionRow" id="zram0_compr_size_row">
+                        <property name="subtitle">512.2 MiB</property>
+                        <property name="title">Compressed Size</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="AdwActionRow" id="zram0_data_size_row">
+                        <property name="subtitle">1.8 GiB</property>
+                        <property name="title">Uncompressed Data Size</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="AdwActionRow" id="zram0_streams_row">
+                        <property name="subtitle">4</property>
+                        <property name="title">Streams</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="AdwActionRow" id="zram0_writeback_row">
+                        <property name="subtitle">(none)</property>
+                        <property name="title">Writeback Device</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="AdwActionRow">
+                        <property name="title">Recent Activity (60s)</property>
+                        <child type="suffix">
+                          <object class="GtkFrame">
+                            <property name="valign">center</property>
+                            <child>
+                              <object class="GtkDrawingArea" id="zram0_sparkline_graph">
+                                <property name="content-width">200</property>
+                                <property name="height-request">40</property>
+                                <property name="tooltip-text">Live ZRAM usage over the last minute.</property>
+                              </object>
+                            </child>
+                          </object>
                         </child>
                       </object>
                     </child>
                   </object>
                 </child>
                 <child>
-                    <object class="AdwBanner" id="zswap_warning_banner">
-                        <property name="title">⚠️ Final Steps Required!</property>
-                        <property name="button-label">Show Command</property>
-                        <property name="revealed">false</property>
-                    </object>
+                  <!-- This is the NEW compact placeholder widget -->
+                  <object class="GtkBox" id="no_devices_status_page">
+                    <property name="css-classes">placeholder</property>
+                    <property name="orientation">vertical</property>
+                    <property name="spacing">6</property>
+                    <property name="halign">center</property>
+                    <property name="valign">center</property>
+                    <property name="margin-top">24</property>
+                    <property name="margin-bottom">24</property>
+                    <property name="visible">false</property>
+                    <child>
+                      <object class="GtkImage">
+                        <property name="icon-name">drive-multidisk-symbolic</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkLabel">
+                        <property name="label">No Active ZRAM Devices Found</property>
+                        <attributes>
+                          <attribute name="weight" value="bold"></attribute>
+                        </attributes>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+              </object>
+            </child>
+            <child>
+              <object class="AdwPreferencesGroup" id="zswap_health_group">
+                <property name="description">Permanently disable ZSwap for best ZRAM performance. This requires manual steps and a reboot.</property>
+                <property name="title">ZSwap Conflict Resolution</property>
+                <child>
+                  <object class="AdwActionRow" id="disable_zswap_row">
+                    <property name="subtitle">ZSwap should be disabled for optimal ZRAM performance.</property>
+                    <property name="title">ZSwap Status</property>
+                    <child type="suffix">
+                      <object class="GtkBox">
+                        <property name="valign">center</property>
+                        <child>
+                          <object class="GtkImage" id="zswap_status_icon">
+                            <property name="icon-name">emblem-ok-symbolic</property>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="GtkButton" id="disable_zswap_button">
+                            <property name="css-classes">destructive-action</property>
+                            <property name="label">Disable...</property>
+                            <property name="margin-start">12</property>
+                            <property name="visible">false</property>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwBanner" id="zswap_warning_banner">
+                    <property name="button-label">Show Command</property>
+                    <property name="revealed">false</property>
+                    <property name="title">⚠️ Final Steps Required!</property>
+                  </object>
                 </child>
               </object>
             </child>
             <child>
               <object class="AdwPreferencesGroup" id="swap_list_group">
-                <property name="title">All System Swap Devices</property>
                 <property name="description">Shows how ZRAM is prioritized against other swap spaces.</property>
+                <property name="title">All System Swap Devices</property>
               </object>
             </child>
             <child>
@@ -151,18 +178,36 @@
                 <property name="title">System Health Events</property>
                 <child>
                   <object class="GtkScrolledWindow">
-                    <property name="min-content-height">150</property>
-                    <property name="max-content-height">300</property>
                     <property name="hscrollbar-policy">never</property>
+                    <property name="max-content-height">300</property>
+                    <property name="min-content-height">150</property>
                     <child>
                       <object class="GtkBox" id="event_log_container">
                         <property name="orientation">vertical</property>
                         <child>
-                          <object class="AdwStatusPage" id="no_events_status_page">
-                            <property name="icon-name">face-cool-symbolic</property>
-                            <property name="title">No Issues Found</property>
-                            <property name="description">The system journal contains no recent warnings or errors for ZRAM services.</property>
+                          <!-- This is the NEW compact placeholder widget -->
+                          <object class="GtkBox" id="no_events_status_page">
+                            <property name="css-classes">placeholder</property>
+                            <property name="orientation">vertical</property>
+                            <property name="spacing">6</property>
+                            <property name="halign">center</property>
+                            <property name="valign">center</property>
+                            <property name="margin-top">24</property>
+                            <property name="margin-bottom">24</property>
                             <property name="visible">true</property>
+                            <child>
+                              <object class="GtkImage">
+                                <property name="icon-name">face-cool-symbolic</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkLabel">
+                                <property name="label">No Recent Issues Found</property>
+                                <attributes>
+                                  <attribute name="weight" value="bold"></attribute>
+                                </attributes>
+                              </object>
+                            </child>
                           </object>
                         </child>
                       </object>
