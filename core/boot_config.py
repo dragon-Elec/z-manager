@@ -2,7 +2,7 @@
 """
 Manages persistent, boot-time system configuration.
 
-This module is responsible for creating and managing configuration files
+This core module is responsible for creating and managing configuration files
 in system directories like /etc/sysctl.d/ and /etc/default/grub.d/
 to ensure that tuning settings survive a reboot.
 """
