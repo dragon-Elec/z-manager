@@ -12,7 +12,7 @@ A Modern GTK4 / Libadwaita GUI for Managing ZRAM on Linux.
 >
 > Please feel free to explore the code, test it on a non-critical system, and report any issues you find.
 
-![Z-Manager Status Page](./assets/status-page.png)
+<img src="./assets/z-manager-status-page.png" alt="Z-Manager Status Page" width="600"/>
 
 ## About The Project
 
