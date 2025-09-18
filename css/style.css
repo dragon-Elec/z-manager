@@ -5,11 +5,12 @@
 
 box.placeholder image {
   -gtk-icon-size: 80px; /* Controls the icon size */
+  opacity: 0.5;      /* ✅ ADDED: Controls the icon's opacity */
 }
 
 box.placeholder label {
   font-size: 20px;   /* Controls the text size */
-  opacity: 0.7;
+  opacity: 0.8;
 }
 
 /* Custom style for our window's close button */

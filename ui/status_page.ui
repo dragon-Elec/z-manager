@@ -130,43 +130,7 @@
                 </child>
               </object>
             </child>
-            <child>
-              <object class="AdwPreferencesGroup" id="zswap_health_group">
-                <property name="description">Permanently disable ZSwap for best ZRAM performance. This requires manual steps and a reboot.</property>
-                <property name="title">ZSwap Conflict Resolution</property>
-                <child>
-                  <object class="AdwActionRow" id="disable_zswap_row">
-                    <property name="subtitle">ZSwap should be disabled for optimal ZRAM performance.</property>
-                    <property name="title">ZSwap Status</property>
-                    <child type="suffix">
-                      <object class="GtkBox">
-                        <property name="valign">center</property>
-                        <child>
-                          <object class="GtkImage" id="zswap_status_icon">
-                            <property name="icon-name">emblem-ok-symbolic</property>
-                          </object>
-                        </child>
-                        <child>
-                          <object class="GtkButton" id="disable_zswap_button">
-                            <property name="css-classes">destructive-action</property>
-                            <property name="label">Disable...</property>
-                            <property name="margin-start">12</property>
-                            <property name="visible">false</property>
-                          </object>
-                        </child>
-                      </object>
-                    </child>
-                  </object>
-                </child>
-                <child>
-                  <object class="AdwBanner" id="zswap_warning_banner">
-                    <property name="button-label">Show Command</property>
-                    <property name="revealed">false</property>
-                    <property name="title">⚠️ Final Steps Required!</property>
-                  </object>
-                </child>
-              </object>
-            </child>
+
             <child>
               <object class="AdwPreferencesGroup" id="swap_list_group">
                 <property name="description">Shows how ZRAM is prioritized against other swap spaces.</property>

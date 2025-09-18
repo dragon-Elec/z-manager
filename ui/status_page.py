@@ -37,11 +37,6 @@ class StatusPage(Adw.Bin):
     # CRITICAL FIX: Name must match the 'class' attribute in the .ui file
     __gtype_name__ = 'StatusPage'
 
-    # Health Alerts group
-    zswap_warning_banner: Adw.Banner = Gtk.Template.Child()
-    disable_zswap_row: Adw.ActionRow = Gtk.Template.Child()
-    zswap_status_icon: Gtk.Image = Gtk.Template.Child()
-    disable_zswap_button: Gtk.Button = Gtk.Template.Child()
 
     # Device Status group
     device_list_group: Adw.PreferencesGroup = Gtk.Template.Child()
@@ -63,7 +58,6 @@ class StatusPage(Adw.Bin):
     def refresh(self):
         """Public method to refresh all data on the page."""
         # --- TEMPORARILY DISABLED TO GET THE UI RUNNING ---
-        # self._populate_health_alerts()
         # self._populate_zram_devices()
         # self._populate_swap_list()
         # self._populate_event_log()
@@ -90,19 +84,6 @@ class StatusPage(Adw.Bin):
             return None
         return None
 
-    def _populate_health_alerts(self):
-        """Checks for system health issues and updates the UI accordingly."""
-        self.zswap_warning_banner.set_revealed(False)
-        status = health.get_zswap_status()
-
-        if status.enabled:
-            self.disable_zswap_row.set_subtitle("ZSwap is active and may conflict with ZRAM.")
-            self.zswap_status_icon.set_from_icon_name("dialog-warning-symbolic")
-            self.disable_zswap_button.set_visible(True)
-        else:
-            self.disable_zswap_row.set_subtitle("ZSwap is correctly disabled.")
-            self.zswap_status_icon.set_from_icon_name("emblem-ok-symbolic")
-            self.disable_zswap_button.set_visible(False)
 
     def _populate_zram_devices(self):
         """Populates the list of active ZRAM devices with real-time stats."""
