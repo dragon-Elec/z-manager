@@ -12,6 +12,8 @@ A Modern GTK4 / Libadwaita GUI for Managing ZRAM on Linux.
 >
 > Please feel free to explore the code, test it on a non-critical system, and report any issues you find.
 
+
+
 ## About The Project
 
 Z-Manager is a user-friendly desktop application designed to simplify the configuration and monitoring of ZRAM on modern Linux systems. It acts as a graphical frontend for `zram-generator` and the `zramctl` utility, removing the need to manually edit configuration files in the terminal.
