@@ -30,6 +30,19 @@ This tool is for desktop users and system tweakers who want to harness the perfo
 *   **System Tuning:** Adjust related kernel parameters like CPU governors and I/O schedulers to further optimize performance.
 *   **Log Viewer:** Easily view ZRAM-related logs from the systemd journal to troubleshoot issues.
 
+## Bugs
+
+*   **Bug 1:** zramctl- scrambled data
+```py
+>>> from core import zdevice_ctl
+>>> devices = zdevice_ctl.list_devices()
+>>> print(devices)
+[DeviceInfo(name='zram0', disksize='lzo-rle', data_size='4G', compr_size='4K', ratio=None, streams='12K', algorithm='4')]
+>>>
+```
+
+*   **Bug 2:** Description of bug 2.
+
 ## Installation
 
 Installation instructions will be provided once the application reaches a more stable release.
