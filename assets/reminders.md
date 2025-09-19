@@ -60,3 +60,16 @@ By writing a device path (like `/dev/loop13`) directly into this file, we comman
 | **Our Application's Choice** | Abandoned                             | **Implemented**                                             |
 
 **In short:** We switched from a version-specific command that was breaking the application to a universal kernel feature that is guaranteed to work. This change was a necessary fix to ensure the application is robust and compatible.
+
+
+However, our research and testing have proven that this ideal is not the reality.
+
+The reality is that zramctl is an imperfect and inconsistent tool:
+
+    Its --reset function is destructive and undocumented.
+
+    Its --writeback-device flag doesn't even exist on your system.
+
+    It has strict, undocumented rules about the order of operations.
+
+Conclusion: The benefit of using zramctl is purely theoretical. In practice, it's an unreliable abstraction. The only way to build a robust application is to bypass the unreliable parts of zramctl and talk directly to the kernel's sysfs interface, which has consistent and predictable rules.
