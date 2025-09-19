@@ -101,7 +101,7 @@ def zramctl_reset(device_path: str) -> None:
 
 
 def zramctl_create(device_path: str, size: str, algorithm: Optional[str] = None,
-                   streams: Optional[int] = None, writeback_device: Optional[str] = None) -> None:
+                   streams: Optional[int] = None) -> None:
     """
     Create/configure a zram device. zramctl requires size on first setup.
     """
@@ -110,8 +110,6 @@ def zramctl_create(device_path: str, size: str, algorithm: Optional[str] = None,
         cmd += ["--algorithm", algorithm]
     if streams:
         cmd += ["--streams", str(streams)]
-    if writeback_device:
-        cmd += ["--writeback-device", writeback_device]
     run(cmd, check=True)
 
 
@@ -172,8 +170,7 @@ def parse_zramctl_table() -> List[Dict[str, Any]]:
             continue  # Skip non-zram or malformed
 
         # 2. Create row dict: zip header to parts (assumes aligned lengths)
-        if len(parts) < len(header):
-            continue  # Skip if row too short (rare misalignment)
+
         row_data = dict(zip(header, parts))
 
         # 3. Extract by key (handle short/long variants)
