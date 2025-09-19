@@ -3,6 +3,10 @@
 import sys
 import gi
 import signal
+from pathlib import Path
+# Add the project root to the path to allow imports like `from core import ...`
+project_root = Path(__file__).resolve().parent
+sys.path.insert(0, str(project_root))
 
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
