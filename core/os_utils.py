@@ -153,43 +153,49 @@ def systemd_try_restart(service: str) -> Tuple[bool, Optional[str]]:
 
 def parse_zramctl_table() -> List[Dict[str, Any]]:
     """
-    Parse `zramctl` default table output to extract basic fields for devices.
-    Falls back to naive parsing; for richer data prefer sysfs reads.
+    Parse `zramctl` default table output by reading the header to dynamically
+    map columns, making it robust against column reordering in different
+    zram-tools versions.
     """
     out = zramctl_info_all()
-    lines = [ln for ln in out.splitlines() if ln.strip()]
-    if not lines:
+    lines = [ln.strip() for ln in out.splitlines() if ln.strip()]
+    if len(lines) < 2:
         return []
 
-    header = lines[0]
-    # Heuristic columns; zramctl formats can vary.
-    # We'll scan for device paths like /dev/zramN and then split remaining columns.
+    # 1. Read and split the header (normalize to upper)
+    header = [col.upper().strip() for col in lines[0].split()]
     devices: List[Dict[str, Any]] = []
+
     for ln in lines[1:]:
-        if "/dev/zram" not in ln:
-            continue
         parts = ln.split()
-        # Common format: NAME DISKSIZE DATA COMPR TOTAL STREAMS ALG ...
-        # NAME is /dev/zramN
-        name = parts[0]
-        info: Dict[str, Any] = {"name": os.path.basename(name)}
-        # Best-effort mapping
-        if len(parts) >= 2:
-            info["disksize"] = parts[1]
-        if len(parts) >= 3:
-            info["data-size"] = parts[2]
-        if len(parts) >= 4:
-            info["compr-size"] = parts[3]
-        if len(parts) >= 6:
-            # streams often at index 5
-            try:
-                info["streams"] = int(parts[5])
-            except Exception:
-                info["streams"] = parts[5]
-        if len(parts) >= 7:
-            info["algorithm"] = parts[6]
-        # ratio is not always present in table; compute elsewhere if needed
+        if len(parts) < 1 or not os.path.basename(parts[0]).startswith("zram"):
+            continue  # Skip non-zram or malformed
+
+        # 2. Create row dict: zip header to parts (assumes aligned lengths)
+        if len(parts) < len(header):
+            continue  # Skip if row too short (rare misalignment)
+        row_data = dict(zip(header, parts))
+
+        # 3. Extract by key (handle short/long variants)
+        name_path = row_data.get("NAME", "")
+        info: Dict[str, Any] = {"name": os.path.basename(name_path) if name_path else "unknown"}
+
+        # Map fields (use short or long keys)
+        info["disksize"] = row_data.get("DISKSIZE")
+        info["data-size"] = row_data.get("DATA")
+        info["compr-size"] = row_data.get("COMPR")  # Or "COMPR-SIZE" if full
+        info["algorithm"] = row_data.get("ALG") or row_data.get("ALGORITHM")
+        # No ratio in default; set None
+
+        # Streams: safe int parse
+        streams_str = row_data.get("STREAMS")
+        try:
+            info["streams"] = int(streams_str) if streams_str else None
+        except (ValueError, TypeError):
+            info["streams"] = None
+
         devices.append(info)
+
     return devices
 
 
@@ -231,5 +237,3 @@ def parse_size_to_bytes(size_str: str) -> int:
         return int(size_str)
     except (ValueError, TypeError):
         return 0
-
-
