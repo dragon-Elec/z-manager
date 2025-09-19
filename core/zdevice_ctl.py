@@ -163,6 +163,9 @@ def list_devices() -> List[DeviceInfo]:
 
 
 def get_writeback_status(device_name: str) -> WritebackStatus:
+    dev_path = f"/dev/{device_name}"
+    if not is_block_device(dev_path):
+        raise NotBlockDeviceError(f"zram device {device_name} does not exist")
     base = zram_sysfs_dir(device_name)
     backing = read_file(f"{base}/backing_dev")
     mem_used_total = read_file(f"{base}/mem_used_total")
@@ -250,6 +253,9 @@ def restart_unit_for_device(device_name: str) -> UnitResult:
     """
     Restart the systemd unit systemd-zram-setup@zramN.service for the device.
     """
+    dev_path = f"/dev/{device_name}"
+    if not is_block_device(dev_path):
+        return UnitResult(success=False, message=f"Device {device_name} does not exist", service=None)
     svc = f"systemd-zram-setup@{device_name}.service"
     try:
         systemd_restart(svc)
@@ -314,6 +320,9 @@ def persist_writeback(device_name: str, writeback_device: Optional[str], apply_n
 
 def _get_live_writeback_device(device_name: str) -> str:
     """Reads sysfs to get the current backing device for a zram device."""
+    dev_path = f"/dev/{device_name}"
+    if not is_block_device(dev_path):
+        return ""
     current_backing = _get_sysfs(device_name, "backing_dev")
     # Some kernels use an empty string when none; normalize to empty string.
     return current_backing if current_backing is not None else ""
@@ -426,6 +435,21 @@ def ensure_writeback_state(
                 actions=[Action(name="validate-writeback-device", success=False, message=f"{desired_writeback} is not a block device")],
                 message="validation failed",
             )
+
+    dev_path = f"/dev/{device_name}"
+    exists = is_block_device(dev_path)
+    if not exists and desired_writeback is None:
+        # No device and no writeback desired: no-op
+        actions.append(Action(name="noop-no-device", success=True, message="Device does not exist and no writeback desired"))
+        unit_res = restart_device_unit(device_name, mode="none")
+        actions.append(Action(name="restart(none)", success=unit_res.success, message=unit_res.message))
+        return OrchestrationResult(
+            success=all(a.success for a in actions),
+            device=device_name,
+            desired_writeback=desired_writeback,
+            actions=actions,
+            message="no changes required",
+        )
 
     # 2. Get live state
     current_backing = _get_live_writeback_device(device_name)
