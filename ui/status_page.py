@@ -41,17 +41,29 @@ class StatusPage(Adw.Bin):
     # Device Status group
     device_list_group: Adw.PreferencesGroup = Gtk.Template.Child()
     no_devices_status_page: Gtk.Box = Gtk.Template.Child()
+    # ✅ ADD THIS LINE
+    no_devices_label: Gtk.Label = Gtk.Template.Child() 
     zram0_expander_template: Adw.ExpanderRow = Gtk.Template.Child()
 
     # Swap List group
     swap_list_group: Adw.PreferencesGroup = Gtk.Template.Child()
 
-    # Event Log group (These were missing)
+    # Event Log group
     event_log_container: Gtk.Box = Gtk.Template.Child()
-    no_events_status_page: Adw.StatusPage = Gtk.Template.Child()
+    # 1. FIX: The type hint must match the UI file (it's a Gtk.Box)
+    no_events_status_page: Gtk.Box = Gtk.Template.Child()
+    # 2. NEW: Add a child for the label inside the box
+    no_events_label: Gtk.Label = Gtk.Template.Child() # This will be added in the UI
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        
+        # --- THIS IS THE FIX ---
+        # Force the CSS class onto the widgets at runtime to bypass the
+        # AdwPreferencesGroup's interference with the UI file properties.
+        self.no_devices_status_page.add_css_class("placeholder")
+        self.no_events_status_page.add_css_class("placeholder")
+        
         self._device_template_xml = self._get_device_template_xml()
         self.refresh()
 
@@ -169,8 +181,8 @@ class StatusPage(Adw.Bin):
 
         if not devices:
             self.no_events_status_page.set_visible(True)
-            self.no_events_status_page.set_title("No Active ZRAM Devices")
-            self.no_events_status_page.set_description("Logs are not available because no ZRAM devices were found.")
+            # 3. FIX: Use the correct widget and method
+            self.no_events_label.set_label("No Active ZRAM Devices Found")
             return
 
         for device in devices:
@@ -182,8 +194,8 @@ class StatusPage(Adw.Bin):
 
         if not logs_to_display:
             self.no_events_status_page.set_visible(True)
-            self.no_events_status_page.set_title("No Issues Found")
-            self.no_events_status_page.set_description("The system journal contains no recent warnings or errors for ZRAM services.")
+            # 4. FIX: Use the correct widget and method
+            self.no_events_label.set_label("No Recent Issues Found")
         else:
             self.no_events_status_page.set_visible(False)
             for log_entry in logs_to_display:
