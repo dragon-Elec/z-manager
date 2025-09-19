@@ -186,6 +186,7 @@ def set_writeback(device_name: str, writeback_device: str, force: bool = False, 
         # Best-effort deactivation for force mode
         run(["swapoff", f"/dev/{device_name}"], check=False)
         run(["umount", f"/dev/{device_name}"], check=False)
+
     dev_path = f"/dev/{device_name}"
     if not create_if_missing and not is_block_device(dev_path):
         raise NotBlockDeviceError(f"Device {device_name} does not exist; set create_if_missing=True to auto-create")
@@ -193,30 +194,37 @@ def set_writeback(device_name: str, writeback_device: str, force: bool = False, 
     params = _read_params_best_effort(device_name, default_size)
     size = params.get("disksize") or default_size
     algorithm = params.get("algorithm")
-    streams = params.get("streams")
+    # streams cannot be set via sysfs, so we skip it
 
-    dev_path = f"/dev/{device_name}"
-
-    # 1. Reset the device. This sets disksize to 0.
+    # --- Pure SysFS Reconfiguration ---
     try:
+        # 1. Reset the device. This sets disksize to 0.
         zramctl_reset(dev_path)
-    except SystemCommandError as e:
-        raise ValidationError(f"Failed to reset device {device_name}: {e}")
 
-    # 2. Set the backing device via sysfs (MUST be done while size is 0)
-    write_path = f"/sys/block/{device_name}/backing_dev"
-    ok, err = sysfs_write(write_path, writeback_device)
-    if not ok:
-        raise ValidationError(f"Failed to set writeback via sysfs for {device_name}: {err}")
+        # 2. Set the backing device via sysfs (MUST be done while size is 0)
+        ok, err = sysfs_write(f"/sys/block/{device_name}/backing_dev", writeback_device)
+        if not ok:
+            raise ValidationError(f"Failed to set backing_dev: {err}")
 
-    # 3. Now, apply the rest of the configuration
-    zramctl_create(dev_path, size=size, algorithm=algorithm, streams=streams)
+        # 3. Set algorithm
+        if algorithm:
+            ok, err = sysfs_write(f"/sys/block/{device_name}/comp_algorithm", algorithm)
+            if not ok:
+                raise ValidationError(f"Failed to set comp_algorithm: {err}")
+
+        # 4. Set size. This should be the final step.
+        ok, err = sysfs_write(f"/sys/block/{device_name}/disksize", size)
+        if not ok:
+            raise ValidationError(f"Failed to set disksize: {err}")
+
+    except (ValidationError, SystemCommandError) as e:
+        return WritebackResult(success=False, device=device_name, action="set-writeback", details={"error": str(e)})
 
     return WritebackResult(
         success=True,
         device=device_name,
         action="set-writeback",
-        details={"writeback_device": writeback_device, "preserved": {"size": size, "algorithm": algorithm, "streams": streams}},
+        details={"writeback_device": writeback_device, "preserved": {"size": size, "algorithm": algorithm, "streams": params.get("streams")}},
     )
 
 
