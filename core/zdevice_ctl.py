@@ -15,7 +15,6 @@ from core.os_utils import (
     sysfs_write,
     zram_sysfs_dir,
     zramctl_reset,
-    zramctl_create,
     parse_zramctl_table,
     systemd_daemon_reload,
     systemd_try_restart,
@@ -89,7 +88,6 @@ class OrchestrationResult:
 def _get_sysfs(device_name: str, node: str) -> Optional[str]:
     base = zram_sysfs_dir(device_name)
     return read_file(f"{base}/{node}")
-
 
 
 def _device_active(device_name: str) -> bool:
@@ -168,8 +166,7 @@ def get_writeback_status(device_name: str) -> WritebackStatus:
         writeback_failed=_get_sysfs(device_name, "writeback_failed"),
     )
 
-
-def set_writeback(device_name: str, writeback_device: str, force: bool = False, create_if_missing: bool = True, default_size: str = "1G") -> WritebackResult:
+def set_writeback(device_name: str, writeback_device: str, force: bool = False, create_if_missing: bool = True, default_size: str = "1G", new_size: Optional[str] = None) -> WritebackResult:
     """
     Configure writeback for an existing zram device, or create if missing and create_if_missing=True.
     If active, requires force=True to reset/recreate. Preserves current size/algorithm/streams best-effort;
@@ -192,7 +189,7 @@ def set_writeback(device_name: str, writeback_device: str, force: bool = False, 
         raise NotBlockDeviceError(f"Device {device_name} does not exist; set create_if_missing=True to auto-create")
 
     params = _read_params_best_effort(device_name, default_size)
-    size = params.get("disksize") or default_size
+    size = new_size or params.get("disksize") or default_size
     algorithm = params.get("algorithm")
     # streams cannot be set via sysfs, so we skip it
 
@@ -228,7 +225,7 @@ def set_writeback(device_name: str, writeback_device: str, force: bool = False, 
     )
 
 
-def clear_writeback(device_name: str, force: bool = False, create_if_missing: bool = True, default_size: str = "1G") -> WritebackResult:
+def clear_writeback(device_name: str, force: bool = False, create_if_missing: bool = True, default_size: str = "1G", new_size: Optional[str] = None) -> WritebackResult:
     """
     Clear writeback by resetting and recreating device without --writeback-device.
     Creates if missing and create_if_missing=True; uses default_size if creating new.
@@ -241,35 +238,41 @@ def clear_writeback(device_name: str, force: bool = False, create_if_missing: bo
         # Best-effort deactivation for force mode
         run(["swapoff", f"/dev/{device_name}"], check=False)
         run(["umount", f"/dev/{device_name}"], check=False)
+
     dev_path = f"/dev/{device_name}"
     if not create_if_missing and not is_block_device(dev_path):
         raise NotBlockDeviceError(f"Device {device_name} does not exist; set create_if_missing=True to auto-create")
 
     params = _read_params_best_effort(device_name, default_size)
-    size = params.get("disksize") or default_size
+    size = new_size or params.get("disksize") or default_size
     algorithm = params.get("algorithm")
-    streams = params.get("streams")
 
-    dev_path = f"/dev/{device_name}"
-    if is_block_device(dev_path):
-        try:
-            zramctl_reset(dev_path)
-        except SystemCommandError as e:
-            raise ValidationError(f"Failed to reset device {device_name}: {e}")
-    # recreate
-    zramctl_create(dev_path, size=size, algorithm=algorithm, streams=streams)
+    # --- Pure SysFS Reconfiguration ---
+    try:
+        # 1. Reset the device.
+        zramctl_reset(dev_path)
 
-    # clear writeback via sysfs by writing "none"
-    write_path = f"/sys/block/{device_name}/backing_dev"
-    ok, err = sysfs_write(write_path, "none")
-    if not ok:
-        raise ValidationError(f"Failed to clear writeback via sysfs for {device_name}: {err}")
+        # 2. The reset operation already cleared the backing device. No further action needed.
+
+        # 3. Set algorithm
+        if algorithm:
+            ok, err = sysfs_write(f"/sys/block/{device_name}/comp_algorithm", algorithm)
+            if not ok:
+                raise ValidationError(f"Failed to set comp_algorithm: {err}")
+
+        # 4. Set size.
+        ok, err = sysfs_write(f"/sys/block/{device_name}/disksize", size)
+        if not ok:
+            raise ValidationError(f"Failed to set disksize: {err}")
+
+    except (ValidationError, SystemCommandError) as e:
+        return WritebackResult(success=False, device=device_name, action="clear-writeback", details={"error": str(e)})
 
     return WritebackResult(
         success=True,
         device=device_name,
         action="clear-writeback",
-        details={"preserved": {"size": size, "algorithm": algorithm, "streams": streams}},
+        details={"preserved": {"size": size, "algorithm": algorithm, "streams": params.get("streams")}},
     )
 
 
@@ -358,7 +361,7 @@ def _is_writeback_state_correct(current_backing_device: str, desired_writeback_d
     """Compares the live state to the desired state."""
     if desired_writeback_device is None:
         # We want no writeback, so state is correct if there is no current backing device
-        return not bool(current_backing_device)
+        return not bool(current_backing_device) or current_backing_device == "none"
     else:
         # We want a specific writeback device
         return current_backing_device == desired_writeback_device
@@ -382,44 +385,44 @@ def _apply_live_writeback_change(
     params = _read_params_best_effort(device_name)
     size = params.get("disksize") or "1G"
     algorithm = params.get("algorithm")
-    streams = params.get("streams")
 
     dev_path = f"/dev/{device_name}"
 
+    # --- Pure SysFS Reconfiguration ---
     # 1. Reset
     if is_block_device(dev_path):
         try:
             zramctl_reset(dev_path)
-            actions.append(Action(name="reset", success=True, message="zramctl --reset via sysfs"))
+            actions.append(Action(name="reset", success=True, message="reset via sysfs"))
         except SystemCommandError as e:
             actions.append(Action(name="reset", success=False, message=str(e)))
             return False, actions
 
-    # 2. Set writeback via sysfs
-    write_path = f"/sys/block/{device_name}/backing_dev"
-    write_value = desired_writeback if desired_writeback is not None else "none"
-    ok, err = sysfs_write(write_path, write_value)
-    if not ok:
-        actions.append(Action(name="set-writeback-sysfs", success=False, message=err))
-        return False, actions
-    actions.append(Action(name="set-writeback-sysfs", success=True, message=f"wrote '{write_value}' to backing_dev"))
+    # 2. Set writeback via sysfs (if desired)
+    if desired_writeback is not None:
+        ok, err = sysfs_write(f"/sys/block/{device_name}/backing_dev", desired_writeback)
+        if not ok:
+            actions.append(Action(name="set-backing-dev", success=False, message=err))
+            return False, actions
+        actions.append(Action(name="set-backing-dev", success=True, message=f"wrote '{desired_writeback}' to backing_dev"))
+    else:
+        # The reset operation already cleared the backing device.
+        actions.append(Action(name="set-backing-dev", success=True, message="backing_dev cleared by reset"))
 
-    # 3. Recreate/set size
-    try:
-        zramctl_create(
-            dev_path,
-            size=size,
-            algorithm=algorithm,
-            streams=streams,
-        )
-        actions.append(Action(
-            name="recreate",
-            success=True,
-            message=f"size={size} algo={algorithm or 'default'} streams={streams or 'default'}",
-        ))
-    except SystemCommandError as e:
-        actions.append(Action(name="recreate", success=False, message=str(e)))
+    # 3. Set algorithm
+    if algorithm:
+        ok, err = sysfs_write(f"/sys/block/{device_name}/comp_algorithm", algorithm)
+        if not ok:
+            actions.append(Action(name="set-algorithm", success=False, message=err))
+            return False, actions
+        actions.append(Action(name="set-algorithm", success=True, message=f"set algorithm to {algorithm}"))
+
+    # 4. Set size
+    ok, err = sysfs_write(f"/sys/block/{device_name}/disksize", size)
+    if not ok:
+        actions.append(Action(name="set-disksize", success=False, message=err))
         return False, actions
+    actions.append(Action(name="set-disksize", success=True, message=f"set disksize to {size}"))
 
     return True, actions
 
