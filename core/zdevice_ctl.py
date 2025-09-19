@@ -196,19 +196,21 @@ def set_writeback(device_name: str, writeback_device: str, force: bool = False, 
     streams = params.get("streams")
 
     dev_path = f"/dev/{device_name}"
-    if is_block_device(dev_path):
-        try:
-            zramctl_reset(dev_path)
-        except SystemCommandError as e:
-            raise ValidationError(f"Failed to reset device {device_name}: {e}")
-    # recreate
-    zramctl_create(dev_path, size=size, algorithm=algorithm, streams=streams)
 
-    # set writeback via sysfs
+    # 1. Reset the device. This sets disksize to 0.
+    try:
+        zramctl_reset(dev_path)
+    except SystemCommandError as e:
+        raise ValidationError(f"Failed to reset device {device_name}: {e}")
+
+    # 2. Set the backing device via sysfs (MUST be done while size is 0)
     write_path = f"/sys/block/{device_name}/backing_dev"
     ok, err = sysfs_write(write_path, writeback_device)
     if not ok:
         raise ValidationError(f"Failed to set writeback via sysfs for {device_name}: {err}")
+
+    # 3. Now, apply the rest of the configuration
+    zramctl_create(dev_path, size=size, algorithm=algorithm, streams=streams)
 
     return WritebackResult(
         success=True,
@@ -376,14 +378,25 @@ def _apply_live_writeback_change(
 
     dev_path = f"/dev/{device_name}"
 
+    # 1. Reset
     if is_block_device(dev_path):
         try:
             zramctl_reset(dev_path)
-            actions.append(Action(name="reset", success=True, message="zramctl --reset"))
+            actions.append(Action(name="reset", success=True, message="zramctl --reset via sysfs"))
         except SystemCommandError as e:
             actions.append(Action(name="reset", success=False, message=str(e)))
             return False, actions
 
+    # 2. Set writeback via sysfs
+    write_path = f"/sys/block/{device_name}/backing_dev"
+    write_value = desired_writeback if desired_writeback is not None else "none"
+    ok, err = sysfs_write(write_path, write_value)
+    if not ok:
+        actions.append(Action(name="set-writeback-sysfs", success=False, message=err))
+        return False, actions
+    actions.append(Action(name="set-writeback-sysfs", success=True, message=f"wrote '{write_value}' to backing_dev"))
+
+    # 3. Recreate/set size
     try:
         zramctl_create(
             dev_path,
@@ -399,16 +412,6 @@ def _apply_live_writeback_change(
     except SystemCommandError as e:
         actions.append(Action(name="recreate", success=False, message=str(e)))
         return False, actions
-
-    # set writeback via sysfs
-    write_path = f"/sys/block/{device_name}/backing_dev"
-    write_value = desired_writeback if desired_writeback is not None else "none"
-    ok, err = sysfs_write(write_path, write_value)
-    if not ok:
-        actions.append(Action(name="set-writeback-sysfs", success=False, message=err))
-        return False, actions
-
-    actions.append(Action(name="set-writeback-sysfs", success=True, message=f"wrote '{write_value}' to backing_dev"))
 
     return True, actions
 
