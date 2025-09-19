@@ -1,6 +1,7 @@
 # main_window.py
 
 import gi
+from pathlib import Path
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
@@ -140,7 +141,12 @@ class MainWindow(Gtk.ApplicationWindow):
     def load_css(self):
         """Loads the application's CSS file."""
         provider = Gtk.CssProvider()
-        provider.load_from_path('css/style.css')
+        
+        # --- THIS IS THE FIX ---
+        # 1. Get the absolute path to this file's directory, then go up to the project root.
+        css_path = Path(__file__).resolve().parent.parent / "css" / "style.css"
+        # 2. Load the CSS from that absolute path.
+        provider.load_from_path(str(css_path))
         
         display = Gdk.Display.get_default()
         Gtk.StyleContext.add_provider_for_display(
