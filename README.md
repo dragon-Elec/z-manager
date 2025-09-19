@@ -34,11 +34,7 @@ This tool is for desktop users and system tweakers who want to harness the perfo
 
 *   **Bug 1:** zramctl- scrambled data
 ```py
->>> from core import zdevice_ctl
->>> devices = zdevice_ctl.list_devices()
->>> print(devices)
-[DeviceInfo(name='zram0', disksize='lzo-rle', data_size='4G', compr_size='4K', ratio=None, streams='12K', algorithm='4')]
->>>
+placeholder
 ```
 
 *   **Bug 2:** Description of bug 2.
