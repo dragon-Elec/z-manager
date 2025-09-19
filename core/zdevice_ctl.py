@@ -91,16 +91,6 @@ def _get_sysfs(device_name: str, node: str) -> Optional[str]:
     return read_file(f"{base}/{node}")
 
 
-def _compute_ratio(orig: Optional[str], comp: Optional[str]) -> Optional[str]:
-    try:
-        if orig is None or comp is None:
-            return None
-        # Values may be like "512.2M" etc. Leave ratio None unless we parse numbers reliably.
-        # Keep it None for now; GUI can compute if it has raw bytes.
-        return None
-    except Exception:
-        return None
-
 
 def _device_active(device_name: str) -> bool:
     # A device is considered "active" if it's in /proc/swaps or mounted
@@ -109,14 +99,14 @@ def _device_active(device_name: str) -> bool:
         swaps = run(["cat", "/proc/swaps"]).out
         if f"/dev/{device_name}" in swaps:
             return True
-    except Exception:
+    except (SystemCommandError, OSError):
         pass
     # Mount check:
     try:
         mounts = run(["mount"]).out
         if f"/dev/{device_name}" in mounts:
             return True
-    except Exception:
+    except (SystemCommandError, OSError):
         pass
     return False
 
@@ -126,12 +116,13 @@ def is_device_active(device_name: str) -> bool:
     return _device_active(device_name)
 
 
-def _read_params_best_effort(device_name: str) -> Dict[str, Any]:
+def _read_params_best_effort(device_name: str, default_size: str = "1G") -> Dict[str, Any]:
     """
     Best-effort read of current params to preserve when recreating:
     - disksize (from zramctl table)
     - algorithm (from zramctl table)
     - streams (from zramctl table)
+    Returns default_size if no device found.
     """
     info_list = parse_zramctl_table()
     for info in info_list:
@@ -141,7 +132,7 @@ def _read_params_best_effort(device_name: str) -> Dict[str, Any]:
                 "algorithm": info.get("algorithm"),
                 "streams": info.get("streams"),
             }
-    return {}
+    return {"disksize": default_size, "algorithm": None, "streams": None}
 
 
 # ============ Public API ============
@@ -166,29 +157,23 @@ def get_writeback_status(device_name: str) -> WritebackStatus:
     dev_path = f"/dev/{device_name}"
     if not is_block_device(dev_path):
         raise NotBlockDeviceError(f"zram device {device_name} does not exist")
-    base = zram_sysfs_dir(device_name)
-    backing = read_file(f"{base}/backing_dev")
-    mem_used_total = read_file(f"{base}/mem_used_total")
-    orig_data_size = read_file(f"{base}/orig_data_size")
-    compr_data_size = read_file(f"{base}/compr_data_size")
-    num_writeback = read_file(f"{base}/num_writeback")
-    writeback_failed = read_file(f"{base}/writeback_failed")
 
     return WritebackStatus(
         device=device_name,
-        backing_dev=backing,
-        mem_used_total=mem_used_total,
-        orig_data_size=orig_data_size,
-        compr_data_size=compr_data_size,
-        num_writeback=num_writeback,
-        writeback_failed=writeback_failed,
+        backing_dev=_get_sysfs(device_name, "backing_dev"),
+        mem_used_total=_get_sysfs(device_name, "mem_used_total"),
+        orig_data_size=_get_sysfs(device_name, "orig_data_size"),
+        compr_data_size=_get_sysfs(device_name, "compr_data_size"),
+        num_writeback=_get_sysfs(device_name, "num_writeback"),
+        writeback_failed=_get_sysfs(device_name, "writeback_failed"),
     )
 
 
-def set_writeback(device_name: str, writeback_device: str, force: bool = False) -> WritebackResult:
+def set_writeback(device_name: str, writeback_device: str, force: bool = False, create_if_missing: bool = True, default_size: str = "1G") -> WritebackResult:
     """
-    Configure writeback for an existing zram device. If active, requires force=True to reset/recreate.
-    Preserves current size/algorithm/streams best-effort.
+    Configure writeback for an existing zram device, or create if missing and create_if_missing=True.
+    If active, requires force=True to reset/recreate. Preserves current size/algorithm/streams best-effort;
+    uses default_size if creating new.
     """
     if not is_block_device(writeback_device):
         raise NotBlockDeviceError(f"{writeback_device} is not a block device")
@@ -197,8 +182,16 @@ def set_writeback(device_name: str, writeback_device: str, force: bool = False) 
     if active and not force:
         raise ValidationError(f"{device_name} is active; use force=True to reset and apply writeback")
 
-    params = _read_params_best_effort(device_name)
-    size = params.get("disksize") or "1G"
+    if active:
+        # Best-effort deactivation for force mode
+        run(["swapoff", f"/dev/{device_name}"], check=False)
+        run(["umount", f"/dev/{device_name}"], check=False)
+    dev_path = f"/dev/{device_name}"
+    if not create_if_missing and not is_block_device(dev_path):
+        raise NotBlockDeviceError(f"Device {device_name} does not exist; set create_if_missing=True to auto-create")
+
+    params = _read_params_best_effort(device_name, default_size)
+    size = params.get("disksize") or default_size
     algorithm = params.get("algorithm")
     streams = params.get("streams")
 
@@ -208,8 +201,14 @@ def set_writeback(device_name: str, writeback_device: str, force: bool = False) 
             zramctl_reset(dev_path)
         except SystemCommandError as e:
             raise ValidationError(f"Failed to reset device {device_name}: {e}")
-    # recreate with writeback
-    zramctl_create(dev_path, size=size, algorithm=algorithm, streams=streams, writeback_device=writeback_device)
+    # recreate
+    zramctl_create(dev_path, size=size, algorithm=algorithm, streams=streams)
+
+    # set writeback via sysfs
+    write_path = f"/sys/block/{device_name}/backing_dev"
+    ok, err = sysfs_write(write_path, writeback_device)
+    if not ok:
+        raise ValidationError(f"Failed to set writeback via sysfs for {device_name}: {err}")
 
     return WritebackResult(
         success=True,
@@ -219,16 +218,25 @@ def set_writeback(device_name: str, writeback_device: str, force: bool = False) 
     )
 
 
-def clear_writeback(device_name: str, force: bool = False) -> WritebackResult:
+def clear_writeback(device_name: str, force: bool = False, create_if_missing: bool = True, default_size: str = "1G") -> WritebackResult:
     """
     Clear writeback by resetting and recreating device without --writeback-device.
+    Creates if missing and create_if_missing=True; uses default_size if creating new.
     """
     active = _device_active(device_name)
     if active and not force:
         raise ValidationError(f"{device_name} is active; use force=True to reset and clear writeback")
 
-    params = _read_params_best_effort(device_name)
-    size = params.get("disksize") or "1G"
+    if active:
+        # Best-effort deactivation for force mode
+        run(["swapoff", f"/dev/{device_name}"], check=False)
+        run(["umount", f"/dev/{device_name}"], check=False)
+    dev_path = f"/dev/{device_name}"
+    if not create_if_missing and not is_block_device(dev_path):
+        raise NotBlockDeviceError(f"Device {device_name} does not exist; set create_if_missing=True to auto-create")
+
+    params = _read_params_best_effort(device_name, default_size)
+    size = params.get("disksize") or default_size
     algorithm = params.get("algorithm")
     streams = params.get("streams")
 
@@ -238,8 +246,14 @@ def clear_writeback(device_name: str, force: bool = False) -> WritebackResult:
             zramctl_reset(dev_path)
         except SystemCommandError as e:
             raise ValidationError(f"Failed to reset device {device_name}: {e}")
-    # recreate without writeback
-    zramctl_create(dev_path, size=size, algorithm=algorithm, streams=streams, writeback_device=None)
+    # recreate
+    zramctl_create(dev_path, size=size, algorithm=algorithm, streams=streams)
+
+    # clear writeback via sysfs by writing "none"
+    write_path = f"/sys/block/{device_name}/backing_dev"
+    ok, err = sysfs_write(write_path, "none")
+    if not ok:
+        raise ValidationError(f"Failed to clear writeback via sysfs for {device_name}: {err}")
 
     return WritebackResult(
         success=True,
@@ -270,6 +284,9 @@ def reset_device(device_name: str, confirm: bool = False) -> UnitResult:
     confirm parameter exists for CLI UX; core does not prompt.
     """
     dev_path = f"/dev/{device_name}"
+    if not is_block_device(dev_path):
+        return UnitResult(success=False, message=f"Cannot reset non-existent device {device_name}")
+
     try:
         zramctl_reset(dev_path)
         return UnitResult(success=True, message="reset")
@@ -373,16 +390,25 @@ def _apply_live_writeback_change(
             size=size,
             algorithm=algorithm,
             streams=streams,
-            writeback_device=desired_writeback,
         )
         actions.append(Action(
             name="recreate",
             success=True,
-            message=f"size={size} algo={algorithm or 'default'} streams={streams or 'default'} writeback={desired_writeback or 'None'}",
+            message=f"size={size} algo={algorithm or 'default'} streams={streams or 'default'}",
         ))
     except SystemCommandError as e:
         actions.append(Action(name="recreate", success=False, message=str(e)))
         return False, actions
+
+    # set writeback via sysfs
+    write_path = f"/sys/block/{device_name}/backing_dev"
+    write_value = desired_writeback if desired_writeback is not None else "none"
+    ok, err = sysfs_write(write_path, write_value)
+    if not ok:
+        actions.append(Action(name="set-writeback-sysfs", success=False, message=err))
+        return False, actions
+
+    actions.append(Action(name="set-writeback-sysfs", success=True, message=f"wrote '{write_value}' to backing_dev"))
 
     return True, actions
 
