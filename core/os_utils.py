@@ -97,7 +97,18 @@ def zram_sysfs_dir(device_name: str) -> str:
 
 
 def zramctl_reset(device_path: str) -> None:
-    run(["zramctl", "--reset", device_path], check=True)
+    """Resets a zram device using the sysfs interface to avoid device deletion."""
+    device_name = os.path.basename(device_path)
+    reset_path = f"/sys/block/{device_name}/reset"
+    ok, err = sysfs_write(reset_path, "1")
+    if not ok:
+        # Raise an error consistent with the previous command-based implementation
+        raise SystemCommandError(
+            cmd=[f"echo 1 > {reset_path}"],
+            returncode=1,
+            stdout="",
+            stderr=err or "Failed to write to sysfs reset node",
+        )
 
 
 def zramctl_create(device_path: str, size: str, algorithm: Optional[str] = None,
