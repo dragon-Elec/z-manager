@@ -60,12 +60,12 @@ class StatusPage(Adw.Bin):
         # --- TEMPORARILY DISABLED TO GET THE UI RUNNING ---
         # self._populate_zram_devices()
         # self._populate_swap_list()
-        # self._populate_event_log()
+        self._populate_event_log()
         
         # We can hide the template row to start with a clean slate
         self.zram0_expander_template.set_visible(False)
         self.no_devices_status_page.set_visible(True)
-        pass # UI will now load without trying to fetch data
+        
 
     def _get_device_template_xml(self) -> str | None:
         """
@@ -160,10 +160,9 @@ class StatusPage(Adw.Bin):
 
     def _populate_event_log(self):
         """Populates the System Health Events log."""
-        while (child := self.event_log_container.get_first_child()):
-            if child == self.no_events_status_page:
-                break
-            self.event_log_container.remove(child)
+        for child in list(self.event_log_container):
+            if child != self.no_events_status_page:
+                self.event_log_container.remove(child)
 
         devices = zdevice_ctl.list_devices()
         all_logs: List[journal.JournalRecord] = []
