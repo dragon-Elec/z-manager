@@ -200,8 +200,11 @@ def set_writeback(device_name: str, writeback_device: str, force: bool = False) 
     streams = params.get("streams")
 
     dev_path = f"/dev/{device_name}"
-    if active:
-        zramctl_reset(dev_path)
+    if is_block_device(dev_path):
+        try:
+            zramctl_reset(dev_path)
+        except SystemCommandError as e:
+            raise ValidationError(f"Failed to reset device {device_name}: {e}")
     # recreate with writeback
     zramctl_create(dev_path, size=size, algorithm=algorithm, streams=streams, writeback_device=writeback_device)
 
@@ -227,8 +230,11 @@ def clear_writeback(device_name: str, force: bool = False) -> WritebackResult:
     streams = params.get("streams")
 
     dev_path = f"/dev/{device_name}"
-    if active:
-        zramctl_reset(dev_path)
+    if is_block_device(dev_path):
+        try:
+            zramctl_reset(dev_path)
+        except SystemCommandError as e:
+            raise ValidationError(f"Failed to reset device {device_name}: {e}")
     # recreate without writeback
     zramctl_create(dev_path, size=size, algorithm=algorithm, streams=streams, writeback_device=None)
 
@@ -344,7 +350,7 @@ def _apply_live_writeback_change(
 
     dev_path = f"/dev/{device_name}"
 
-    if active:
+    if is_block_device(dev_path):
         try:
             zramctl_reset(dev_path)
             actions.append(Action(name="reset", success=True, message="zramctl --reset"))
