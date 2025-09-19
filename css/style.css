@@ -1,18 +1,25 @@
 /*
+/* css/style.css */
+
+/*
  * Styles for the compact placeholder widgets.
  * Icon and text size are controlled here.
  */
 
-box.placeholder image {
-  -gtk-icon-size: 80px; /* Controls the icon size */
-  opacity: 0.5;      /* ✅ ADDED: Controls the icon's opacity */
+/* --- The Fix: Make the selectors more specific --- */
+/* - box.placeholder image { ... } */
+/* + Target an image inside a .placeholder box that is itself inside a preferencesgroup */
+preferencesgroup box.placeholder image {
+  -gtk-icon-size: 85px;
+  opacity: 0.5;
 }
 
-box.placeholder label {
-  font-size: 20px;   /* Controls the text size */
+/* - box.placeholder label { ... } */
+/* + Target a label inside a .placeholder box that is itself inside a preferencesgroup */
+preferencesgroup box.placeholder label {
+  font-size: 25px;
   opacity: 0.8;
 }
-
 /* Custom style for our window's close button */
 .flat.window-close-button {
     /* This makes the color change smooth instead of instant */
