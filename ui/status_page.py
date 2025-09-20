@@ -67,6 +67,9 @@ class StatusPage(Adw.Bin):
         self._device_template_xml = self._get_device_template_xml()
         self.refresh()
 
+        # Refresh the data every 30 seconds
+        GObject.timeout_add_seconds(30, self.refresh)
+
     def refresh(self):
         """Public method to refresh all data on the page."""
         # --- TEMPORARILY DISABLED TO GET THE UI RUNNING ---
