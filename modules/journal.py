@@ -75,7 +75,7 @@ def list_zram_logs(unit: str = "systemd-zram-setup@zram0.service", count: int = 
         [
             "/bin/sh",
             "-lc",
-            f"journalctl -u {unit} -n {count} --no-pager --output=short-iso 2>/dev/null || true",
+            f"journalctl --system -u {unit} -n {count} --no-pager --output=short-iso 2>/dev/null || true",
         ],
         check=False,
     )
