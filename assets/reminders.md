@@ -73,3 +73,18 @@ The reality is that zramctl is an imperfect and inconsistent tool:
     It has strict, undocumented rules about the order of operations.
 
 Conclusion: The benefit of using zramctl is purely theoretical. In practice, it's an unreliable abstraction. The only way to build a robust application is to bypass the unreliable parts of zramctl and talk directly to the kernel's sysfs interface, which has consistent and predictable rules.
+
+
+### intrestinf command 
+
+ray@ray-X450CA:~/Desktop/pending/z-manager/3/z-manager$ systemctl list-units --all 'systemd-zram-setup@*'
+  UNIT                             LOAD   ACTIVE SUB    DESCRIPTION              
+● systemd-zram-setup@0.service     loaded failed failed Create swap on /dev/0
+● systemd-zram-setup@999.service   loaded failed failed Create swap on /dev/999
+● systemd-zram-setup@zram0.service loaded failed failed Create swap on /dev/zram0
+
+LOAD   = Reflects whether the unit definition was properly loaded.
+ACTIVE = The high-level unit activation state, i.e. generalization of SUB.
+SUB    = The low-level unit activation state, values depend on unit type.
+3 loaded units listed.
+To show all installed unit files use 'systemctl list-unit-files'.
