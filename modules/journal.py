@@ -46,62 +46,59 @@ def list_zram_logs(unit: str = "systemd-zram-setup@zram0.service", count: int = 
     Return latest ZRAM-related logs as normalized records.
     Prefers python3-systemd if available; otherwise falls back to `journalctl`.
     """
-    if python_journal_available():
-        try:
-            import systemd.journal  # type: ignore
-            reader = systemd.journal.Reader()
-            reader.add_match(_SYSTEMD_UNIT=unit)
-            reader.seek_tail()
-            buf: List[JournalRecord] = []
-            for entry in reader:
-                ts = entry.get("__REALTIME_TIMESTAMP", datetime.now())
-                msg = entry.get("MESSAGE", "No message found.")
-                prio = entry.get("PRIORITY", 6)
-                rec = JournalRecord(
-                    timestamp=_format_ts_safe(ts),
-                    priority=int(prio) if isinstance(prio, (int, str)) and str(prio).isdigit() else 6,
-                    message=str(msg),
-                    fields={k: v for k, v in entry.items() if isinstance(k, str)},
-                )
-                buf.append(rec)
-                if len(buf) >= count:
-                    break
-            return buf
-        except Exception:
-            # Fall through to journalctl fallback
-            pass
-
-    jr = run(
-        [
-            "/bin/sh",
-            "-lc",
-            f"journalctl --system -u {unit} -n {count} --no-pager --output=short-iso 2>/dev/null || true",
-        ],
-        check=False,
-    )
-    lines = [ln for ln in jr.out.splitlines() if ln.strip()]
-    records: List[JournalRecord] = []
-    for ln in lines:
-        ts: datetime = datetime.now()
-        msg = ln
-        prio = 6
-        try:
-            first_space = ln.find(" ")
-            if first_space > 0:
-                ts_str = ln[:first_space]
-                ts = _parse_iso_best_effort(ts_str) or datetime.now()
-                msg = ln[first_space + 1 :].strip()
-        except Exception:
-            pass
-        records.append(
-            JournalRecord(
-                timestamp=ts,
-                priority=prio,
-                message=msg,
-                fields={"source": "journalctl"},
+    try:
+        import systemd.journal  # type: ignore
+        reader = systemd.journal.Reader()
+        reader.add_match(_SYSTEMD_UNIT=unit)
+        reader.seek_tail()
+        buf: List[JournalRecord] = []
+        i = 0
+        while i < count and (entry := reader.get_previous()):
+            i += 1
+            ts = entry.get("__REALTIME_TIMESTAMP", datetime.now())
+            msg = entry.get("MESSAGE", "No message found.")
+            prio = entry.get("PRIORITY", 6)
+            rec = JournalRecord(
+                timestamp=_format_ts_safe(ts),
+                priority=int(prio) if isinstance(prio, (int, str)) and str(prio).isdigit() else 6,
+                message=str(msg),
+                fields={k: v for k, v in entry.items() if isinstance(k, str)},
             )
+            buf.append(rec)
+        buf.reverse()
+        return buf
+    except (ImportError, Exception):
+        jr = run(
+            [
+                "/bin/sh",
+                "-lc",
+                f"journalctl --system -u {unit} -n {count} --no-pager --output=short-iso 2>/dev/null || true",
+            ],
+            check=False,
         )
-    return records
+        lines = [ln for ln in jr.out.splitlines() if ln.strip()]
+        records: List[JournalRecord] = []
+        for ln in lines:
+            ts: datetime = datetime.now()
+            msg = ln
+            prio = 6
+            try:
+                first_space = ln.find(" ")
+                if first_space > 0:
+                    ts_str = ln[:first_space]
+                    ts = _parse_iso_best_effort(ts_str) or datetime.now()
+                    msg = ln[first_space + 1 :].strip()
+            except Exception:
+                pass
+            records.append(
+                JournalRecord(
+                    timestamp=ts,
+                    priority=prio,
+                    message=msg,
+                    fields={"source": "journalctl"},
+                )
+            )
+        return records
 
 
 def _parse_iso_best_effort(s: str) -> Optional[datetime]:
