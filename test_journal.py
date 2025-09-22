@@ -10,6 +10,8 @@ sys.path.insert(0, str(project_root))
 
 from modules.journal import list_zram_logs
 
+
+
 def main():
     """
     Fetches and prints ZRAM logs to the console to test the backend module.
