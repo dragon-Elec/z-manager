@@ -65,6 +65,11 @@ class StatusPage(Adw.Bin):
         self.no_events_status_page.add_css_class("placeholder")
         
         self._device_template_xml = self._get_device_template_xml()
+        
+        # --- ADD THESE TWO LINES ---
+        self._dynamic_device_rows = []
+        self._dynamic_swap_rows = []
+        
         self.refresh()
 
         # Refresh the data every 30 seconds
@@ -73,13 +78,15 @@ class StatusPage(Adw.Bin):
     def refresh(self):
         """Public method to refresh all data on the page."""
         # --- TEMPORARILY DISABLED TO GET THE UI RUNNING ---
-        # self._populate_zram_devices()
-        # self._populate_swap_list()
-        self._populate_event_log()
+        self._populate_zram_devices()
+        self._populate_swap_list()
+        # self._populate_event_log()
         
-        # We can hide the template row to start with a clean slate
-        self.zram0_expander_template.set_visible(False)
-        self.no_devices_status_page.set_visible(True)
+        if not zdevice_ctl.list_devices():
+            self.no_devices_status_page.set_visible(True)
+            self.zram0_expander_template.set_visible(False)
+        else:
+            self.no_devices_status_page.set_visible(False)
         
 
     def _get_device_template_xml(self) -> str | None:
@@ -102,9 +109,10 @@ class StatusPage(Adw.Bin):
 
     def _populate_zram_devices(self):
         """Populates the list of active ZRAM devices with real-time stats."""
-        for child in list(self.device_list_group):
-            if child != self.zram0_expander_template and child != self.no_devices_status_page:
-                self.device_list_group.remove(child)
+        # 1. Remove the old rows we tracked
+        for row in self._dynamic_device_rows:
+            self.device_list_group.remove(row)
+        self._dynamic_device_rows.clear()
 
         devices: List[zdevice_ctl.DeviceInfo] = zdevice_ctl.list_devices()
 
@@ -115,15 +123,16 @@ class StatusPage(Adw.Bin):
 
         self.no_devices_status_page.set_visible(False)
         if not self._device_template_xml:
-            self.no_devices_status_page.set_visible(True)
-            self.no_devices_status_page.set_title("UI Error")
-            self.no_devices_status_page.set_description("Could not parse device template from UI file.")
             return
 
+        # 2. Create and add new rows for each device
         for device in devices:
             builder = Gtk.Builder.new_from_string(self._device_template_xml, -1)
             new_row: Adw.ExpanderRow = builder.get_object("zram0_expander_template")
+            
+            # (Your existing logic to populate the new_row with data...)
             new_row.set_title(device.name)
+            # ... all the subtitle and level bar logic ...
             usage_percent = 0
             try:
                 disk_bytes = parse_size_to_bytes(device.disksize or '0')
@@ -136,34 +145,39 @@ class StatusPage(Adw.Bin):
             subtitle = f"{usage_percent}% Used | {device.ratio or 'N/A'}x Ratio"
             new_row.set_subtitle(subtitle)
 
-            def get_widget(name):
-                return builder.get_object(name)
-
+            def get_widget(name): return builder.get_object(name)
             usage_bar: Gtk.LevelBar = get_widget("zram0_usage_bar")
-            if usage_bar:
-                usage_bar.set_value(usage_percent)
+            if usage_bar: usage_bar.set_value(usage_percent)
             details = {
-                "zram0_disk_size_row": device.disksize,
-                "zram0_algorithm_row": device.algorithm,
-                "zram0_compr_size_row": device.compr_size,
-                "zram0_data_size_row": device.data_size,
-                "zram0_streams_row": str(device.streams) if device.streams else "N/A",
-                "zram0_writeback_row": "(none)",
+                "zram0_disk_size_row": device.disksize, "zram0_algorithm_row": device.algorithm,
+                "zram0_compr_size_row": device.compr_size, "zram0_data_size_row": device.data_size,
+                "zram0_streams_row": str(device.streams) if device.streams else "N/A", "zram0_writeback_row": "(none)",
             }
             for name, value in details.items():
                 row: Adw.ActionRow = get_widget(name)
-                if row:
-                    row.set_subtitle(value or "N/A")
+                if row: row.set_subtitle(value or "N/A")
+            
+            # 3. Add the row to the UI and TRACK it
             self.device_list_group.add(new_row)
+            self._dynamic_device_rows.append(new_row)
+
         self.zram0_expander_template.set_visible(False)
 
     def _populate_swap_list(self):
         """Populates the list of all system swap devices."""
-        child = self.swap_list_group.get_first_child()
-        while child:
-            self.swap_list_group.remove(child)
-            child = self.swap_list_group.get_first_child()
+        # You can keep or remove the print statement, it has served its purpose.
+        # print(f"DEBUG: RAW DATA FROM health.get_all_swaps() -> {health.get_all_swaps()}")
+
+        # 1. REMOVE the old rows we explicitly tracked from the last refresh.
+        #    This is the logic that was missing.
+        for row in self._dynamic_swap_rows:
+            self.swap_list_group.remove(row)
+        self._dynamic_swap_rows.clear()
+
+        # 2. GET the latest, clean data from the backend.
         swaps: List[health.SwapDevice] = health.get_all_swaps()
+        
+        # 3. CREATE new rows and TRACK them for the next refresh.
         for swap in swaps:
             row = Adw.ActionRow()
             row.set_title(swap.name)
@@ -171,7 +185,10 @@ class StatusPage(Adw.Bin):
             used_hr = _kb_to_human(swap.used_kb)
             subtitle = f"Size: {size_hr} | Used: {used_hr} | Priority: {swap.priority}"
             row.set_subtitle(subtitle)
+            
             self.swap_list_group.add(row)
+            # This is the crucial step: we add the new row to our tracking list.
+            self._dynamic_swap_rows.append(row)
 
     def _populate_event_log(self):
         """Populates the System Health Events log."""
@@ -192,6 +209,8 @@ class StatusPage(Adw.Bin):
             unit = f"systemd-zram-setup@{device.name}.service"
             all_logs.extend(journal.list_zram_logs(unit=unit, count=50))
 
+
+
         all_logs.sort(key=lambda r: r.timestamp, reverse=True)
         logs_to_display = all_logs[:25]
 
@@ -202,15 +221,35 @@ class StatusPage(Adw.Bin):
         else:
             self.no_events_status_page.set_visible(False)
             for log_entry in logs_to_display:
-                row = Adw.ActionRow()
-                row.set_title(log_entry.message)
                 ts_str = log_entry.timestamp.strftime("%Y-%m-%d %H:%M:%S")
-                row.set_subtitle(ts_str)
+                message = GLib.markup_escape_text(log_entry.message)
+                label = Gtk.Label()
+                label.set_markup(f"<small>{ts_str}</small>\n<b>{message}</b>")
+                label.set_halign(Gtk.Align.START)
+                label.set_wrap(True)
+
                 icon_name = "dialog-information-symbolic"
                 if log_entry.priority <= 3:
                     icon_name = "dialog-error-symbolic"
                 elif log_entry.priority <= 4:
                     icon_name = "dialog-warning-symbolic"
                 icon = Gtk.Image.new_from_icon_name(icon_name)
-                row.add_prefix(icon)
-                self.event_log_container.append(row)
+
+                box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+                box.append(icon)
+                box.append(label)
+
+                self.event_log_container.append(box).set_wrap(True)
+
+                icon_name = "dialog-information-symbolic"
+                if log_entry.priority <= 3:
+                    icon_name = "dialog-error-symbolic"
+                elif log_entry.priority <= 4:
+                    icon_name = "dialog-warning-symbolic"
+                icon = Gtk.Image.new_from_icon_name(icon_name)
+
+                box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+                box.append(icon)
+                box.append(label)
+
+                self.event_log_container.append(box)
