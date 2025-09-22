@@ -68,15 +68,10 @@ def list_zram_logs(unit: str = "systemd-zram-setup@zram0.service", count: int = 
         buf.reverse()
         return buf
     except (ImportError, Exception):
-        jr = run(
-            [
-                "/bin/sh",
-                "-lc",
-                f"journalctl --system -u {unit} -n {count} --no-pager --output=short-iso 2>/dev/null || true",
-            ],
-            check=False,
-        )
+        cmd = ["journalctl", "--system", "-u", unit, "-n", str(count), "--no-pager", "--output=short-iso"]
+        jr = run(cmd, check=False)
         lines = [ln for ln in jr.out.splitlines() if ln.strip()]
+
         records: List[JournalRecord] = []
         for ln in lines:
             ts: datetime = datetime.now()
