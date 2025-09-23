@@ -88,3 +88,25 @@ ACTIVE = The high-level unit activation state, i.e. generalization of SUB.
 SUB    = The low-level unit activation state, values depend on unit type.
 3 loaded units listed.
 To show all installed unit files use 'systemctl list-unit-files'.
+
+
+┌────────────────────────────────────────────────────────────┐
+│                                                            │
+│  zram0                                                     │
+│  45% Used | 3.51x Ratio                [ GtkLevelBar ]      │
+│                                                            │
+├────────────────────────────────────────────────────────────┤
+│                                                            │
+│  Show Details                                          ▲   │
+│ ---------------------------------------------------------- │
+│  Disk Size                      4.0 GiB                    │
+│  Compression Algorithm          zstd                       │
+│  Compressed Size                512.2 MiB                  │
+│  Uncompressed Data Size         1.8 GiB                    │
+│  Total Memory Used              521.4 MiB   <-- NEW        │
+│  Streams                        4                          │
+│  Writeback Device               (none)                     │
+│  I/O Operations                 1502 Reads / 987 Writes <-- NEW │
+│  Failed I/O                     0 Reads / 0 Writes    <-- NEW │
+│                                                            │
+└────────────────────────────────────────────────────────────┘
