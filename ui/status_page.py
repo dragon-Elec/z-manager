@@ -41,75 +41,86 @@ class StatusPage(Adw.Bin):
     # Device Status group
     device_list_group: Adw.PreferencesGroup = Gtk.Template.Child()
     no_devices_status_page: Gtk.Box = Gtk.Template.Child()
-    # ✅ ADD THIS LINE
-    no_devices_label: Gtk.Label = Gtk.Template.Child() 
-    zram0_expander_template: Adw.ExpanderRow = Gtk.Template.Child()
+    no_devices_label: Gtk.Label = Gtk.Template.Child()
 
     # Swap List group
     swap_list_group: Adw.PreferencesGroup = Gtk.Template.Child()
 
     # Event Log group
     event_log_container: Gtk.Box = Gtk.Template.Child()
-    # 1. FIX: The type hint must match the UI file (it's a Gtk.Box)
     no_events_status_page: Gtk.Box = Gtk.Template.Child()
-    # 2. NEW: Add a child for the label inside the box
-    no_events_label: Gtk.Label = Gtk.Template.Child() # This will be added in the UI
+    no_events_label: Gtk.Label = Gtk.Template.Child()
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         
-        # --- THIS IS THE FIX ---
-        # Force the CSS class onto the widgets at runtime to bypass the
-        # AdwPreferencesGroup's interference with the UI file properties.
         self.no_devices_status_page.add_css_class("placeholder")
         self.no_events_status_page.add_css_class("placeholder")
         
-        self._device_template_xml = self._get_device_template_xml()
-        
-        # --- ADD THESE TWO LINES ---
         self._dynamic_device_rows = []
         self._dynamic_swap_rows = []
         
         self.refresh()
 
-        # Refresh the data every 30 seconds
         GObject.timeout_add_seconds(30, self.refresh)
 
     def refresh(self):
         """Public method to refresh all data on the page."""
-        # --- TEMPORARILY DISABLED TO GET THE UI RUNNING ---
         self._populate_zram_devices()
         self._populate_swap_list()
-        # self._populate_event_log()
         
         if not zdevice_ctl.list_devices():
             self.no_devices_status_page.set_visible(True)
-            self.zram0_expander_template.set_visible(False)
         else:
             self.no_devices_status_page.set_visible(False)
-        
 
-    def _get_device_template_xml(self) -> str | None:
-        """
-        Parses the UI file to extract the XML definition of the expander row template.
-        This is used to dynamically create new device rows.
-        """
+    def _create_device_card(self, device: zdevice_ctl.DeviceInfo) -> Adw.PreferencesGroup:
+        """Creates a 'card' for a single ZRAM device."""
+        card = Adw.PreferencesGroup()
+
+        # --- Main Action Row (Always Visible) ---
+        usage_percent = 0
         try:
-            tree = ET.parse(get_ui_path('status_page.ui'))
-            root = tree.getroot()
-            template_node = root.find(".//*[@id='zram0_expander_template']")
-            if template_node is not None:
-                interface = ET.Element('interface')
-                interface.append(template_node)
-                return ET.tostring(interface, encoding='unicode')
-        except (ET.ParseError, FileNotFoundError):
-            return None
-        return None
+            disk_bytes = parse_size_to_bytes(device.disksize or '0')
+            data_bytes = parse_size_to_bytes(device.data_size or '0')
+            if disk_bytes > 0:
+                usage_percent = int((data_bytes / disk_bytes) * 100)
+        except (ValueError, ZeroDivisionError):
+            usage_percent = 0
 
+        subtitle = f"{usage_percent}% Used | {device.ratio or 'N/A'}x Ratio"
+        
+        main_row = Adw.ActionRow(title=device.name, subtitle=subtitle)
+        
+        usage_bar = Gtk.LevelBar(min_value=0, max_value=100, value=usage_percent, valign=Gtk.Align.CENTER)
+        usage_bar.set_size_request(150, -1)
+        main_row.add_suffix(usage_bar)
+        
+        card.add(main_row)
+
+        # --- Expander Row for Details ---
+        expander = Adw.ExpanderRow(title="Click to expand details")
+        expander.set_subtitle(f"Disk Size: {device.disksize or 'N/A'} | Algorithm: {device.algorithm or 'N/A'}")
+        
+        details = {
+            "Disk Size": device.disksize,
+            "Compression Algorithm": device.algorithm,
+            "Compressed Size": device.compr_size,
+            "Uncompressed Data Size": device.data_size,
+            "Streams": str(device.streams) if device.streams else "N/A",
+            "Writeback Device": "(none)",
+        }
+
+        for title, value in details.items():
+            row = Adw.ActionRow(title=title, subtitle=value or "N/A")
+            expander.add_row(row)
+            
+        card.add(expander)
+        
+        return card
 
     def _populate_zram_devices(self):
         """Populates the list of active ZRAM devices with real-time stats."""
-        # 1. Remove the old rows we tracked
         for row in self._dynamic_device_rows:
             self.device_list_group.remove(row)
         self._dynamic_device_rows.clear()
@@ -118,50 +129,14 @@ class StatusPage(Adw.Bin):
 
         if not devices:
             self.no_devices_status_page.set_visible(True)
-            self.zram0_expander_template.set_visible(False)
             return
 
         self.no_devices_status_page.set_visible(False)
-        if not self._device_template_xml:
-            return
 
-        # 2. Create and add new rows for each device
         for device in devices:
-            builder = Gtk.Builder.new_from_string(self._device_template_xml, -1)
-            new_row: Adw.ExpanderRow = builder.get_object("zram0_expander_template")
-            
-            # (Your existing logic to populate the new_row with data...)
-            new_row.set_title(device.name)
-            # ... all the subtitle and level bar logic ...
-            usage_percent = 0
-            try:
-                disk_bytes = parse_size_to_bytes(device.disksize or '0')
-                data_bytes = parse_size_to_bytes(device.data_size or '0')
-                if disk_bytes > 0:
-                    usage_percent = int((data_bytes / disk_bytes) * 100)
-            except (ValueError, ZeroDivisionError):
-                usage_percent = 0
-
-            subtitle = f"{usage_percent}% Used | {device.ratio or 'N/A'}x Ratio"
-            new_row.set_subtitle(subtitle)
-
-            def get_widget(name): return builder.get_object(name)
-            usage_bar: Gtk.LevelBar = get_widget("zram0_usage_bar")
-            if usage_bar: usage_bar.set_value(usage_percent)
-            details = {
-                "zram0_disk_size_row": device.disksize, "zram0_algorithm_row": device.algorithm,
-                "zram0_compr_size_row": device.compr_size, "zram0_data_size_row": device.data_size,
-                "zram0_streams_row": str(device.streams) if device.streams else "N/A", "zram0_writeback_row": "(none)",
-            }
-            for name, value in details.items():
-                row: Adw.ActionRow = get_widget(name)
-                if row: row.set_subtitle(value or "N/A")
-            
-            # 3. Add the row to the UI and TRACK it
-            self.device_list_group.add(new_row)
-            self._dynamic_device_rows.append(new_row)
-
-        self.zram0_expander_template.set_visible(False)
+            new_card = self._create_device_card(device)
+            self.device_list_group.add(new_card)
+            self._dynamic_device_rows.append(new_card)
 
     def _populate_swap_list(self):
         """Populates the list of all system swap devices."""
