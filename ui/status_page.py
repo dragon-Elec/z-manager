@@ -4,7 +4,7 @@
 import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
-from gi.repository import Gtk, Adw, GObject
+from gi.repository import Gtk, Adw, GObject, GLib
 
 # --- Backend imports are kept for future use, but functions are not called ---
 from core import health
@@ -68,6 +68,7 @@ class StatusPage(Adw.Bin):
         """Public method to refresh all data on the page."""
         self._populate_zram_devices()
         self._populate_swap_list()
+        self._populate_event_log()
         
         if not zdevice_ctl.list_devices():
             self.no_devices_status_page.set_visible(True)
@@ -196,35 +197,28 @@ class StatusPage(Adw.Bin):
         else:
             self.no_events_status_page.set_visible(False)
             for log_entry in logs_to_display:
-                ts_str = log_entry.timestamp.strftime("%Y-%m-%d %H:%M:%S")
-                message = GLib.markup_escape_text(log_entry.message)
-                label = Gtk.Label()
-                label.set_markup(f"<small>{ts_str}</small>\n<b>{message}</b>")
-                label.set_halign(Gtk.Align.START)
-                label.set_wrap(True)
+                            ts_str = log_entry.timestamp.strftime("%Y-%m-%d %H:%M:%S")
+                            # Use GLib.markup_escape_text to prevent Pango-related errors
+                            message = GLib.markup_escape_text(log_entry.message)
+                            
+                            label = Gtk.Label()
+                            label.set_markup(f"<small>{ts_str}</small>\n<b>{message}</b>")
+                            label.set_halign(Gtk.Align.START)
+                            label.set_wrap(True)
 
-                icon_name = "dialog-information-symbolic"
-                if log_entry.priority <= 3:
-                    icon_name = "dialog-error-symbolic"
-                elif log_entry.priority <= 4:
-                    icon_name = "dialog-warning-symbolic"
-                icon = Gtk.Image.new_from_icon_name(icon_name)
+                            icon_name = "dialog-information-symbolic"
+                            if log_entry.priority <= 3: # Error level
+                                icon_name = "dialog-error-symbolic"
+                            elif log_entry.priority <= 4: # Warning level
+                                icon_name = "dialog-warning-symbolic"
+                            
+                            icon = Gtk.Image.new_from_icon_name(icon_name)
+                            icon.set_valign(Gtk.Align.START) # Align icon to the top
 
-                box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-                box.append(icon)
-                box.append(label)
+                            box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+                            box.set_margin_top(6)
+                            box.set_margin_bottom(6)
+                            box.append(icon)
+                            box.append(label)
 
-                self.event_log_container.append(box).set_wrap(True)
-
-                icon_name = "dialog-information-symbolic"
-                if log_entry.priority <= 3:
-                    icon_name = "dialog-error-symbolic"
-                elif log_entry.priority <= 4:
-                    icon_name = "dialog-warning-symbolic"
-                icon = Gtk.Image.new_from_icon_name(icon_name)
-
-                box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-                box.append(icon)
-                box.append(label)
-
-                self.event_log_container.append(box)
+                            self.event_log_container.append(box)
