@@ -13,10 +13,14 @@ A Modern GTK4 / Libadwaita GUI for Managing ZRAM on Linux.
 > Please feel free to explore the code, test it on a non-critical system, and report any issues you find.
 
 <img src="./assets/status-page.png" alt="Status Page" width="430"/>
-<img src="./assets/configure-page.png" alt="Configure Page" width="215"/>
-<img src="./assets/tune-page.png" alt="Tune Page" width="215"/>
-<img src="./assets/Screenshot from 2025-10-02 00-11-29.png" alt="Screenshot 1" width="215"/>
-<img src="./assets/Screenshot from 2025-10-02 00-11-41.png" alt="Screenshot 2" width="215"/>
+
+| Configure | Tune |
+|---|---|
+| <img src="./assets/configure-page.png" alt="Configure Page" width="215"/> | <img src="./assets/tune-page.png" alt="Tune Page" width="215"/> |
+
+| Screenshot 1 | Screenshot 2 |
+|---|---|
+| <img src="./assets/Screenshot from 2025-10-02 00-11-29.png" alt="Screenshot 1" width="215"/> | <img src="./assets/Screenshot from 2025-10-02 00-11-41.png" alt="Screenshot 2" width="215"/> |
 
 ## About The Project
 
