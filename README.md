@@ -5,9 +5,9 @@
 
 ## 🕐 Developer Status ⏳
 
-> **Project updates will be slow for a while, user is a bit busy.**
+> **Project updates will be slow for a while, user is a bit busy.** 
+In the meantime, feel free to test and make pull requests
 
- **In the meantime, feel free to test and make pull requests.**
 
 
 ## 🚧 Project Status: Under Heavy Development 🚧
