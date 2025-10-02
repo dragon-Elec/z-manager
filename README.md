@@ -12,7 +12,9 @@ A Modern GTK4 / Libadwaita GUI for Managing ZRAM on Linux.
 >
 > Please feel free to explore the code, test it on a non-critical system, and report any issues you find.
 
-<img src="./assets/status-page.png" alt="status-page" width="430"/>
+| Status | Configure | Tune |
+|---|---|---|
+| <img src="./assets/status-page.png" alt="status-page" width="200"/> | <img src="./assets/configure-page.png" alt="configure-page" width="200"/> | <img src="./assets/tune-page.png" alt="tune-page" width="200"/> |
 
 ## About The Project
 
