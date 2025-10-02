@@ -2,6 +2,8 @@
 
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
 
+> 🕐 **Developer Status:** Project updates will be slow for a while, user is a bit busy. ⏳
+
 A Modern GTK4 / Libadwaita GUI for Managing ZRAM on Linux.
 
 ## 🚧 Project Status: Under Heavy Development 🚧
