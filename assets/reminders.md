@@ -110,3 +110,86 @@ To show all installed unit files use 'systemctl list-unit-files'.
 │  Failed I/O                     0 Reads / 0 Writes    <-- NEW │
 │                                                            │
 └────────────────────────────────────────────────────────────┘
+
+
+
+implement writeback with swap files someday 
+
+## Can Swapfiles Be Used as Writeback Devices with systemd zram-generator and zramctl?
+
+**No, swapfiles cannot be used as writeback devices with zram. The zram writeback feature only supports block devices (partitions), not swap files.** While you can use a workaround with loop devices, systemd zram-generator doesn't currently provide automatic management for writeback functionality.
+
+### Zram Writeback Device Requirements
+
+According to the kernel documentation, zram writeback requires **block devices only**:[1]
+
+```bash
+echo /dev/sda5 > /sys/block/zramX/backing_dev
+```
+
+The documentation explicitly states: **"It supports only partitions at this moment"**. This means:[1]
+
+- ✅ **Supported**: `/dev/sda5`, `/dev/nvme0n1p3`, or other block device partitions
+- ❌ **Not supported**: `/var/swapfile` or other file-based swap
+
+### systemd zram-generator Configuration
+
+The `zram-generator.conf` file does support the `writeback-device` parameter:[2]
+
+```ini
+[zram0]
+zram-size = min(ram / 2, 4096)
+compression-algorithm = zstd
+writeback-device = /dev/disk/by-partuuid/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX
+```
+
+However, there are **significant limitations**:
+
+1. **Incomplete implementation**: The writeback feature in zram-generator is not fully functional. It accepts the configuration but doesn't automatically trigger writeback operations.[3][4]
+
+2. **Manual intervention required**: Even with a configured writeback device, you must manually trigger writeback using commands like:[1]
+   ```bash
+   echo idle > /sys/block/zram0/writeback
+   echo huge > /sys/block/zram0/writeback
+   ```
+
+### Workaround: Loop Device Method
+
+One documented workaround involves using loop devices to mount swap files as block devices:[5]
+
+1. Create a swap file:
+   ```bash
+   sudo dd if=/dev/zero of=/swapfile bs=1M count=4096
+   sudo chmod 600 /swapfile
+   ```
+
+2. Set up a loop device:
+   ```bash
+   sudo losetup /dev/loop0 /swapfile
+   ```
+
+3. Configure zram to use the loop device:
+   ```bash
+   echo /dev/loop0 > /sys/block/zram0/backing_dev
+   ```
+
+However, this approach requires manual setup and isn't supported by zram-generator's automatic configuration.
+
+### Current State and Limitations
+
+The writeback functionality has several important limitations:[4][6]
+
+- **No automatic writeback**: zram-generator doesn't implement automatic idle page detection and writeback
+- **Manual management required**: You must manually mark pages as idle and trigger writeback
+- **Partition requirement**: Only actual partitions work, not swap files
+- **Feature incomplete**: The integration between zram-generator and writeback is still under development
+
+### Recommended Approach
+
+For most use cases, consider these alternatives:
+
+1. **Use zram without writeback**: Modern systems with adequate RAM often don't need writeback functionality
+2. **Create a dedicated swap partition**: If you need writeback, create a small swap partition specifically for this purpose
+3. **Use regular swap alongside zram**: Configure both zram (higher priority) and a traditional swap file/partition (lower priority)[7]
+
+The consensus among users is that **zram alone is sufficient for most desktop systems**, and the added complexity of writeback configuration may not provide meaningful benefits for typical workloads.[8]
