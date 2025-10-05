@@ -9,6 +9,8 @@ to ensure that tuning settings survive a reboot.
 from __future__ import annotations
 
 import logging
+import tempfile
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -19,6 +21,15 @@ _LOGGER = logging.getLogger(__name__)
 
 # --- Core Constants ---
 SYSCTL_CONFIG_PATH = Path("/etc/sysctl.d/99-z-manager.conf")
+# TODO: This is a temporary solution. A more robust solution will be implemented later.
+# The ideal solution would be to read the default values from the system, but that is not a straightforward task.
+DEFAULT_SYSCTL_SETTINGS = """# Default kernel tuning values.
+vm.swappiness = 60
+vm.watermark_boost_factor = 150
+vm.watermark_scale_factor = 10
+vm.page-cluster = 3
+""".strip()
+
 GAMING_PROFILE_CONTENT = """# Kernel tuning for ZRAM, recommended by Pop!_OS and others.
 vm.swappiness = 180
 vm.watermark_boost_factor = 0
@@ -66,6 +77,22 @@ def get_swappiness() -> int | None:
     return None
 
 
+def _revert_sysctl_to_defaults() -> bool:
+    """Writes the default sysctl settings to a temporary file and applies them."""
+    try:
+        # Use a temporary file to apply the default settings
+        with tempfile.NamedTemporaryFile(mode='w+', delete=False) as temp_f:
+            temp_f.write(DEFAULT_SYSCTL_SETTINGS)
+            temp_f.flush()
+            run(["sysctl", "--load", temp_f.name], check=True)
+        os.unlink(temp_f.name)
+        _LOGGER.info("Successfully reverted sysctl settings to defaults.")
+        return True
+    except (SystemCommandError, OSError) as e:
+        _LOGGER.error(f"Failed to revert sysctl settings to defaults: {e}")
+        return False
+
+
 # --- Core Tuning Functions ---
 
 def apply_sysctl_profile(enable: bool) -> TuneResult:
@@ -98,8 +125,11 @@ def apply_sysctl_profile(enable: bool) -> TuneResult:
 
         try:
             SYSCTL_CONFIG_PATH.unlink()
-            # Optionally, you could reset the values to defaults here and run `sysctl --system`.
-            return TuneResult(success=True, changed=True, message="Sysctl performance profile was disabled.")
+            if not _revert_sysctl_to_defaults():
+                # If reverting fails, the config file is already deleted, which is not ideal.
+                # However, the user can re-enable and then disable again to retry.
+                return TuneResult(success=False, changed=True, message="Profile disabled, but failed to revert live settings.")
+            return TuneResult(success=True, changed=True, message="Sysctl performance profile was disabled and settings reverted.")
         except Exception as e:
             _LOGGER.error(f"Failed to remove sysctl config file: {e}")
             return TuneResult(success=False, changed=False, message=f"Failed to disable performance profile: {e}")
