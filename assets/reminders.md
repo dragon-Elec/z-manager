@@ -193,3 +193,31 @@ For most use cases, consider these alternatives:
 3. **Use regular swap alongside zram**: Configure both zram (higher priority) and a traditional swap file/partition (lower priority)[7]
 
 The consensus among users is that **zram alone is sufficient for most desktop systems**, and the added complexity of writeback configuration may not provide meaningful benefits for typical workloads.[8]
+
+
+nice command 
+
+
+```
+ray@ray-X450CA:~/Desktop/Link to z-manager$ sudo systemctl status --no-pager systemd-zram-setup@zram0.service
+× systemd-zram-setup@zram0.service - Create swap on /dev/zram0
+     Loaded: loaded (/lib/systemd/system/systemd-zram-setup@.service; static)
+    Drop-In: /run/systemd/generator/systemd-zram-setup@zram0.service.d
+             └─bindsto-swap.conf
+     Active: failed (Result: exit-code) since Sat 2025-10-04 01:10:07 IST; 1min 25s ago
+       Docs: man:zram-generator(8)
+             man:zram-generator.conf(5)
+    Process: 41113 ExecStart=/lib/systemd/system-generators/zram-generator --setup-device zram0 (code=exited, status=1/FAILURE)
+   Main PID: 41113 (code=exited, status=1/FAILURE)
+        CPU: 3ms
+
+Oct 04 01:10:07 ray-X450CA systemd[1]: Starting Create swap on /dev/zram0...
+Oct 04 01:10:07 ray-X450CA zram-generator[41113]: Error: Failed to configure compression algorithm into /sys/block/zram0/comp_algorithm
+Oct 04 01:10:07 ray-X450CA zram-generator[41113]: Caused by:
+Oct 04 01:10:07 ray-X450CA zram-generator[41113]:     Device or resource busy (os error 16)
+Oct 04 01:10:07 ray-X450CA systemd[1]: systemd-zram-setup@zram0.service: Main process exited, code=exited, status=1/FAILURE
+Oct 04 01:10:07 ray-X450CA systemd[1]: systemd-zram-setup@zram0.service: Failed with result 'exit-code'.
+Oct 04 01:10:07 ray-X450CA systemd[1]: Failed to start Create swap on /dev/zram0.
+ray@ray-X450CA:~/Desktop/Link to z-manager$ 
+
+```
