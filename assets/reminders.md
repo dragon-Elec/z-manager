@@ -221,3 +221,6 @@ Oct 04 01:10:07 ray-X450CA systemd[1]: Failed to start Create swap on /dev/zram0
 ray@ray-X450CA:~/Desktop/Link to z-manager$ 
 
 ```
+
+
+i am not sure if the applicaiton is detecting swap files or swap paratations.
