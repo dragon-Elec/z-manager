@@ -78,14 +78,16 @@ def read_file(path: Union[str, Path]) -> Optional[str]:
         return None
 
 
-def sysfs_write(path: Union[str, Path], value: str) -> Tuple[bool, Optional[str]]:
-    """Safely writes to a sysfs file, accepting either a string or Path object."""
+def sysfs_write(path: Union[str, Path], value: str) -> None:
+    """
+    Safely writes to a sysfs file, accepting either a string or Path object.
+    Raises IOError or OSError on failure.
+    """
     try:
         with open(path, "w", encoding="utf-8") as f:
             f.write(value)
-        return True, None
-    except Exception as e:
-        return False, str(e)
+    except (IOError, OSError):
+        raise
 
 
 def zram_sysfs_dir(device_name: str) -> str:
@@ -100,15 +102,13 @@ def zramctl_reset(device_path: str) -> None:
     """Resets a zram device using the sysfs interface to avoid device deletion."""
     device_name = os.path.basename(device_path)
     reset_path = f"/sys/block/{device_name}/reset"
-    ok, err = sysfs_write(reset_path, "1")
-    if not ok:
-        # Raise an error consistent with the previous command-based implementation
-        raise SystemCommandError(
-            cmd=[f"echo 1 > {reset_path}"],
-            returncode=1,
-            stdout="",
-            stderr=err or "Failed to write to sysfs reset node",
-        )
+    try:
+        sysfs_write(reset_path, "1")
+    except (IOError, OSError) as e:
+        # This is the correct way to handle the error.
+        # It reports the actual operation that failed (a file write)
+        # and the underlying system error.
+        raise RuntimeError(f"Failed to write '1' to sysfs node {reset_path}: {e}")
 
 
 def zramctl_create(device_path: str, size: str, algorithm: Optional[str] = None,
@@ -162,47 +162,51 @@ def systemd_try_restart(service: str) -> Tuple[bool, Optional[str]]:
 
 def parse_zramctl_table() -> List[Dict[str, Any]]:
     """
-    Parse `zramctl` default table output by reading the header to dynamically
-    map columns, making it robust against column reordering in different
-    zram-tools versions.
+    Parse `zramctl` default table output using a "smarter split" that assumes
+    only the last column (MOUNTPOINT) can contain spaces. This is more robust
+    than fixed-width parsing if column spacing changes in future versions.
     """
     out = zramctl_info_all()
     lines = [ln.strip() for ln in out.splitlines() if ln.strip()]
     if len(lines) < 2:
         return []
 
-    # 1. Read and split the header (normalize to upper)
+    # Get header columns, which we assume are always single words
     header = [col.upper().strip() for col in lines[0].split()]
+    num_cols = len(header)
     devices: List[Dict[str, Any]] = []
 
     for ln in lines[1:]:
-        parts = ln.split()
-        if len(parts) < 1 or not os.path.basename(parts[0]).startswith("zram"):
-            continue  # Skip non-zram or malformed
+        # Split the line max (N-1) times. The last element will contain the rest of the line.
+        parts = ln.split(maxsplit=num_cols - 1)
+        
+        # In case the last column is empty, parts will be shorter
+        if len(parts) < num_cols - 1:
+            continue # Skip malformed lines
 
-        # 2. Create row dict: zip header to parts (assumes aligned lengths)
+        # Pad parts if mountpoint is missing, so zip works correctly
+        while len(parts) < num_cols:
+            parts.append("")
 
         row_data = dict(zip(header, parts))
 
-        # 3. Extract by key (handle short/long variants)
+        # Map to our final structure
         name_path = row_data.get("NAME", "")
-        info: Dict[str, Any] = {"name": os.path.basename(name_path) if name_path else "unknown"}
+        device_data: Dict[str, Any] = {"name": os.path.basename(name_path) if name_path else "unknown"}
+        device_data["disksize"] = row_data.get("DISKSIZE")
+        device_data["data-size"] = row_data.get("DATA")
+        device_data["compr-size"] = row_data.get("COMPR")
+        device_data["algorithm"] = row_data.get("ALGORITHM")
+        device_data["mountpoint"] = row_data.get("MOUNTPOINT")
 
-        # Map fields (use short or long keys)
-        info["disksize"] = row_data.get("DISKSIZE")
-        info["data-size"] = row_data.get("DATA")
-        info["compr-size"] = row_data.get("COMPR")  # Or "COMPR-SIZE" if full
-        info["algorithm"] = row_data.get("ALG") or row_data.get("ALGORITHM")
-        # No ratio in default; set None
-
-        # Streams: safe int parse
         streams_str = row_data.get("STREAMS")
         try:
-            info["streams"] = int(streams_str) if streams_str else None
+            device_data["streams"] = int(streams_str) if streams_str else None
         except (ValueError, TypeError):
-            info["streams"] = None
-
-        devices.append(info)
+            device_data["streams"] = None
+        
+        if device_data["name"] != "unknown":
+            devices.append(device_data)
 
     return devices
 
