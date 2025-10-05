@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional, Dict, Any, List, Tuple
 
+from core.config import CONFIG_PATH
 from core.os_utils import (
     run,
     SystemCommandError,
@@ -19,6 +20,7 @@ from core.os_utils import (
     systemd_daemon_reload,
     systemd_try_restart,
     systemd_restart,
+    atomic_write_to_file,
 )
 
 
@@ -84,6 +86,44 @@ class OrchestrationResult:
 
 
 # ============ Internal helpers ============
+
+def _reconfigure_device_sysfs(device_name: str, size: str, algorithm: Optional[str], streams: Optional[int], backing_dev: Optional[str]) -> None:
+    """
+    Single source of truth for reconfiguring a zram device using sysfs.
+    Raises ValidationError or RuntimeError on failure.
+    """
+    dev_path = f"/dev/{device_name}"
+
+    # 1. Reset the device. This sets disksize to 0.
+    zramctl_reset(dev_path)
+
+    # 2. Set the backing device via sysfs (MUST be done while size is 0)
+    if backing_dev:
+        try:
+            sysfs_write(f"/sys/block/{device_name}/backing_dev", backing_dev)
+        except (IOError, OSError) as e:
+            raise ValidationError(f"Failed to set backing_dev: {e}")
+
+    # 3. Set algorithm
+    if algorithm:
+        try:
+            sysfs_write(f"/sys/block/{device_name}/comp_algorithm", algorithm)
+        except (IOError, OSError) as e:
+            raise ValidationError(f"Failed to set comp_algorithm: {e}")
+
+    # 4. Set streams
+    if streams:
+        try:
+            sysfs_write(f"/sys/block/{device_name}/max_comp_streams", str(streams))
+        except (IOError, OSError) as e:
+            raise ValidationError(f"Failed to set max_comp_streams: {e}")
+
+    # 5. Set size. This should be the final step.
+    try:
+        sysfs_write(f"/sys/block/{device_name}/disksize", size)
+    except (IOError, OSError) as e:
+        raise ValidationError(f"Failed to set disksize: {e}")
+
 
 def _get_sysfs(device_name: str, node: str) -> Optional[str]:
     base = zram_sysfs_dir(device_name)
@@ -179,42 +219,23 @@ def set_writeback(device_name: str, writeback_device: str, force: bool = False, 
     if active and not force:
         raise ValidationError(f"{device_name} is active; use force=True to reset and apply writeback")
 
+    dev_path = f"/dev/{device_name}"
+    if not create_if_missing and not is_block_device(dev_path):
+        raise NotBlockDeviceError(f"Device {device_name} does not exist; set create_if_missing=True to auto-create")
+
     if active:
         # Best-effort deactivation for force mode
         run(["swapoff", f"/dev/{device_name}"], check=False)
         run(["umount", f"/dev/{device_name}"], check=False)
 
-    dev_path = f"/dev/{device_name}"
-    if not create_if_missing and not is_block_device(dev_path):
-        raise NotBlockDeviceError(f"Device {device_name} does not exist; set create_if_missing=True to auto-create")
-
     params = _read_params_best_effort(device_name, default_size)
     size = new_size or params.get("disksize") or default_size
     algorithm = params.get("algorithm")
-    # streams cannot be set via sysfs, so we skip it
+    streams = params.get("streams")
 
-    # --- Pure SysFS Reconfiguration ---
     try:
-        # 1. Reset the device. This sets disksize to 0.
-        zramctl_reset(dev_path)
-
-        # 2. Set the backing device via sysfs (MUST be done while size is 0)
-        ok, err = sysfs_write(f"/sys/block/{device_name}/backing_dev", writeback_device)
-        if not ok:
-            raise ValidationError(f"Failed to set backing_dev: {err}")
-
-        # 3. Set algorithm
-        if algorithm:
-            ok, err = sysfs_write(f"/sys/block/{device_name}/comp_algorithm", algorithm)
-            if not ok:
-                raise ValidationError(f"Failed to set comp_algorithm: {err}")
-
-        # 4. Set size. This should be the final step.
-        ok, err = sysfs_write(f"/sys/block/{device_name}/disksize", size)
-        if not ok:
-            raise ValidationError(f"Failed to set disksize: {err}")
-
-    except (ValidationError, SystemCommandError) as e:
+        _reconfigure_device_sysfs(device_name, size, algorithm, streams, writeback_device)
+    except (ValidationError, RuntimeError) as e:
         return WritebackResult(success=False, device=device_name, action="set-writeback", details={"error": str(e)})
 
     return WritebackResult(
@@ -234,38 +255,23 @@ def clear_writeback(device_name: str, force: bool = False, create_if_missing: bo
     if active and not force:
         raise ValidationError(f"{device_name} is active; use force=True to reset and clear writeback")
 
+    dev_path = f"/dev/{device_name}"
+    if not create_if_missing and not is_block_device(dev_path):
+        raise NotBlockDeviceError(f"Device {device_name} does not exist; set create_if_missing=True to auto-create")
+
     if active:
         # Best-effort deactivation for force mode
         run(["swapoff", f"/dev/{device_name}"], check=False)
         run(["umount", f"/dev/{device_name}"], check=False)
 
-    dev_path = f"/dev/{device_name}"
-    if not create_if_missing and not is_block_device(dev_path):
-        raise NotBlockDeviceError(f"Device {device_name} does not exist; set create_if_missing=True to auto-create")
-
     params = _read_params_best_effort(device_name, default_size)
     size = new_size or params.get("disksize") or default_size
     algorithm = params.get("algorithm")
+    streams = params.get("streams")
 
-    # --- Pure SysFS Reconfiguration ---
     try:
-        # 1. Reset the device.
-        zramctl_reset(dev_path)
-
-        # 2. The reset operation already cleared the backing device. No further action needed.
-
-        # 3. Set algorithm
-        if algorithm:
-            ok, err = sysfs_write(f"/sys/block/{device_name}/comp_algorithm", algorithm)
-            if not ok:
-                raise ValidationError(f"Failed to set comp_algorithm: {err}")
-
-        # 4. Set size.
-        ok, err = sysfs_write(f"/sys/block/{device_name}/disksize", size)
-        if not ok:
-            raise ValidationError(f"Failed to set disksize: {err}")
-
-    except (ValidationError, SystemCommandError) as e:
+        _reconfigure_device_sysfs(device_name, size, algorithm, streams, backing_dev=None)
+    except (ValidationError, RuntimeError) as e:
         return WritebackResult(success=False, device=device_name, action="clear-writeback", details={"error": str(e)})
 
     return WritebackResult(
@@ -303,7 +309,7 @@ def reset_device(device_name: str, confirm: bool = False) -> UnitResult:
     try:
         zramctl_reset(dev_path)
         return UnitResult(success=True, message="reset")
-    except SystemCommandError as e:
+    except (SystemCommandError, RuntimeError) as e:
         return UnitResult(success=False, message=str(e))
 
 
@@ -326,9 +332,14 @@ def persist_writeback(device_name: str, writeback_device: Optional[str], apply_n
                 raise NotBlockDeviceError(f"{writeback_device} is not a block device")
             updates["writeback-device"] = writeback_device
 
-        ok, err, _rendered = update_zram_config(device_name, updates)
+        ok, err, rendered_config = update_zram_config(device_name, updates)
         if not ok:
             raise ValidationError(err or "Failed to update zram-generator.conf")
+
+        # Atomically write the rendered config to the canonical path
+        write_ok, write_err = atomic_write_to_file(CONFIG_PATH, rendered_config)
+        if not write_ok:
+            raise ValidationError(write_err or "Failed to write config file")
 
         applied = False
         msg = "Persisted"
@@ -385,46 +396,15 @@ def _apply_live_writeback_change(
     params = _read_params_best_effort(device_name)
     size = params.get("disksize") or "1G"
     algorithm = params.get("algorithm")
+    streams = params.get("streams")
 
-    dev_path = f"/dev/{device_name}"
-
-    # --- Pure SysFS Reconfiguration ---
-    # 1. Reset
-    if is_block_device(dev_path):
-        try:
-            zramctl_reset(dev_path)
-            actions.append(Action(name="reset", success=True, message="reset via sysfs"))
-        except SystemCommandError as e:
-            actions.append(Action(name="reset", success=False, message=str(e)))
-            return False, actions
-
-    # 2. Set writeback via sysfs (if desired)
-    if desired_writeback is not None:
-        ok, err = sysfs_write(f"/sys/block/{device_name}/backing_dev", desired_writeback)
-        if not ok:
-            actions.append(Action(name="set-backing-dev", success=False, message=err))
-            return False, actions
-        actions.append(Action(name="set-backing-dev", success=True, message=f"wrote '{desired_writeback}' to backing_dev"))
-    else:
-        # The reset operation already cleared the backing device.
-        actions.append(Action(name="set-backing-dev", success=True, message="backing_dev cleared by reset"))
-
-    # 3. Set algorithm
-    if algorithm:
-        ok, err = sysfs_write(f"/sys/block/{device_name}/comp_algorithm", algorithm)
-        if not ok:
-            actions.append(Action(name="set-algorithm", success=False, message=err))
-            return False, actions
-        actions.append(Action(name="set-algorithm", success=True, message=f"set algorithm to {algorithm}"))
-
-    # 4. Set size
-    ok, err = sysfs_write(f"/sys/block/{device_name}/disksize", size)
-    if not ok:
-        actions.append(Action(name="set-disksize", success=False, message=err))
+    try:
+        _reconfigure_device_sysfs(device_name, size, algorithm, streams, desired_writeback)
+        actions.append(Action(name="reconfigure", success=True, message="reconfigured via sysfs"))
+        return True, actions
+    except (ValidationError, RuntimeError) as e:
+        actions.append(Action(name="reconfigure", success=False, message=str(e)))
         return False, actions
-    actions.append(Action(name="set-disksize", success=True, message=f"set disksize to {size}"))
-
-    return True, actions
 
 def restart_device_unit(device_name: str, mode: str = "try") -> UnitResult:
     """
