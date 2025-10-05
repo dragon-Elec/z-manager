@@ -1,0 +1,30 @@
+You've raised two excellent points. Let's clarify them.
+
+### On the `parse_size_to_bytes` Bug
+
+> "this bug only applies if the user interface is sending the wrong data type if the UI knows what data type the logic is expecting than there is no bug right ?"
+
+You are correct that if the UI *strictly* controls the input and only sends single-letter suffixes (like `G`), the immediate symptom of the bug will not appear.
+
+However, the issue is about **robustness and adherence to standards**. A core utility function like this should not rely on its callers (like the UI) to pre-sanitize data. Here are two scenarios where this becomes a problem:
+
+1.  **Future Regressions:** A year from now, a developer might update the UI to be more explicit, changing a dropdown from `"4G"` to `"4GiB"` for clarity, correctly assuming the core library can handle a standard unit. This would silently break the backend logic.
+2.  **External Data:** If this application ever needs to read an existing `zram-generator.conf` file that was created by another tool or edited by hand, that file might contain `"size = 2GiB"`. The parser would fail to interpret it correctly.
+
+So, while you can control the symptom in the UI, the bug—the parser's non-compliance with the documented `zramctl` format—remains in the core logic. It's a latent issue that is safer to fix.
+
+### On the JSON Parser Improvement
+
+> "i think this is for later. json is not supported by older versions of zram."
+
+You are absolutely correct. My recommendation is based on a strategy called **progressive enhancement**. The ideal implementation would be:
+
+1.  **Try** to run `zramctl --json`.
+2.  If the command succeeds, use the robust JSON parser.
+3.  If the command fails (because it's an older version), **fall back** to the current `parse_zramctl_table` text parser.
+
+This approach gives you the best of both worlds:
+*   **Robustness:** On modern systems (like Zorin 17.3+), you get structured, reliable data.
+*   **Backwards Compatibility:** On older systems, the application still works as it does now.
+
+Your assessment is right—it can be deferred. When you do decide to implement it, this fallback approach will provide the most stability.

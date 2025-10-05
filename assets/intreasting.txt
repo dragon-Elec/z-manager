@@ -1,0 +1,116 @@
+ray@ray-X450CA:~$ lsblk -f
+NAME FSTYPE FSVER LABEL UUID                                 FSAVAIL FSUSE% MOUNTPOINTS
+loop0
+     squash 4.0                                                    0   100% /snap/core18/2947
+loop1
+     squash 4.0                                                    0   100% /snap/bare/5
+loop2
+     squash 4.0                                                    0   100% /snap/core22/2111
+loop3
+     squash 4.0                                                    0   100% /snap/core22/2133
+loop4
+     squash 4.0                                                    0   100% /snap/core18/2952
+loop5
+     squash 4.0                                                    0   100% /snap/core24/1151
+loop6
+     squash 4.0                                                    0   100% /snap/core24/1196
+loop7
+     squash 4.0                                                    0   100% /snap/ffmpeg-2404/108
+loop8
+     squash 4.0                                                    0   100% /snap/gnome-3-28-1804/198
+loop9
+     squash 4.0                                                    0   100% /snap/gtk-common-themes/1535
+loop10
+     squash 4.0                                                    0   100% /snap/ffmpeg-2404/103
+loop11
+     squash 4.0                                                    0   100% /snap/snapd/24792
+loop12
+     squash 4.0                                                    0   100% /snap/snapd/25202
+sda                                                                         
+├─sda1
+│    ext4   1.0   IDE   9cf20555-a0c0-4a9e-b6cd-4315ea0021e6                
+└─sda2
+     swap   1     test swap
+                        7115451b-f383-411a-9c77-c53e234950d9                
+sdb                                                                         
+├─sdb1
+│    ext4   1.0   Data  f92d2946-677a-44c4-b9fe-3bb3454302a8                
+├─sdb2
+│    ext4   1.0   root  2c44d7e8-90e8-4b0b-a28f-413a03cd215c    7.2G    74% /
+├─sdb3
+│    ext4   1.0         90be3ecb-f843-4ef1-8ba3-d2fd24b606b8      7G    78% /home
+├─sdb4
+│    vfat   FAT32 EFI   EAF6-7D23                             437.5M     8% /boot/efi
+├─sdb5
+│                                                                           
+├─sdb6
+│    ntfs         StorageX
+│                       FEEA0748EA06FCA1                                    
+├─sdb7
+│    ntfs         WinD  24CA95BFCA958E24                                    
+├─sdb8
+│    ntfs               B2FA485CFA481ECB                                    
+└─sdb9
+                                                                            
+zram0
+                                                                            [SWAP]
+ray@ray-X450CA:~$ 
+
+
+
+
+ray@ray-X450CA:~$ swapon --show
+NAME       TYPE       SIZE USED PRIO
+/swapfile  file      1024M   0B   -2
+/dev/zram0 partition    4G   0B  100
+ray@ray-X450CA:~$ cat /proc/swaps
+Filename				Type		Size		Used		Priority
+/swapfile                               file		1048572		0		-2
+/dev/zram0                              partition	4194300		0		100
+ray@ray-X450CA:~$ 
+
+
+## Command Verification and Purpose
+
+**Yes, the command `sudo journalctl -u zram-generator.service --no-pager` does exist** and is a valid systemd journalctl command. However, there's an important clarification to make about the service name.
+
+### Correct Service Name
+
+The service you're likely looking for is actually **`systemd-zram-setup@zram0.service`** rather than `zram-generator.service`. The zram-generator itself is a systemd generator that creates systemd units, but the actual service that manages zram devices is `systemd-zram-setup@zramN.service` (where N is the device number like 0, 1, etc.).[1][2]
+
+### Purpose of the Command Components
+
+**`journalctl -u`**: This flag filters journal logs to show entries only for a specific systemd unit (service). In this case, it would show logs related to zram configuration and setup.[3][4]
+
+**`--no-pager`**: This option disables the default pager (usually `less`) and outputs the log entries directly to the terminal without pagination. This is particularly useful when:[4][5][3]
+- You want to pipe the output to other commands for processing
+- You need to redirect the output to a file
+- You're using the command in scripts
+- You want all output displayed at once without interactive navigation
+
+### Recommended Commands
+
+For checking zram-related logs, you would more commonly use:
+
+```bash
+# Check logs for a specific zram device setup service
+sudo journalctl -u systemd-zram-setup@zram0.service --no-pager
+
+# Check all zram-related services
+sudo journalctl -u "systemd-zram-setup@*" --no-pager
+
+# Check the status of zram services
+systemctl status systemd-zram-setup@zram0.service
+```
+
+### What These Logs Show
+
+The journalctl output for zram services would typically show:[2][1]
+- **Configuration loading**: When the zram-generator reads config files from `/etc/systemd/zram-generator.conf`
+- **Device creation**: Setting up `/dev/zram0`, `/dev/zram1`, etc.
+- **Compression algorithm setup**: Configuring algorithms like zstd, lzo-rle
+- **Size configuration**: Setting the zram device size based on your configuration
+- **Swap formatting**: Making the zram device ready for use as swap
+- **Error messages**: Any issues with device busy errors, configuration problems, or setup failures
+
+The `--no-pager` option ensures you can see all these log entries in one continuous output, which is especially helpful for troubleshooting zram setup issues or when you need to process the logs with other command-line 

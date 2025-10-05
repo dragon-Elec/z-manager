@@ -1,0 +1,47 @@
+ray@ray-X450CA:~$ zramctl
+ray@ray-X450CA:~$ swapon --show
+NAME      TYPE  SIZE USED PRIO
+/swapfile file 1024M   0B   -2
+ray@ray-X450CA:~$ lsblk -e7 -o NAME,SIZE,FSTYPE,TYPE,MOUNTPOINT
+NAME     SIZE FSTYPE TYPE MOUNTPOINT
+sda    465.8G        disk 
+├─sda1  80.1G ext4   part 
+└─sda2   3.7G swap   part 
+sdb    465.8G        disk 
+├─sdb1 230.7G ext4   part 
+├─sdb2  35.4G ext4   part /
+├─sdb3  41.9G ext4   part /home
+├─sdb4   477M vfat   part /boot/efi
+├─sdb5    16M        part 
+├─sdb6   100G ntfs   part 
+├─sdb7    27G ntfs   part 
+├─sdb8  30.2G ntfs   part 
+└─sdb9     5M        part 
+ray@ray-X450CA:~$ echo 0 | sudo tee /sys/class/zram-control/hot_add
+tee: /sys/class/zram-control/hot_add: Permission denied
+0
+ray@ray-X450CA:~$ sudo modprobe zram
+ray@ray-X450CA:~$ echo 0 | sudo tee /sys/class/zram-control/hot_add
+tee: /sys/class/zram-control/hot_add: Permission denied
+0
+ray@ray-X450CA:~$ sudo bash -c 'echo 0 > /sys/class/zram-control/hot_add'
+bash: line 1: /sys/class/zram-control/hot_add: Permission denied
+ray@ray-X450CA:~$ sudo modprobe zram
+ray@ray-X450CA:~$ sudo cat /sys/class/zram-control/hot_add
+0
+ray@ray-X450CA:~$ sudo bash -c 'echo /dev/sda2 > /sys/block/zram0/backing_dev'
+ray@ray-X450CA:~$ sudo bash -c 'echo 500M > /sys/block/zram0/disksize'
+ray@ray-X450CA:~$ sudo mkswap /dev/zram0
+sudo swapon /dev/zram0 -p 100
+Setting up swapspace version 1, size = 500 MiB (524283904 bytes)
+no label, UUID=1c2b0b05-995c-4c17-9db4-cf9d9a6a8753
+ray@ray-X450CA:~$ zramctl
+swapon --show
+cat /sys/block/zram0/backing_dev
+NAME       ALGORITHM DISKSIZE DATA COMPR TOTAL STREAMS MOUNTPOINT
+/dev/zram0 lzo-rle       500M   4K   73B   12K       4 [SWAP]
+NAME       TYPE       SIZE USED PRIO
+/swapfile  file      1024M   0B   -2
+/dev/zram0 partition  500M   0B  100
+/dev/sda2
+ray@ray-X450CA:~$ 
