@@ -6,7 +6,7 @@ import os
 from dataclasses import dataclass
 from typing import Optional, Dict, Any, List, Tuple
 
-from core.config import CONFIG_PATH
+from core.config import CONFIG_PATH, read_zram_config
 from core.os_utils import (
     run,
     SystemCommandError,
@@ -377,15 +377,21 @@ def reset_device(device_name: str, confirm: bool = False) -> UnitResult:
 def persist_writeback(device_name: str, writeback_device: Optional[str], apply_now: bool = True) -> PersistResult:
     """
     Persist writeback-device using systemd zram-generator.conf.
-    This function does not edit files directly here to keep core/devices focused;
-    we invoke config handler via a subprocess to keep dependencies minimal, or this
-    can be swapped to a python import if config API is made core-safe.
+    Ensures a default zram-size is present if a new config is created.
     """
-    # Prefer Python import if available and side-effect free
     try:
-        # Late import to avoid circular deps if project refactors later
         from core.config import update_zram_config
+        
+        # First, read the existing config to check for zram-size
+        cfg = read_zram_config()
+        
         updates: Dict[str, Any] = {}
+        
+        # CRITICAL: zram-generator requires zram-size. If the section is new,
+        # we must provide a default size to prevent the service from failing.
+        if device_name not in cfg or not cfg.has_option(device_name, 'zram-size'):
+            updates['zram-size'] = '1G'
+
         if writeback_device is None:
             updates["writeback-device"] = None
         else:
@@ -397,7 +403,6 @@ def persist_writeback(device_name: str, writeback_device: Optional[str], apply_n
         if not ok:
             raise ValidationError(err or "Failed to update zram-generator.conf")
 
-        # Atomically write the rendered config to the canonical path
         write_ok, write_err = atomic_write_to_file(CONFIG_PATH, rendered_config)
         if not write_ok:
             raise ValidationError(write_err or "Failed to write config file")
@@ -409,7 +414,9 @@ def persist_writeback(device_name: str, writeback_device: Optional[str], apply_n
             svc = f"systemd-zram-setup@{device_name}.service"
             ok2, err2 = systemd_try_restart(svc)
             applied = ok2
-            if not ok2:
+            if ok2:
+                msg = "Persisted and applied"
+            else:
                 msg = f"Persisted, but restart failed: {err2 or ''}".strip()
 
         return PersistResult(success=True, device=device_name, applied=applied, message=msg)
