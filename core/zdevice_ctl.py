@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Optional, Dict, Any, List, Tuple
 
@@ -15,7 +16,7 @@ from core.os_utils import (
     read_file,
     sysfs_write,
     zram_sysfs_dir,
-    zramctl_reset,
+    sysfs_reset_device,
     parse_zramctl_table,
     systemd_daemon_reload,
     systemd_try_restart,
@@ -87,42 +88,102 @@ class OrchestrationResult:
 
 # ============ Internal helpers ============
 
+
+def _ensure_device_exists(device_name: str) -> None:
+    """
+    Ensures the /dev/zramN node and its /sys/block/zramN counterpart exist.
+    Uses `zramctl --find` as it's the most reliable user-space tool for
+    ensuring the /dev node is also created.
+    Raises RuntimeError if the specific device cannot be created.
+    """
+    dev_path = f"/dev/{device_name}"
+    if os.path.exists(dev_path):
+        return  # Device already exists, nothing to do.
+
+    try:
+        # 1. Ensure the kernel module is loaded.
+        run(["modprobe", "zram"], check=True)
+
+        # 2. Use `zramctl --find`. This is non-deterministic and will create the
+        #    *next available* device. In a clean state where `device_name` is missing,
+        #    this should create it.
+        run(["zramctl", "--find"], check=True)
+
+        # 3. CRITICAL VERIFICATION STEP:
+        #    After asking for a new device, we must check if the *specific one*
+        #    we wanted was actually created.
+        if not os.path.exists(dev_path):
+            raise RuntimeError(
+                f"'{device_name}' was not created. `zramctl --find` may have "
+                f"created a different device (e.g., zram1) if '{device_name}' "
+                "was unavailable or already in a transient state."
+            )
+
+    except (SystemCommandError, IOError, OSError) as e:
+        raise RuntimeError(f"Failed to ensure existence of device '{device_name}': {e}")
+
+
 def _reconfigure_device_sysfs(device_name: str, size: str, algorithm: Optional[str], streams: Optional[int], backing_dev: Optional[str]) -> None:
     """
     Single source of truth for reconfiguring a zram device using sysfs.
+    This function is designed to be robust and handle various system states.
     Raises ValidationError or RuntimeError on failure.
     """
+    # --- Use the robust helper to ensure the device exists ---
+    _ensure_device_exists(device_name)
+
     dev_path = f"/dev/{device_name}"
+    sysfs_path = zram_sysfs_dir(device_name)
 
-    # 1. Reset the device. This sets disksize to 0.
-    zramctl_reset(dev_path)
+    # Now we can safely assume the device and sysfs path exist.
+    if not os.path.isdir(sysfs_path):
+        raise ValidationError(f"Device '{device_name}' exists but its sysfs directory '{sysfs_path}' does not. Kernel state is inconsistent.")
 
-    # 2. Set the backing device via sysfs (MUST be done while size is 0)
+    # Check if the device is already configured. A non-zero disksize indicates it is.
+    # The 'reset' is only necessary for RE-configuration, not initial configuration.
+    current_size = read_file(f"{sysfs_path}/disksize")
+    if current_size is None:
+        # This is a weird state - the directory exists but the disksize file doesn't.
+        raise ValidationError(f"Cannot read disksize for '{device_name}'. The device may be in a bad state.")
+
+    if current_size != "0":
+        # It's an active or configured device, so it must be reset first.
+        sysfs_reset_device(dev_path)
+
+    # --- From here, we know the device disksize is 0 ---
+
+    # --- Improvement 2: Feature Detection for Writeback ---
     if backing_dev:
+        backing_dev_path = f"{sysfs_path}/backing_dev"
+        if not os.path.exists(backing_dev_path):
+            raise NotImplementedError(
+                f"Cannot set writeback device: your kernel does not support it "
+                f"(sysfs node '{backing_dev_path}' is missing)."
+            )
         try:
-            sysfs_write(f"/sys/block/{device_name}/backing_dev", backing_dev)
+            sysfs_write(backing_dev_path, backing_dev)
         except (IOError, OSError) as e:
-            raise ValidationError(f"Failed to set backing_dev: {e}")
+            raise ValidationError(f"Failed to set backing_dev '{backing_dev}': {e}")
 
     # 3. Set algorithm
     if algorithm:
         try:
-            sysfs_write(f"/sys/block/{device_name}/comp_algorithm", algorithm)
+            sysfs_write(f"{sysfs_path}/comp_algorithm", algorithm)
         except (IOError, OSError) as e:
-            raise ValidationError(f"Failed to set comp_algorithm: {e}")
+            raise ValidationError(f"Failed to set comp_algorithm '{algorithm}': {e}")
 
     # 4. Set streams
     if streams:
         try:
-            sysfs_write(f"/sys/block/{device_name}/max_comp_streams", str(streams))
+            sysfs_write(f"{sysfs_path}/max_comp_streams", str(streams))
         except (IOError, OSError) as e:
-            raise ValidationError(f"Failed to set max_comp_streams: {e}")
+            raise ValidationError(f"Failed to set max_comp_streams '{streams}': {e}")
 
-    # 5. Set size. This should be the final step.
+    # 5. Set size. This must be the final step.
     try:
-        sysfs_write(f"/sys/block/{device_name}/disksize", size)
+        sysfs_write(f"{sysfs_path}/disksize", size)
     except (IOError, OSError) as e:
-        raise ValidationError(f"Failed to set disksize: {e}")
+        raise ValidationError(f"Failed to set disksize '{size}': {e}")
 
 
 def _get_sysfs(device_name: str, node: str) -> Optional[str]:
@@ -299,7 +360,7 @@ def restart_unit_for_device(device_name: str) -> UnitResult:
 
 def reset_device(device_name: str, confirm: bool = False) -> UnitResult:
     """
-    Reset a zram device via `zramctl --reset /dev/zramN`.
+    Reset a zram device using the safe sysfs method, which preserves the device node.
     confirm parameter exists for CLI UX; core does not prompt.
     """
     dev_path = f"/dev/{device_name}"
@@ -307,7 +368,7 @@ def reset_device(device_name: str, confirm: bool = False) -> UnitResult:
         return UnitResult(success=False, message=f"Cannot reset non-existent device {device_name}")
 
     try:
-        zramctl_reset(dev_path)
+        sysfs_reset_device(dev_path)
         return UnitResult(success=True, message="reset")
     except (SystemCommandError, RuntimeError) as e:
         return UnitResult(success=False, message=str(e))
