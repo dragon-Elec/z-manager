@@ -98,7 +98,7 @@ def zram_sysfs_dir(device_name: str) -> str:
 # ============ zramctl wrappers ============
 
 
-def zramctl_reset(device_path: str) -> None:
+def sysfs_reset_device(device_path: str) -> None:
     """Resets a zram device using the sysfs interface to avoid device deletion."""
     device_name = os.path.basename(device_path)
     reset_path = f"/sys/block/{device_name}/reset"
@@ -109,19 +109,6 @@ def zramctl_reset(device_path: str) -> None:
         # It reports the actual operation that failed (a file write)
         # and the underlying system error.
         raise RuntimeError(f"Failed to write '1' to sysfs node {reset_path}: {e}")
-
-
-def zramctl_create(device_path: str, size: str, algorithm: Optional[str] = None,
-                   streams: Optional[int] = None) -> None:
-    """
-    Create/configure a zram device. zramctl requires size on first setup.
-    """
-    cmd: List[str] = ["zramctl", device_path, "--size", size]
-    if algorithm:
-        cmd += ["--algorithm", algorithm]
-    if streams:
-        cmd += ["--streams", str(streams)]
-    run(cmd, check=True)
 
 
 def zramctl_info_all() -> str:
