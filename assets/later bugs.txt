@@ -28,3 +28,25 @@ This approach gives you the best of both worlds:
 *   **Backwards Compatibility:** On older systems, the application still works as it does now.
 
 Your assessment is right—it can be deferred. When you do decide to implement it, this fallback approach will provide the most stability.
+
+ ╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+✦ I've reviewed the files in the core directory and analyzed their dependencies. Here's a summary of the imports:
+
+   - boot_config.py: imports os_utils.py
+   - config.py: imports os_utils.py
+   - health.py: imports os_utils.py
+   - zdevice_ctl.py: imports config.py and os_utils.py
+   - os_utils.py: has no imports from other core modules.
+   - __init__.py: has no imports.
+
+  Based on this, I've identified a potential circular dependency:
+
+   - zdevice_ctl.py imports config.py.
+   - zdevice_ctl.py also has a function persist_writeback which has a late import of update_zram_config from core.config.
+
+  This isn't a direct circular import at the module level, but it's a strong indicator of a design problem. The late import is a workaround to avoid a
+  direct circular dependency.
+
+  A better solution would be to refactor the code to remove this circular dependency. For example, the update_zram_config function could be moved to a
+  new module that both config.py and zdevice_ctl.py can import from.
+
