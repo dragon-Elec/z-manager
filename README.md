@@ -5,10 +5,13 @@
 
 ## 🕐 Development Status ⏳
 
-> **Project progression is at halt for a while, support for ubunutu jammy is depricated.** 
-i have decided to hlat the devlopment for 22 LTS. i all i can do is to only enable thigns for 22 LTS that are comptaible. a non standered last package will be realased that will disable writeback and other problamatic features. 
-
-Proceeding with development under this limitation would require implementing a non-standard, brittle workaround that violates the project's goal of being a robust and reliable system utility that integrates cleanly with standard OS components
+> **Project progression is temporarily halted.**
+>
+> I have decided to halt full development for Ubuntu 22.04 LTS (Jammy) due to technical compatibility issues. I can only enable features for 22.04 LTS that are fully compatible with its environment.
+>
+> A final, non-standard package will be released for this version that will disable problematic features, such as writeback.
+>
+> Proceeding with development under this limitation would require implementing a non-standard, brittle workaround that violates the project's goal of being a robust and reliable system utility that integrates cleanly with standard OS components
 
 In the meantime, feel free to test and make pull requests
 
