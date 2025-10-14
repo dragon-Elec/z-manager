@@ -3,9 +3,13 @@
 
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
 
-## 🕐 Developer Status ⏳
+## 🕐 Development Status ⏳
 
-> **Project updates will be slow for a while, user is a bit busy.** 
+> **Project progression is at halt for a while, support for ubunutu jammy is depricated.** 
+i have decided to hlat the devlopment for 22 LTS. i all i can do is to only enable thigns for 22 LTS that are comptaible. a non standered last package will be realased that will disable writeback and other problamatic features. 
+
+Proceeding with development under this limitation would require implementing a non-standard, brittle workaround that violates the project's goal of being a robust and reliable system utility that integrates cleanly with standard OS components
+
 In the meantime, feel free to test and make pull requests
 
 
