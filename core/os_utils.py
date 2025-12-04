@@ -6,6 +6,7 @@ import os
 import subprocess
 import shutil
 import tempfile
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Tuple, Dict, Any, List, Union
@@ -177,6 +178,32 @@ def parse_zramctl_table() -> List[Dict[str, Any]]:
 
         row_data = dict(zip(header, parts))
 
+        # --- VALIDATION START ---
+        # Ensure critical fields match expected patterns
+        name_val = row_data.get("NAME", "")
+        if not name_val.startswith("/dev/zram"):
+            continue
+
+        # Size fields: digits + optional unit (B, K, M, G, T, P), or "-"
+        # Example: "4G", "512M", "12K", "74B", "10.5M"
+        size_pattern = re.compile(r"^(\d+(\.\d+)?[BKMGTP]?|-)$", re.IGNORECASE)
+        
+        valid_row = True
+        for field in ["DISKSIZE", "DATA", "COMPR"]:
+            val = row_data.get(field, "")
+            if val and not size_pattern.match(val):
+                valid_row = False
+                break
+        
+        if not valid_row:
+            continue
+            
+        # Streams: integer or "-"
+        streams_val = row_data.get("STREAMS", "")
+        if streams_val and streams_val != "-" and not streams_val.isdigit():
+            continue
+        # --- VALIDATION END ---
+
         # Map to our final structure
         name_path = row_data.get("NAME", "")
         device_data: Dict[str, Any] = {"name": os.path.basename(name_path) if name_path else "unknown"}
@@ -219,20 +246,46 @@ def atomic_write_to_file(file_path: str, content: str) -> tuple[bool, str | None
         return False, str(e)
 
 def parse_size_to_bytes(size_str: str) -> int:
-    """Converts a size string like '4G' or '512M' to bytes."""
+    """
+    Converts a size string like '4G', '512M', '1GiB' to bytes.
+    Handles B, K, M, G, T, P suffixes (and their iB/B variants).
+    """
     if not isinstance(size_str, str):
         return 0
-    size_str = size_str.upper().strip()
-    unit_multipliers = {'B': 1, 'K': 1024, 'M': 1024**2, 'G': 1024**3, 'T': 1024**4}
-    unit = size_str[-1] if size_str else ''
-    if unit in unit_multipliers:
-        try:
-            numeric_part = size_str[:-1].strip()
-            value = float(numeric_part)
-            return int(value * unit_multipliers[unit])
-        except (ValueError, IndexError):
-            return 0
-    try:
-        return int(size_str)
-    except (ValueError, TypeError):
+    
+    s = size_str.strip().upper()
+    if not s:
         return 0
+
+    # Match number and optional unit
+    # Groups: 1=number, 2=unit
+    match = re.match(r"^(\d+(?:\.\d+)?)\s*([A-Z]+)?$", s)
+    if not match:
+        return 0
+    
+    number_str, unit_str = match.groups()
+    try:
+        value = float(number_str)
+    except ValueError:
+        return 0
+        
+    if not unit_str:
+        return int(value)
+
+    # Normalize unit: K, KB, KIB -> K
+    # We assume binary prefixes (1024) for everything as is standard in system tools like zramctl
+    unit = unit_str[0]
+    
+    multipliers = {
+        'B': 1,
+        'K': 1024,
+        'M': 1024**2,
+        'G': 1024**3,
+        'T': 1024**4,
+        'P': 1024**5
+    }
+    
+    if unit in multipliers:
+        return int(value * multipliers[unit])
+        
+    return 0

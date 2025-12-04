@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Optional, Dict, Any, List, Tuple
 
 from core.config import CONFIG_PATH, read_zram_config
+from core.config_writer import update_zram_config
 from core.os_utils import (
     run,
     SystemCommandError,
@@ -380,7 +381,7 @@ def persist_writeback(device_name: str, writeback_device: Optional[str], apply_n
     Ensures a default zram-size is present if a new config is created.
     """
     try:
-        from core.config import update_zram_config
+        # from core.config import update_zram_config  <-- Removed late import
         
         # First, read the existing config to check for zram-size
         cfg = read_zram_config()

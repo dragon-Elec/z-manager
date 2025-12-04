@@ -59,7 +59,9 @@ class TuneResult:
 def is_kernel_param_active(param: str) -> bool:
     """Checks the live kernel command line for a given parameter."""
     try:
-        cmdline = Path("/proc/cmdline").read_text()
+        cmdline = read_file("/proc/cmdline")
+        if not cmdline:
+            return False
         return param in cmdline.split()
     except Exception as e:
         _LOGGER.warning(f"Could not read /proc/cmdline: {e}")

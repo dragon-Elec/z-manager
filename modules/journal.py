@@ -27,18 +27,28 @@ def python_journal_available() -> bool:
 
 def _format_ts_safe(value: Any) -> datetime:
     try:
+        dt = None
         if isinstance(value, datetime):
-            return value
-        if isinstance(value, (int, float)):
-            return datetime.fromtimestamp(value)
-        if isinstance(value, str):
+            dt = value
+        elif isinstance(value, (int, float)):
+            dt = datetime.fromtimestamp(value)
+        elif isinstance(value, str):
             try:
-                return datetime.fromisoformat(value)
+                dt = datetime.fromisoformat(value)
             except Exception:
-                return datetime.now()
+                dt = datetime.now().astimezone()
+        
+        if dt is None:
+             dt = datetime.now().astimezone()
+
+        # Ensure timezone awareness
+        if dt.tzinfo is None:
+            return dt.astimezone()
+        return dt
+
     except Exception:
         pass
-    return datetime.now()
+    return datetime.now().astimezone()
 
 
 def list_zram_logs(unit: str = "systemd-zram-setup@zram0.service", count: int = 25) -> List[JournalRecord]:
@@ -55,7 +65,7 @@ def list_zram_logs(unit: str = "systemd-zram-setup@zram0.service", count: int = 
         i = 0
         while i < count and (entry := reader.get_previous()):
             i += 1
-            ts = entry.get("__REALTIME_TIMESTAMP", datetime.now())
+            ts = entry.get("__REALTIME_TIMESTAMP", datetime.now().astimezone())
             msg = entry.get("MESSAGE", "No message found.")
             prio = entry.get("PRIORITY", 6)
             rec = JournalRecord(
@@ -74,14 +84,14 @@ def list_zram_logs(unit: str = "systemd-zram-setup@zram0.service", count: int = 
 
         records: List[JournalRecord] = []
         for ln in lines:
-            ts: datetime = datetime.now()
+            ts: datetime = datetime.now().astimezone()
             msg = ln
             prio = 6
             try:
                 first_space = ln.find(" ")
                 if first_space > 0:
                     ts_str = ln[:first_space]
-                    ts = _parse_iso_best_effort(ts_str) or datetime.now()
+                    ts = _parse_iso_best_effort(ts_str) or datetime.now().astimezone()
                     msg = ln[first_space + 1 :].strip()
             except Exception:
                 pass

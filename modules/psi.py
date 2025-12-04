@@ -14,6 +14,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator, Optional
 
+from core.os_utils import read_file
+
 _LOGGER = logging.getLogger(__name__)
 PROC_PSI_PATH = Path("/proc/pressure")
 
@@ -35,10 +37,14 @@ class PsiStats:
 def _parse_psi_line(line: str) -> tuple[float, float, float, int]:
     """Helper to parse a 'some' or 'full' line from a PSI file."""
     parts = line.split()
-    avg10 = float(parts[0].split("=")[1])
-    avg60 = float(parts[1].split("=")[1])
-    avg300 = float(parts[2].split("=")[1])
-    total = int(parts[3].split("=")[1])
+    # parts is like ['some', 'avg10=0.00', 'avg60=0.00', 'avg300=0.00', 'total=0']
+    # We need to skip the first element ('some' or 'full')
+    start_idx = 1 if parts[0] in ('some', 'full') else 0
+    
+    avg10 = float(parts[start_idx].split("=")[1])
+    avg60 = float(parts[start_idx+1].split("=")[1])
+    avg300 = float(parts[start_idx+2].split("=")[1])
+    total = int(parts[start_idx+3].split("=")[1])
     return avg10, avg60, avg300, total
 
 
@@ -48,12 +54,13 @@ def get_psi(resource: str) -> Optional[PsiStats]:
     Returns None if PSI is not available for that resource.
     """
     path = PROC_PSI_PATH / resource
-    if not path.exists():
-        _LOGGER.debug(f"PSI resource not found at {path}")
+    content = read_file(path)
+    if not content:
+        _LOGGER.debug(f"PSI resource not found or empty at {path}")
         return None
 
     try:
-        lines = path.read_text().strip().split('\n')
+        lines = content.split('\n')
         some_line = lines[0]
         full_line = lines[1]
 
