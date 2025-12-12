@@ -273,16 +273,7 @@ def systemd_try_restart(service: str) -> Tuple[bool, Optional[str]]:
 
 # ============ discovery helpers ============
 
-# Pre-compiled regex patterns for zramctl output validation (performance optimization)
-# Size fields: digits + optional decimal + unit (B, K, M, G, T, P), or "-" for empty
-# Examples: "4G", "512M", "12K", "74B", "10.5M", "1.5G", "-"
-_SIZE_PATTERN = re.compile(r"^(\d+(\.\d+)?[BKMGTP]?|-)$", re.IGNORECASE)
 
-# Known compression algorithms supported by the Linux kernel zram module
-# This list should be updated if new algorithms are added to the kernel
-_KNOWN_ALGORITHMS = frozenset({
-    "lzo", "lzo-rle", "lz4", "lz4hc", "zstd", "deflate", "842"
-})
 
 _PARSER_LOGGER = logging.getLogger(__name__)
 

@@ -53,11 +53,6 @@ This tool is for desktop users and system tweakers who want to harness the perfo
 
 ## Bugs
 
-* **Bug 1:** zramctl- scrambled data
-```py
-placeholder
-```
-
 * **Bug 2:** Description of bug 2.
 
 ## Installation
