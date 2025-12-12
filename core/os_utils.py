@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import subprocess
 import shutil
@@ -148,11 +149,65 @@ def systemd_try_restart(service: str) -> Tuple[bool, Optional[str]]:
 
 # ============ discovery helpers ============
 
+# Pre-compiled regex patterns for zramctl output validation (performance optimization)
+# Size fields: digits + optional decimal + unit (B, K, M, G, T, P), or "-" for empty
+# Examples: "4G", "512M", "12K", "74B", "10.5M", "1.5G", "-"
+_SIZE_PATTERN = re.compile(r"^(\d+(\.\d+)?[BKMGTP]?|-)$", re.IGNORECASE)
+
+# Known compression algorithms supported by the Linux kernel zram module
+# This list should be updated if new algorithms are added to the kernel
+_KNOWN_ALGORITHMS = frozenset({
+    "lzo", "lzo-rle", "lz4", "lz4hc", "zstd", "deflate", "842"
+})
+
+_PARSER_LOGGER = logging.getLogger(__name__)
+
+
+def _calculate_compression_ratio(data_size_str: Optional[str], compr_size_str: Optional[str]) -> Optional[float]:
+    """
+    Calculate compression ratio from data-size and compr-size strings.
+    
+    Args:
+        data_size_str: Original data size (e.g., "4K", "1M", "-")
+        compr_size_str: Compressed data size (e.g., "74B", "500K", "-")
+    
+    Returns:
+        Compression ratio as float (e.g., 2.5 means 2.5:1 compression),
+        or None if calculation is not possible (missing/invalid data).
+    """
+    if not data_size_str or not compr_size_str:
+        return None
+    if data_size_str == "-" or compr_size_str == "-":
+        return None
+    
+    # Import locally to avoid circular dependency issues
+    data_bytes = parse_size_to_bytes(data_size_str)
+    compr_bytes = parse_size_to_bytes(compr_size_str)
+    
+    if compr_bytes == 0:
+        # Avoid division by zero; if compressed size is 0, ratio is undefined
+        return None if data_bytes == 0 else float('inf')
+    
+    return round(data_bytes / compr_bytes, 2)
+
+
 def parse_zramctl_table() -> List[Dict[str, Any]]:
     """
-    Parse `zramctl` default table output using a "smarter split" that assumes
-    only the last column (MOUNTPOINT) can contain spaces. This is more robust
-    than fixed-width parsing if column spacing changes in future versions.
+    Parse `zramctl` default table output into a list of device dictionaries.
+    
+    Uses a "smarter split" strategy that assumes only the last column (MOUNTPOINT)
+    can contain spaces. This is more robust than fixed-width parsing if column
+    spacing changes in future zramctl versions.
+    
+    Validation:
+        - NAME must start with /dev/zram
+        - DISKSIZE, DATA, COMPR, TOTAL must be valid size strings or "-"
+        - STREAMS must be an integer or "-"
+        - ALGORITHM should be a known compression algorithm (warns if unknown)
+    
+    Returns:
+        List of device dicts with keys: name, disksize, data-size, compr-size,
+        total-size, algorithm, streams, mountpoint
     """
     out = zramctl_info_all()
     lines = [ln.strip() for ln in out.splitlines() if ln.strip()]
@@ -170,7 +225,8 @@ def parse_zramctl_table() -> List[Dict[str, Any]]:
         
         # In case the last column is empty, parts will be shorter
         if len(parts) < num_cols - 1:
-            continue # Skip malformed lines
+            _PARSER_LOGGER.debug(f"Skipping malformed line (too few columns): {ln!r}")
+            continue
 
         # Pad parts if mountpoint is missing, so zip works correctly
         while len(parts) < num_cols:
@@ -182,16 +238,15 @@ def parse_zramctl_table() -> List[Dict[str, Any]]:
         # Ensure critical fields match expected patterns
         name_val = row_data.get("NAME", "")
         if not name_val.startswith("/dev/zram"):
+            _PARSER_LOGGER.debug(f"Skipping line (invalid NAME): {ln!r}")
             continue
 
-        # Size fields: digits + optional unit (B, K, M, G, T, P), or "-"
-        # Example: "4G", "512M", "12K", "74B", "10.5M"
-        size_pattern = re.compile(r"^(\d+(\.\d+)?[BKMGTP]?|-)$", re.IGNORECASE)
-        
+        # Validate size fields
         valid_row = True
-        for field in ["DISKSIZE", "DATA", "COMPR"]:
+        for field in ["DISKSIZE", "DATA", "COMPR", "TOTAL"]:
             val = row_data.get(field, "")
-            if val and not size_pattern.match(val):
+            if val and not _SIZE_PATTERN.match(val):
+                _PARSER_LOGGER.debug(f"Skipping line (invalid {field}={val!r}): {ln!r}")
                 valid_row = False
                 break
         
@@ -201,7 +256,13 @@ def parse_zramctl_table() -> List[Dict[str, Any]]:
         # Streams: integer or "-"
         streams_val = row_data.get("STREAMS", "")
         if streams_val and streams_val != "-" and not streams_val.isdigit():
+            _PARSER_LOGGER.debug(f"Skipping line (invalid STREAMS={streams_val!r}): {ln!r}")
             continue
+        
+        # Algorithm: warn if unknown (but don't reject - could be a new kernel algorithm)
+        algorithm_val = row_data.get("ALGORITHM", "")
+        if algorithm_val and algorithm_val.lower() not in _KNOWN_ALGORITHMS:
+            _PARSER_LOGGER.warning(f"Unknown compression algorithm: {algorithm_val!r}")
         # --- VALIDATION END ---
 
         # Map to our final structure
@@ -210,6 +271,7 @@ def parse_zramctl_table() -> List[Dict[str, Any]]:
         device_data["disksize"] = row_data.get("DISKSIZE")
         device_data["data-size"] = row_data.get("DATA")
         device_data["compr-size"] = row_data.get("COMPR")
+        device_data["total-size"] = row_data.get("TOTAL")  # Added TOTAL column
         device_data["algorithm"] = row_data.get("ALGORITHM")
         device_data["mountpoint"] = row_data.get("MOUNTPOINT")
 
@@ -218,6 +280,13 @@ def parse_zramctl_table() -> List[Dict[str, Any]]:
             device_data["streams"] = int(streams_str) if streams_str else None
         except (ValueError, TypeError):
             device_data["streams"] = None
+        
+        # Calculate compression ratio from data-size and compr-size
+        # Ratio = original_size / compressed_size (higher is better compression)
+        device_data["ratio"] = _calculate_compression_ratio(
+            device_data.get("data-size"),
+            device_data.get("compr-size")
+        )
         
         if device_data["name"] != "unknown":
             devices.append(device_data)

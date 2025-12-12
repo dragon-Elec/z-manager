@@ -43,11 +43,11 @@ def set_cpu_governor(governor: str) -> bool:
     cpu_glob_path = Path("/sys/devices/system/cpu/")
     for gov_path in cpu_glob_path.glob("cpu*/cpufreq/scaling_governor"):
         found_any_governor_files = True
-
-        success, _ = sysfs_write(gov_path, governor)
-        if not success:
+        try:
+            sysfs_write(gov_path, governor)
+        except (IOError, OSError) as e:
             all_success = False
-            _LOGGER.warning(f"Failed to set governor for {gov_path.parent.parent.name}")
+            _LOGGER.warning(f"Failed to set governor for {gov_path.parent.parent.name}: {e}")
 
     if not found_any_governor_files:
         _LOGGER.error("Could not find any CPU governor files in /sys. Is cpufreq enabled?")
@@ -87,8 +87,12 @@ def set_io_scheduler(device_name: str, scheduler: str) -> bool:
         return False
 
     path = Path(f"/sys/block/{device_name}/queue/scheduler")
-    success, _ = sysfs_write(path, scheduler)
-    return success
+    try:
+        sysfs_write(path, scheduler)
+        return True
+    except (IOError, OSError) as e:
+        _LOGGER.error(f"Failed to set I/O scheduler for {device_name}: {e}")
+        return False
 
 
 # --- Live Kernel Parameters ---
@@ -101,9 +105,13 @@ def get_vfs_cache_pressure() -> int:
 
 def set_vfs_cache_pressure(value: int) -> bool:
     """Sets the live vm.vfs_cache_pressure value."""
-    if not 0 <= value <= 500: # Sanity check
+    if not 0 <= value <= 500:  # Sanity check
         _LOGGER.error(f"Invalid vfs_cache_pressure value: {value}. Must be 0-500.")
         return False
     path = Path("/proc/sys/vm/vfs_cache_pressure")
-    success, _ = sysfs_write(path, str(value))
-    return success
+    try:
+        sysfs_write(path, str(value))
+        return True
+    except (IOError, OSError) as e:
+        _LOGGER.error(f"Failed to set vfs_cache_pressure: {e}")
+        return False
