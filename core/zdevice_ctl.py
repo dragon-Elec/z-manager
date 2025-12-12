@@ -93,8 +93,7 @@ class OrchestrationResult:
 def _ensure_device_exists(device_name: str) -> None:
     """
     Ensures the /dev/zramN node and its /sys/block/zramN counterpart exist.
-    Uses `zramctl --find` as it's the most reliable user-space tool for
-    ensuring the /dev node is also created.
+    Uses kernel's hot_add mechanism instead of zramctl for maximum portability.
     Raises RuntimeError if the specific device cannot be created.
     """
     dev_path = f"/dev/{device_name}"
@@ -105,23 +104,71 @@ def _ensure_device_exists(device_name: str) -> None:
         # 1. Ensure the kernel module is loaded.
         run(["modprobe", "zram"], check=True)
 
-        # 2. Use `zramctl --find`. This is non-deterministic and will create the
-        #    *next available* device. In a clean state where `device_name` is missing,
-        #    this should create it.
-        run(["zramctl", "--find"], check=True)
-
-        # 3. CRITICAL VERIFICATION STEP:
-        #    After asking for a new device, we must check if the *specific one*
-        #    we wanted was actually created.
-        if not os.path.exists(dev_path):
+        # 2. Try to create the specific device using hot_add
+        #    Extract the device number from device_name (e.g., "zram0" -> 0)
+        if not device_name.startswith("zram"):
+            raise RuntimeError(f"Invalid device name '{device_name}', must start with 'zram'")
+        
+        device_num_str = device_name[4:]  # Remove "zram" prefix
+        if not device_num_str.isdigit():
+            raise RuntimeError(f"Invalid device number in '{device_name}'")
+        
+        # The kernel may auto-create zram0 when the module loads, so check again
+        if os.path.exists(dev_path):
+            return
+        
+        # Use hot_add to create a new device
+        # Writing to /sys/class/zram-control/hot_add creates a new device
+        # It returns the device number created
+        hot_add_path = "/sys/class/zram-control/hot_add"
+        
+        if not os.path.exists(hot_add_path):
+            # Fallback: older kernels might not have hot_add, try creating via /sys/block directly
+            # This is less reliable but might work on some systems
             raise RuntimeError(
-                f"'{device_name}' was not created. `zramctl --find` may have "
-                f"created a different device (e.g., zram1) if '{device_name}' "
-                "was unavailable or already in a transient state."
+                f"Kernel does not support /sys/class/zram-control/hot_add. "
+                f"Cannot dynamically create {device_name}."
             )
+        
+        # Create device by writing to hot_add (creates next available device)
+        # Note: hot_add creates the *next* available device, not a specific number
+        # So we may need to create multiple devices to get to the desired number
+        current_devices = set()
+        for entry in os.listdir("/sys/block"):
+            if entry.startswith("zram"):
+                current_devices.add(entry)
+        
+        target_num = int(device_num_str)
+        while not os.path.exists(dev_path):
+            with open(hot_add_path, "w") as f:
+                f.write("1")
+            
+            # Check if our device was created
+            if os.path.exists(dev_path):
+                break
+            
+            #Check what new device was created
+            new_devices = set()
+            for entry in os.listdir("/sys/block"):
+                if entry.startswith("zram"):
+                    new_devices.add(entry)
+            
+            created = new_devices - current_devices
+            if not created:
+                raise RuntimeError(f"Failed to create any zram device via hot_add")
+            
+            current_devices = new_devices
+            
+            # Check if we've somehow exceeded our target (shouldn't happen normally)
+            highest_num = max(int(d[4:]) for d in new_devices if d[4:].isdigit())
+            if highest_num > target_num:
+                raise RuntimeError(
+                    f"Created devices up to zram{highest_num} but target {device_name} was not created"
+                )
 
     except (SystemCommandError, IOError, OSError) as e:
         raise RuntimeError(f"Failed to ensure existence of device '{device_name}': {e}")
+
 
 
 def _reconfigure_device_sysfs(device_name: str, size: str, algorithm: Optional[str], streams: Optional[int], backing_dev: Optional[str]) -> None:

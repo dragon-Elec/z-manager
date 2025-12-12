@@ -97,7 +97,7 @@ def zram_sysfs_dir(device_name: str) -> str:
     return f"/sys/block/{device_name}"
 
 
-# ============ zramctl wrappers ============
+# ============ sysfs-based zram device discovery ============
 
 
 def sysfs_reset_device(device_path: str) -> None:
@@ -113,21 +113,145 @@ def sysfs_reset_device(device_path: str) -> None:
         raise RuntimeError(f"Failed to write '1' to sysfs node {reset_path}: {e}")
 
 
-def zramctl_info_all() -> str:
+def _scan_zram_devices() -> List[str]:
     """
-    Returns text output of `zramctl`.
+    Scan /sys/block/ for zram devices and return their names.
+    
+    Returns:
+        List of device names like ['zram0', 'zram1']
     """
-    return run(["zramctl"], check=False).out
+    devices: List[str] = []
+    sys_block = Path("/sys/block")
+    
+    if not sys_block.exists():
+        return devices
+    
+    try:
+        for entry in sys_block.iterdir():
+            if entry.is_dir() and entry.name.startswith("zram"):
+                devices.append(entry.name)
+    except (OSError, PermissionError):
+        pass
+    
+    # Sort numerically by device number
+    devices.sort(key=lambda x: int(x[4:]) if x[4:].isdigit() else 0)
+    return devices
 
 
-def zramctl_info_json() -> Optional[str]:
+def _read_zram_sysfs_props(device_name: str) -> Dict[str, Any]:
     """
-    Returns JSON (if supported by zramctl - not always available).
+    Read all zram properties from sysfs for a single device.
+    
+    Returns dict with keys matching the old zramctl output format:
+    - name, disksize, data-size, compr-size, total-size, algorithm, streams, mountpoint
     """
-    res = run(["zramctl", "--output-all", "--json"], check=False)
-    if res.code == 0:
-        return res.out
-    return None
+    sysfs_base = Path(f"/sys/block/{device_name}")
+    props: Dict[str, Any] = {"name": device_name}
+    
+    # Read disksize (in bytes)
+    disksize_bytes = read_file(sysfs_base / "disksize")
+    if disksize_bytes and disksize_bytes != "0":
+        props["disksize"] = _bytes_to_human(int(disksize_bytes))
+    else:
+        props["disksize"] = "-"
+    
+    # Read orig_data_size (uncompressed data in bytes)
+    orig_data = read_file(sysfs_base / "orig_data_size")
+    if orig_data and orig_data != "0":
+        props["data-size"] = _bytes_to_human(int(orig_data))
+    else:
+        props["data-size"] = "-"
+    
+    # Read compr_data_size (compressed data in bytes)
+    compr_data = read_file(sysfs_base / "compr_data_size")
+    if compr_data and compr_data != "0":
+        props["compr-size"] = _bytes_to_human(int(compr_data))
+    else:
+        props["compr-size"] = "-"
+    
+    # Read mem_used_total (total memory used in bytes)
+    mem_used = read_file(sysfs_base / "mem_used_total")
+    if mem_used and mem_used != "0":
+        props["total-size"] = _bytes_to_human(int(mem_used))
+    else:
+        props["total-size"] = "-"
+    
+    # Read compression algorithm (format: [lz4])
+    algo_raw = read_file(sysfs_base / "comp_algorithm")
+    if algo_raw:
+        # Extract the active algorithm from bracketed format like "[lz4] lzo lzo-rle"
+        import re
+        match = re.search(r'\[([^\]]+)\]', algo_raw)
+        if match:
+            props["algorithm"] = match.group(1)
+        else:
+            props["algorithm"] = algo_raw.split()[0] if algo_raw else None
+    else:
+        props["algorithm"] = None
+    
+    # Read max_comp_streams
+    streams_str = read_file(sysfs_base / "max_comp_streams")
+    try:
+        props["streams"] = int(streams_str) if streams_str else None
+    except (ValueError, TypeError):
+        props["streams"] = None
+    
+    # Check mountpoint from /proc/swaps
+    props["mountpoint"] = _get_zram_mountpoint(device_name)
+    
+    # Calculate compression ratio
+    props["ratio"] = _calculate_compression_ratio(
+        props.get("data-size"),
+        props.get("compr-size")
+    )
+    
+    return props
+
+
+def _bytes_to_human(size_bytes: int) -> str:
+    """Convert bytes to human-readable format matching zramctl output (B, K, M, G, T, P)."""
+    if size_bytes == 0:
+        return "0B"
+    
+    units = ['B', 'K', 'M', 'G', 'T', 'P']
+    unit_idx = 0
+    size = float(size_bytes)
+    
+    while size >= 1024 and unit_idx < len(units) - 1:
+        size /= 1024
+        unit_idx += 1
+    
+    # Format: if it's a whole number, no decimal; otherwise 1 decimal place
+    if size == int(size):
+        return f"{int(size)}{units[unit_idx]}"
+    else:
+        return f"{size:.1f}{units[unit_idx]}"
+
+
+def _get_zram_mountpoint(device_name: str) -> str:
+    """Check if zram device is used as swap or mounted."""
+    dev_path = f"/dev/{device_name}"
+    
+    # Check /proc/swaps first
+    try:
+        with open("/proc/swaps", "r") as f:
+            for line in f:
+                if dev_path in line:
+                    return "[SWAP]"
+    except (IOError, OSError):
+        pass
+    
+    # Check /proc/mounts
+    try:
+        with open("/proc/mounts", "r") as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) >= 2 and parts[0] == dev_path:
+                    return parts[1]  # mount point
+    except (IOError, OSError):
+        pass
+    
+    return ""
 
 
 # ============ systemd wrappers ============
@@ -193,105 +317,27 @@ def _calculate_compression_ratio(data_size_str: Optional[str], compr_size_str: O
 
 def parse_zramctl_table() -> List[Dict[str, Any]]:
     """
-    Parse `zramctl` default table output into a list of device dictionaries.
+    Parse zram devices using sysfs instead of zramctl command.
     
-    Uses a "smarter split" strategy that assumes only the last column (MOUNTPOINT)
-    can contain spaces. This is more robust than fixed-width parsing if column
-    spacing changes in future zramctl versions.
+    Returns list of device dicts with keys: name, disksize, data-size, compr-size,
+    total-size, algorithm, streams, mountpoint, ratio
     
-    Validation:
-        - NAME must start with /dev/zram
-        - DISKSIZE, DATA, COMPR, TOTAL must be valid size strings or "-"
-        - STREAMS must be an integer or "-"
-        - ALGORITHM should be a known compression algorithm (warns if unknown)
-    
-    Returns:
-        List of device dicts with keys: name, disksize, data-size, compr-size,
-        total-size, algorithm, streams, mountpoint
+    This function maintains API compatibility with the old zramctl-based parser.
     """
-    out = zramctl_info_all()
-    lines = [ln.strip() for ln in out.splitlines() if ln.strip()]
-    if len(lines) < 2:
-        return []
-
-    # Get header columns, which we assume are always single words
-    header = [col.upper().strip() for col in lines[0].split()]
-    num_cols = len(header)
     devices: List[Dict[str, Any]] = []
-
-    for ln in lines[1:]:
-        # Split the line max (N-1) times. The last element will contain the rest of the line.
-        parts = ln.split(maxsplit=num_cols - 1)
-        
-        # In case the last column is empty, parts will be shorter
-        if len(parts) < num_cols - 1:
-            _PARSER_LOGGER.debug(f"Skipping malformed line (too few columns): {ln!r}")
-            continue
-
-        # Pad parts if mountpoint is missing, so zip works correctly
-        while len(parts) < num_cols:
-            parts.append("")
-
-        row_data = dict(zip(header, parts))
-
-        # --- VALIDATION START ---
-        # Ensure critical fields match expected patterns
-        name_val = row_data.get("NAME", "")
-        if not name_val.startswith("/dev/zram"):
-            _PARSER_LOGGER.debug(f"Skipping line (invalid NAME): {ln!r}")
-            continue
-
-        # Validate size fields
-        valid_row = True
-        for field in ["DISKSIZE", "DATA", "COMPR", "TOTAL"]:
-            val = row_data.get(field, "")
-            if val and not _SIZE_PATTERN.match(val):
-                _PARSER_LOGGER.debug(f"Skipping line (invalid {field}={val!r}): {ln!r}")
-                valid_row = False
-                break
-        
-        if not valid_row:
-            continue
-            
-        # Streams: integer or "-"
-        streams_val = row_data.get("STREAMS", "")
-        if streams_val and streams_val != "-" and not streams_val.isdigit():
-            _PARSER_LOGGER.debug(f"Skipping line (invalid STREAMS={streams_val!r}): {ln!r}")
-            continue
-        
-        # Algorithm: warn if unknown (but don't reject - could be a new kernel algorithm)
-        algorithm_val = row_data.get("ALGORITHM", "")
-        if algorithm_val and algorithm_val.lower() not in _KNOWN_ALGORITHMS:
-            _PARSER_LOGGER.warning(f"Unknown compression algorithm: {algorithm_val!r}")
-        # --- VALIDATION END ---
-
-        # Map to our final structure
-        name_path = row_data.get("NAME", "")
-        device_data: Dict[str, Any] = {"name": os.path.basename(name_path) if name_path else "unknown"}
-        device_data["disksize"] = row_data.get("DISKSIZE")
-        device_data["data-size"] = row_data.get("DATA")
-        device_data["compr-size"] = row_data.get("COMPR")
-        device_data["total-size"] = row_data.get("TOTAL")  # Added TOTAL column
-        device_data["algorithm"] = row_data.get("ALGORITHM")
-        device_data["mountpoint"] = row_data.get("MOUNTPOINT")
-
-        streams_str = row_data.get("STREAMS")
+    
+    for device_name in _scan_zram_devices():
         try:
-            device_data["streams"] = int(streams_str) if streams_str else None
-        except (ValueError, TypeError):
-            device_data["streams"] = None
-        
-        # Calculate compression ratio from data-size and compr-size
-        # Ratio = original_size / compressed_size (higher is better compression)
-        device_data["ratio"] = _calculate_compression_ratio(
-            device_data.get("data-size"),
-            device_data.get("compr-size")
-        )
-        
-        if device_data["name"] != "unknown":
-            devices.append(device_data)
-
+            props = _read_zram_sysfs_props(device_name)
+            # Only include devices that have been configured (disksize > 0)
+            if props.get("disksize") and props["disksize"] != "-":
+                devices.append(props)
+        except (OSError, ValueError) as e:
+            _PARSER_LOGGER.debug(f"Error reading {device_name}: {e}")
+            continue
+    
     return devices
+
 
 
 def is_root() -> bool:
