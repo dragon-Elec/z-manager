@@ -500,7 +500,7 @@ def _apply_live_writeback_change(
     active: bool,
 ) -> Tuple[bool, List[Action]]:
     """
-    Performs the zramctl --reset and zramctl --create operations.
+    Performs device reset and reconfiguration using sysfs.
     Returns a tuple of (success, list_of_actions).
     """
     actions: List[Action] = []

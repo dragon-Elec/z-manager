@@ -16,13 +16,17 @@ from core.zdevice_ctl import (
     NotBlockDeviceError
 )
 from core.config import CONFIG_PATH
+from core.os_utils import sysfs_reset_device
 
 def cleanup_system(zram_dev, wb_dev):
     """Ensure a clean state before and after tests."""
     print("--- Cleaning up system ---")
     # Remove zram device
     os.system(f"sudo swapoff /dev/{zram_dev} > /dev/null 2>&1")
-    os.system(f"sudo zramctl --reset /dev/{zram_dev} > /dev/null 2>&1")
+    try:
+        sysfs_reset_device(f"/dev/{zram_dev}")
+    except Exception:
+        pass  # Ignore errors during cleanup
     # Remove loop device
     os.system(f"sudo losetup -d {wb_dev} > /dev/null 2>&1")
     # Remove config file
@@ -63,7 +67,7 @@ def test_persist_and_recreate(zram_dev, wb_dev):
 
         # 4. SIMULATE REBOOT: Destroy the device and restart the service
         print("    Action: Simulating reboot (resetting device, restarting service)...")
-        os.system(f"sudo zramctl --reset /dev/{zram_dev}")
+        sysfs_reset_device(f"/dev/{zram_dev}")
         os.system(f"sudo systemctl restart systemd-zram-setup@{zram_dev}.service")
 
         time.sleep(1)
