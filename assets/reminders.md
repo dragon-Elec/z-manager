@@ -2,7 +2,7 @@
 *system.py to = os_utils.py*
 
 ###live sys py
-_read_sys_file() / _write_sys_file(): ⚠️ This is a problem. This module has its own private, duplicate functions for reading and writing system files. It should be using the official, robust ones from our system.py (or os_utils.py) core file.
+_read_sys_file() / _write_sys_file(): [DONE - Refactored to use core.os_utils] ⚠️ This is a problem. This module has its own private, duplicate functions for reading and writing system files. It should be using the official, robust ones from our system.py (or os_utils.py) core file.
 Relationship to Honeycomb: It should be using system.py for all its file I/O, but it currently doesn't.
 
 Assessment: 🔶 Functionally Sound, but Inefficient. It works, but it violates the "Don't Repeat Yourself" (DRY) principle by having its own file I/O logic. This makes maintenance harder.

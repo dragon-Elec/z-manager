@@ -1,6 +1,6 @@
 You've raised two excellent points. Let's clarify them.
 
-### On the `parse_size_to_bytes` Bug
+### On the `parse_size_to_bytes` Bug [FIXED]
 
 > "this bug only applies if the user interface is sending the wrong data type if the UI knows what data type the logic is expecting than there is no bug right ?"
 
@@ -39,7 +39,7 @@ Your assessment is right—it can be deferred. When you do decide to implement i
    - os_utils.py: has no imports from other core modules.
    - __init__.py: has no imports.
 
-  Based on this, I've identified a potential circular dependency:
+  Based on this, I've identified a potential circular dependency: [FIXED]
 
    - zdevice_ctl.py imports config.py.
    - zdevice_ctl.py also has a function persist_writeback which has a late import of update_zram_config from core.config.

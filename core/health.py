@@ -76,19 +76,27 @@ def _check_sysfs_root() -> bool:
 
 
 def _devices_summary() -> str:
-    # Use zramctl table output, but tolerate absence
-    r = run(["/bin/sh", "-lc", "zramctl 2>/dev/null || true"], check=False)
-    out = r.out.strip()
-    if not out:
-        return "no devices or zramctl produced no output"
-    lines = [ln for ln in out.splitlines() if ln.strip()]
-    if len(lines) <= 1:
-        return "no devices"
-    count = 0
-    for ln in lines[1:]:
-        if "/dev/zram" in ln:
-            count += 1
-    return f"{count} device(s) reported by zramctl"
+    """Count zram devices using sysfs instead of zramctl."""
+    try:
+        count = 0
+        for entry in os.listdir("/sys/block"):
+            if entry.startswith("zram"):
+                # Check if device is configured (disksize > 0)
+                disksize_path = f"/sys/block/{entry}/disksize"
+                try:
+                    with open(disksize_path, "r") as f:
+                        size = f.read().strip()
+                        if size and int(size) > 0:
+                            count += 1
+                except (IOError, ValueError):
+                    pass
+        
+        if count == 0:
+            return "no active devices"
+        return f"{count} device(s) active"
+    except (OSError, FileNotFoundError):
+        return "unable to read /sys/block"
+
 
 
 def _journal_available() -> bool:
@@ -110,7 +118,7 @@ def check_system_health() -> HealthReport:
 
     notes: List[str] = []
     if not zramctl_ok:
-        notes.append("zramctl not found; install zram-tools")
+        notes.append("zramctl not found (optional; not required for functionality)")
     if not systemd_ok:
         notes.append("systemctl not found; systemd integration limited")
     if not sysfs_ok:
