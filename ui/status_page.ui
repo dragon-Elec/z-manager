@@ -18,53 +18,60 @@
             <property name="margin-top">12</property>
             <property name="orientation">vertical</property>
             <property name="spacing">12</property>
-            <child>
-              <object class="AdwPreferencesGroup" id="health_alerts_group">
-                <property name="title">Health Alerts</property>
-                <child>
-                  <object class="AdwBanner" id="health_alert_banner">
-                    <property name="button-label">Fix It</property>
-                    <property name="revealed">false</property>
-                    <property name="title">Health Alert</property>
-                  </object>
-                </child>
-              </object>
-            </child>
+
             <child>
               <object class="AdwPreferencesGroup" id="device_list_group">
                 <property name="description">Real-time usage and statistics for each device.</property>
                 <property name="title">Active ZRAM Devices</property>
+                <!-- Rows will be added dynamically here -->
+              </object>
+            </child>
+            <child>
+              <!-- This is the NEW compact placeholder widget, MOVED OUTSIDE group for cleaner hiding -->
+              <object class="GtkBox" id="no_devices_status_page">
+                <property name="vexpand">true</property>
+                <property name="orientation">vertical</property>
+                <property name="spacing">6</property>
+                <property name="halign">center</property>
+                <property name="valign">center</property>
+                <property name="margin-top">24</property>
+                <property name="margin-bottom">24</property>
+                <property name="visible">false</property>
                 <child>
-                  <!-- The zram0_expander_template was here. It is now generated in code. -->
+                  <object class="GtkImage">
+                    <property name="icon-name">drive-multidisk-symbolic</property>
+                    <property name="pixel-size">64</property>
+                    <style>
+                      <class name="dim-label"/>
+                    </style>
+                  </object>
                 </child>
                 <child>
-                  <!-- This is the NEW compact placeholder widget -->
-                  <object class="GtkBox" id="no_devices_status_page">
-                    <property name="vexpand">true</property>
-                    <property name="orientation">vertical</property>
-                    <property name="spacing">6</property>
-                    <property name="halign">center</property>
-                    <property name="valign">center</property>
-                    <property name="margin-top">24</property>
-                    <property name="margin-bottom">24</property>
-                    <property name="visible">false</property>
-                    <child>
-                      <object class="GtkImage">
-                        <property name="icon-name">drive-multidisk-symbolic</property>
-                      </object>
-                    </child>
-                    <child>
-                      <object class="GtkLabel" id="no_devices_label">
-                        <property name="label">No Active ZRAM Devices Found</property>
-                        <attributes>
-                          <attribute name="weight" value="bold"></attribute>
-                        </attributes>
-                      </object>
-                    </child>
+                  <object class="GtkLabel" id="no_devices_label">
+                    <property name="label">No Active ZRAM Devices Found</property>
+                    <attributes>
+                      <attribute name="weight" value="bold"></attribute>
+                    </attributes>
+                    <style>
+                      <class name="title-2"/>
+                    </style>
                   </object>
+                </child>
+                <child>
+                   <object class="GtkButton">
+                     <property name="label">Create New Device</property>
+                     <property name="halign">center</property>
+                     <property name="margin-top">12</property>
+                     <property name="action-name">app.show-configure</property> 
+                     <style>
+                       <class name="pill"/>
+                       <class name="suggested-action"/>
+                     </style>
+                   </object>
                 </child>
               </object>
             </child>
+
 
             <child>
               <object class="AdwPreferencesGroup" id="swap_list_group">
@@ -72,50 +79,7 @@
                 <property name="title">All System Swap Devices</property>
               </object>
             </child>
-            <child>
-              <object class="AdwPreferencesGroup">
-                <property name="title">System Health Events</property>
-                <child>
-                  <object class="GtkScrolledWindow">
-                    <property name="hscrollbar-policy">never</property>
-                    <property name="max-content-height">300</property>
-                    <property name="min-content-height">150</property>
-                    <child>
-                      <object class="GtkBox" id="event_log_container">
-                        <property name="orientation">vertical</property>
-                        <child>
-                          <!-- This is the NEW compact placeholder widget -->
-                          <object class="GtkBox" id="no_events_status_page">
-                            
-                            <property name="vexpand">true</property>
-                            <property name="orientation">vertical</property>
-                            <property name="spacing">6</property>
-                            <property name="halign">center</property>
-                            <property name="valign">center</property>
-                            <property name="margin-top">24</property>
-                            <property name="margin-bottom">24</property>
-                            <property name="visible">true</property>
-                            <child>
-                              <object class="GtkImage">
-                                <property name="icon-name">face-cool-symbolic</property>
-                              </object>
-                            </child>
-                            <child>
-                              <object class="GtkLabel" id="no_events_label">
-                                <property name="label">No Recent Issues Found</property>
-                                <attributes>
-                                  <attribute name="weight" value="bold"></attribute>
-                                </attributes>
-                              </object>
-                            </child>
-                          </object>
-                        </child>
-                      </object>
-                    </child>
-                  </object>
-                </child>
-              </object>
-            </child>
+
           </object>
         </child>
       </object>

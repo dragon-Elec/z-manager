@@ -1,0 +1,324 @@
+
+
+man7.org > Linux > man-pages
+	
+
+Linux/UNIX system programming training
+systemd-inhibit(1) — Linux manual page
+
+NAME | SYNOPSIS | DESCRIPTION | OPTIONS | EXIT STATUS | EXAMPLE | ENVIRONMENT | SEE ALSO | NOTES | COLOPHON
+
+SYSTEMD-INHIBIT(1)           systemd-inhibit           SYSTEMD-INHIBIT(1)
+
+NAME         top
+
+       systemd-inhibit - Execute a program with an inhibition lock taken
+
+SYNOPSIS         top
+
+
+       systemd-inhibit [OPTIONS...] [COMMAND] [ARGUMENTS...]
+
+       systemd-inhibit [OPTIONS...] [--list]
+
+DESCRIPTION         top
+
+       systemd-inhibit may be used to execute a program with a shutdown,
+       sleep, or idle inhibitor lock taken. The lock will be acquired
+       before the specified command line is executed and released
+       afterwards.
+
+       Inhibitor locks may be used to block or delay system sleep and
+       shutdown requests from the user, as well as automatic idle
+       handling of the OS. This is useful to avoid system suspends while
+       an optical disc is being recorded, or similar operations that
+       should not be interrupted.
+
+       For more information see Inhibitor Locks[1].
+
+OPTIONS         top
+
+       The following options are understood:
+
+       --what=
+           Takes a colon-separated list of one or more operations to
+           inhibit: "shutdown", "sleep", "idle", "handle-power-key",
+           "handle-suspend-key", "handle-hibernate-key",
+           "handle-lid-switch", for inhibiting
+           reboot/power-off/halt/kexec/soft-reboot,
+           suspending/hibernating, the automatic idle detection, or the
+           low-level handling of the power/sleep key and the lid switch,
+           respectively. If omitted, defaults to "idle:sleep:shutdown".
+
+       --who=
+           Takes a short, human-readable descriptive string for the
+           program taking the lock. If not passed, defaults to the
+           command line string.
+
+       --why=
+           Takes a short, human-readable descriptive string for the
+           reason for taking the lock. Defaults to "Unknown reason".
+
+       --mode=
+           Takes "block", "delay", or "block-weak" and describes how the
+           lock is applied. If "block" is used (the default), the lock
+           prohibits any of the requested operations without time limit,
+           and only privileged users may override it. The "block-weak"
+           inhibitor lock type is similar to "block" but is not enforced
+           against operations initiated by privileged clients or those
+           owned by the user that also owns the inhibitor lock. If
+           "delay" is used, the lock can only delay the requested
+           operations for a limited time. If the time elapses, the lock
+           is ignored and the operation executed. The time limit may be
+           specified in logind.conf(5). Note that "delay" is only
+           available for "sleep" and "shutdown".
+
+       --list
+           Lists all active inhibition locks instead of acquiring one.
+
+       --no-ask-password
+           Do not query the user for authentication for privileged
+           operations.
+
+       --no-pager
+           Do not pipe output into a pager.
+
+       --no-legend
+           Do not print the legend, i.e. column headers and the footer
+           with hints.
+
+       -h, --help
+           Print a short help text and exit.
+
+       --version
+           Print a short version string and exit.
+
+EXIT STATUS         top
+
+       Returns the exit status of the executed program.
+
+EXAMPLE         top
+
+           # systemd-inhibit wodim foobar.iso
+
+       This burns the ISO image foobar.iso on a CD using wodim(1), and
+       inhibits system sleeping, shutdown and idle while doing so.
+
+ENVIRONMENT         top
+
+       $SYSTEMD_LOG_LEVEL
+           The maximum log level of emitted messages (messages with a
+           higher log level, i.e. less important ones, will be
+           suppressed). Takes a comma-separated list of values. A value
+           may be either one of (in order of decreasing importance)
+           emerg, alert, crit, err, warning, notice, info, debug, or an
+           integer in the range 0...7. See syslog(3) for more
+           information. Each value may optionally be prefixed with one of
+           console, syslog, kmsg or journal followed by a colon to set
+           the maximum log level for that specific log target (e.g.
+           SYSTEMD_LOG_LEVEL=debug,console:info specifies to log at debug
+           level except when logging to the console which should be at
+           info level). Note that the global maximum log level takes
+           priority over any per target maximum log levels.
+
+       $SYSTEMD_LOG_COLOR
+           A boolean. If true, messages written to the tty will be
+           colored according to priority.
+
+           This setting is only useful when messages are written directly
+           to the terminal, because journalctl(1) and other tools that
+           display logs will color messages based on the log level on
+           their own.
+
+       $SYSTEMD_LOG_TIME
+           A boolean. If true, console log messages will be prefixed with
+           a timestamp.
+
+           This setting is only useful when messages are written directly
+           to the terminal or a file, because journalctl(1) and other
+           tools that display logs will attach timestamps based on the
+           entry metadata on their own.
+
+       $SYSTEMD_LOG_LOCATION
+           A boolean. If true, messages will be prefixed with a filename
+           and line number in the source code where the message
+           originates.
+
+           Note that the log location is often attached as metadata to
+           journal entries anyway. Including it directly in the message
+           text can nevertheless be convenient when debugging programs.
+
+       $SYSTEMD_LOG_TID
+           A boolean. If true, messages will be prefixed with the current
+           numerical thread ID (TID).
+
+           Note that the this information is attached as metadata to
+           journal entries anyway. Including it directly in the message
+           text can nevertheless be convenient when debugging programs.
+
+       $SYSTEMD_LOG_TARGET
+           The destination for log messages. One of console (log to the
+           attached tty), console-prefixed (log to the attached tty but
+           with prefixes encoding the log level and "facility", see
+           syslog(3), kmsg (log to the kernel circular log buffer),
+           journal (log to the journal), journal-or-kmsg (log to the
+           journal if available, and to kmsg otherwise), auto (determine
+           the appropriate log target automatically, the default), null
+           (disable log output).
+
+       $SYSTEMD_LOG_RATELIMIT_KMSG
+           Whether to ratelimit kmsg or not. Takes a boolean. Defaults to
+           "true". If disabled, systemd will not ratelimit messages
+           written to kmsg.
+
+       $SYSTEMD_PAGER, $PAGER
+           Pager to use when --no-pager is not given.  $SYSTEMD_PAGER is
+           used if set; otherwise $PAGER is used. If neither
+           $SYSTEMD_PAGER nor $PAGER are set, a set of well-known pager
+           implementations is tried in turn, including less(1) and
+           more(1), until one is found. If no pager implementation is
+           discovered, no pager is invoked. Setting those environment
+           variables to an empty string or the value "cat" is equivalent
+           to passing --no-pager.
+
+           Note: if $SYSTEMD_PAGERSECURE is not set, $SYSTEMD_PAGER and
+           $PAGER can only be used to disable the pager (with "cat" or
+           ""), and are otherwise ignored.
+
+       $SYSTEMD_LESS
+           Override the options passed to less (by default "FRSXMK").
+
+           Users might want to change two options in particular:
+
+           K
+               This option instructs the pager to exit immediately when
+               Ctrl+C is pressed. To allow less to handle Ctrl+C itself
+               to switch back to the pager command prompt, unset this
+               option.
+
+               If the value of $SYSTEMD_LESS does not include "K", and
+               the pager that is invoked is less, Ctrl+C will be ignored
+               by the executable, and needs to be handled by the pager.
+
+           X
+               This option instructs the pager to not send termcap
+               initialization and deinitialization strings to the
+               terminal. It is set by default to allow command output to
+               remain visible in the terminal even after the pager exits.
+               Nevertheless, this prevents some pager functionality from
+               working, in particular paged output cannot be scrolled
+               with the mouse.
+
+           Note that setting the regular $LESS environment variable has
+           no effect for less invocations by systemd tools.
+
+           See less(1) for more discussion.
+
+       $SYSTEMD_LESSCHARSET
+           Override the charset passed to less (by default "utf-8", if
+           the invoking terminal is determined to be UTF-8 compatible).
+
+           Note that setting the regular $LESSCHARSET environment
+           variable has no effect for less invocations by systemd tools.
+
+       $SYSTEMD_PAGERSECURE
+           Common pager commands like less(1), in addition to "paging",
+           i.e. scrolling through the output, support opening of or
+           writing to other files and running arbitrary shell commands.
+           When commands are invoked with elevated privileges, for
+           example under sudo(8) or pkexec(1), the pager becomes a
+           security boundary. Care must be taken that only programs with
+           strictly limited functionality are used as pagers, and
+           unintended interactive features like opening or creation of
+           new files or starting of subprocesses are not allowed. "Secure
+           mode" for the pager may be enabled as described below, if the
+           pager supports that (most pagers are not written in a way that
+           takes this into consideration). It is recommended to either
+           explicitly enable "secure mode" or to completely disable the
+           pager using --no-pager or PAGER=cat when allowing untrusted
+           users to execute commands with elevated privileges.
+
+           This option takes a boolean argument. When set to true, the
+           "secure mode" of the pager is enabled. In "secure mode",
+           LESSSECURE=1 will be set when invoking the pager, which
+           instructs the pager to disable commands that open or create
+           new files or start new subprocesses. Currently only less(1) is
+           known to understand this variable and implement "secure mode".
+
+           When set to false, no limitation is placed on the pager.
+           Setting SYSTEMD_PAGERSECURE=0 or not removing it from the
+           inherited environment may allow the user to invoke arbitrary
+           commands.
+
+           When $SYSTEMD_PAGERSECURE is not set, systemd tools attempt to
+           automatically figure out if "secure mode" should be enabled
+           and whether the pager supports it. "Secure mode" is enabled if
+           the effective UID is not the same as the owner of the login
+           session, see geteuid(2) and sd_pid_get_owner_uid(3), or when
+           running under sudo(8) or similar tools ($SUDO_UID is set [2]).
+           In those cases, SYSTEMD_PAGERSECURE=1 will be set and pagers
+           which are not known to implement "secure mode" will not be
+           used at all. Note that this autodetection only covers the most
+           common mechanisms to elevate privileges and is intended as
+           convenience. It is recommended to explicitly set
+           $SYSTEMD_PAGERSECURE or disable the pager.
+
+           Note that if the $SYSTEMD_PAGER or $PAGER variables are to be
+           honoured, other than to disable the pager,
+           $SYSTEMD_PAGERSECURE must be set too.
+
+       $SYSTEMD_COLORS
+           Takes a boolean argument. When true, systemd and related
+           utilities will use colors in their output, otherwise the
+           output will be monochrome. Additionally, the variable can take
+           one of the following special values: "16", "256" to restrict
+           the use of colors to the base 16 or 256 ANSI colors,
+           respectively. This can be specified to override the automatic
+           decision based on $TERM and what the console is connected to.
+
+       $SYSTEMD_URLIFY
+           The value must be a boolean. Controls whether clickable links
+           should be generated in the output for terminal emulators
+           supporting this. This can be specified to override the
+           decision that systemd makes based on $TERM and other
+           conditions.
+
+SEE ALSO         top
+
+       systemd(1), logind.conf(5)
+
+NOTES         top
+
+        1. Inhibitor Locks
+           https://systemd.io/INHIBITOR_LOCKS
+
+        2. It is recommended for other tools to set and check $SUDO_UID
+           as appropriate, treating it is a common interface.
+
+COLOPHON         top
+
+       This page is part of the systemd (systemd system and service
+       manager) project.  Information about the project can be found at
+       ⟨http://www.freedesktop.org/wiki/Software/systemd⟩.  If you have a
+       bug report for this manual page, see
+       ⟨http://www.freedesktop.org/wiki/Software/systemd/#bugreports⟩.
+       This page was obtained from the project's upstream Git repository
+       ⟨https://github.com/systemd/systemd.git⟩ on 2025-08-11.  (At that
+       time, the date of the most recent commit that was found in the
+       repository was 2025-08-11.)  If you discover any rendering
+       problems in this HTML version of the page, or you believe there is
+       a better or more up-to-date source for the page, or you have
+       corrections or improvements to the information in this COLOPHON
+       (which is not part of the original manual page), send a mail to
+       man-pages@man7.org
+
+systemd 258~rc2                                        SYSTEMD-INHIBIT(1)
+
+Pages that refer to this page: systemd.directives(7),  systemd.index(7),  rpm-plugin-systemd-inhibit(8)
+
+HTML rendering created 2025-09-06 by Michael Kerrisk, author of The Linux Programming Interface.
+
+For details of in-depth Linux/UNIX system programming training courses that I teach, look here.
+
+Hosting by jambit GmbH.
+		Cover of TLPI

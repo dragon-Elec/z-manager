@@ -10,7 +10,10 @@ from gi.repository import Gtk, Adw, GObject, GLib
 from core import health
 from core import zdevice_ctl
 from core.os_utils import parse_size_to_bytes
-from modules import journal
+import psutil # Added for RAM calculation
+from ui.custom_widgets import CircularWidget, MemoryTube
+from ui.health_button import HealthStatusButton, HealthState
+from ui.health_dialog import HealthReportDialog
 
 import xml.etree.ElementTree as ET
 import os
@@ -46,179 +49,270 @@ class StatusPage(Adw.Bin):
     # Swap List group
     swap_list_group: Adw.PreferencesGroup = Gtk.Template.Child()
 
-    # Event Log group
-    event_log_container: Gtk.Box = Gtk.Template.Child()
-    no_events_status_page: Gtk.Box = Gtk.Template.Child()
-    no_events_label: Gtk.Label = Gtk.Template.Child()
-
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         
         self.no_devices_status_page.add_css_class("placeholder")
-        self.no_events_status_page.add_css_class("placeholder")
         
-        self._dynamic_device_rows = []
+        # Reparent no_devices_status_page into device_list_group
+        # This allows us to keep the group visible (for the health button)
+        # while showing the placeholder content inside it.
+        parent = self.no_devices_status_page.get_parent()
+        if parent:
+            parent.remove(self.no_devices_status_page)
+        self.device_list_group.add(self.no_devices_status_page)
+        
         self._dynamic_swap_rows = []
+        self._device_widgets = {} # Map[name, CircularWidget]
         
-        self.refresh()
+        # Health Status Button
+        self._health_button = HealthStatusButton()
+        self._health_button.connect("clicked", self._on_health_button_clicked)
+        
+        # Add health button to the header of the device list group
+        self.device_list_group.set_header_suffix(self._health_button)
+        
+        # [LAYOUT FIX] Use FlowBox for Cards
+        self._device_flowbox = Gtk.FlowBox()
+        self._device_flowbox.set_valign(Gtk.Align.START)
+        self._device_flowbox.set_max_children_per_line(5) # Auto wrap
+        self._device_flowbox.set_selection_mode(Gtk.SelectionMode.NONE)
+        self._device_flowbox.set_column_spacing(12)
+        self._device_flowbox.set_row_spacing(12)
+        self._device_flowbox.set_margin_start(12)
+        self._device_flowbox.set_margin_end(12)
+        self._device_flowbox.set_margin_top(12)
+        self._device_flowbox.set_margin_bottom(12)
+        
+        # Add the FlowBox to the Group
+        self.device_list_group.add(self._device_flowbox)
+        
+        # Optimize: Only run refresh loop when visible
+        self.connect("map", self._on_map)
+        self.connect("unmap", self._on_unmap)
+        self._timer_id = None
 
-        GObject.timeout_add_seconds(30, self.refresh)
+    def _on_map(self, widget):
+        if self._timer_id is None:
+            self.refresh()
+            self._timer_id = GLib.timeout_add_seconds(1, self.refresh)
+
+    def _on_unmap(self, widget):
+        if self._timer_id is not None:
+            GLib.source_remove(self._timer_id)
+            self._timer_id = None
 
     def refresh(self):
         """Public method to refresh all data on the page."""
-        self._populate_zram_devices()
+        # Optimization: Fetch system RAM once per cycle
+        try:
+            ram_total = psutil.virtual_memory().total
+        except:
+            ram_total = 1 # Prevent div/0
+            
+        self._populate_zram_devices(ram_total)
         self._populate_swap_list()
-        self._populate_event_log()
+        self._update_health_button()
         
-        if not zdevice_ctl.list_devices():
+        # Check coverage
+        if not self._device_widgets:
             self.no_devices_status_page.set_visible(True)
         else:
             self.no_devices_status_page.set_visible(False)
+            
+        return True
 
-    def _create_device_card(self, device: zdevice_ctl.DeviceInfo) -> Adw.PreferencesGroup:
-        """Creates a 'card' for a single ZRAM device."""
-        card = Adw.PreferencesGroup()
-
-        # --- Main Action Row (Always Visible) ---
-        usage_percent = 0
+    def _create_device_row(self, device: zdevice_ctl.DeviceInfo, ram_total: int) -> Gtk.Widget:
+        """Creates a 'CircularWidget' card for a single ZRAM device."""
+        
+        # Parse Sizes safely
         try:
             disk_bytes = parse_size_to_bytes(device.disksize or '0')
             data_bytes = parse_size_to_bytes(device.data_size or '0')
-            if disk_bytes > 0:
-                usage_percent = int((data_bytes / disk_bytes) * 100)
+            compr_bytes = parse_size_to_bytes(device.compr_size or '0')
         except (ValueError, ZeroDivisionError):
-            usage_percent = 0
+            disk_bytes, data_bytes, compr_bytes = 0, 0, 0
 
-        subtitle = f"{usage_percent}% Used | {device.ratio or 'N/A'}x Ratio"
-        
-        main_row = Adw.ActionRow(title=device.name, subtitle=subtitle)
-        
-        usage_bar = Gtk.LevelBar(min_value=0, max_value=100, value=usage_percent, valign=Gtk.Align.CENTER)
-        usage_bar.set_size_request(150, -1)
-        main_row.add_suffix(usage_bar)
-        
-        card.add(main_row)
+        # Backing Device / Writeback Logic
+        backing_dev = None
+        bd_used = 0
+        bd_limit = 0
+        try:
+            wb_status = zdevice_ctl.get_writeback_status(device.name)
+            if wb_status and wb_status.backing_dev and wb_status.backing_dev != "none":
+                backing_dev = wb_status.backing_dev
+                # Placeholder for BD limits if needed in future
+                pass
+        except Exception:
+            pass
 
-        # --- Expander Row for Details ---
-        expander = Adw.ExpanderRow(title="Click to expand details")
-        expander.set_subtitle(f"Disk Size: {device.disksize or 'N/A'} | Algorithm: {device.algorithm or 'N/A'}")
-        
-        details = {
-            "Disk Size": device.disksize,
-            "Compression Algorithm": device.algorithm,
-            "Compressed Size": device.compr_size,
-            "Uncompressed Data Size": device.data_size,
-            "Streams": str(device.streams) if device.streams else "N/A",
-            "Writeback Device": "(none)",
-        }
+        # Identify if Swap
+        is_swap = "SWAP" in (device.mountpoint or "") or "swap" in (device.type or "").lower()
 
-        for title, value in details.items():
-            row = Adw.ActionRow(title=title, subtitle=value or "N/A")
-            expander.add_row(row)
-            
-        card.add(expander)
+        # Instantiate Widget
+        widget = CircularWidget(
+            device_name=device.name,
+            algo=device.algorithm,
+            used_bytes=data_bytes,
+            total_bytes=disk_bytes,
+            orig_bytes=data_bytes,
+            compr_bytes=compr_bytes,
+            physical_ram_total=ram_total,
+            is_swap=is_swap,
+            backing_dev=backing_dev,
+            bd_used=bd_used,
+            bd_limit=bd_limit
+        )
+        # Store metadata to detect structural changes (like backing dev)
+        widget._start_backing_dev = backing_dev
         
-        return card
+        return widget
 
-    def _populate_zram_devices(self):
+    def _populate_zram_devices(self, ram_total: int):
         """Populates the list of active ZRAM devices with real-time stats."""
-        for row in self._dynamic_device_rows:
-            self.device_list_group.remove(row)
-        self._dynamic_device_rows.clear()
-
+        
+        # Get current devices
         devices: List[zdevice_ctl.DeviceInfo] = zdevice_ctl.list_devices()
+        current_names = set()
 
         if not devices:
+            # Clear all
+            for child in list(self._device_widgets.values()):
+                self._device_flowbox.remove(child)
+            self._device_widgets.clear()
+            
+            # Show placeholder, hide flowbox
             self.no_devices_status_page.set_visible(True)
+            self._device_flowbox.set_visible(False)
+            
+            # Ensure group is visible so health button shows
+            self.device_list_group.set_visible(True)
             return
 
         self.no_devices_status_page.set_visible(False)
+        self._device_flowbox.set_visible(True)
+        self.device_list_group.set_visible(True)
 
         for device in devices:
-            new_card = self._create_device_card(device)
-            self.device_list_group.add(new_card)
-            self._dynamic_device_rows.append(new_card)
+            current_names.add(device.name)
+            
+            # Parse stats
+            try:
+                disk_bytes = parse_size_to_bytes(device.disksize or '0')
+                data_bytes = parse_size_to_bytes(device.data_size or '0')
+                compr_bytes = parse_size_to_bytes(device.compr_size or '0')
+            except:
+                disk_bytes, data_bytes, compr_bytes = 0, 0, 0
+            
+            # Check if exists
+            widget = self._device_widgets.get(device.name)
+            
+            if widget:
+                # OPTIMIZATION: Update existing
+                # Check for structural changes (e.g. backing dev changed)
+                # For now assuming backing dev doesn't change on the fly without remove/add.
+                
+                widget.update(
+                    used_bytes=data_bytes,
+                    total_bytes=disk_bytes,
+                    orig_bytes=data_bytes,
+                    compr_bytes=compr_bytes,
+                    physical_ram_total=ram_total
+                )
+            else:
+                # Create new
+                new_widget = self._create_device_row(device, ram_total)
+                new_widget.set_hexpand(False)
+                new_widget.set_vexpand(False)
+                self._device_flowbox.append(new_widget)
+                self._device_widgets[device.name] = new_widget
+
+        # Remove stale widgets
+        for name in list(self._device_widgets.keys()):
+            if name not in current_names:
+                w = self._device_widgets.pop(name)
+                self._device_flowbox.remove(w)
 
     def _populate_swap_list(self):
         """Populates the list of all system swap devices."""
-        # You can keep or remove the print statement, it has served its purpose.
-        # print(f"DEBUG: RAW DATA FROM health.get_all_swaps() -> {health.get_all_swaps()}")
-
-        # 1. REMOVE the old rows we explicitly tracked from the last refresh.
-        #    This is the logic that was missing.
-        for row in self._dynamic_swap_rows:
-            self.swap_list_group.remove(row)
-        self._dynamic_swap_rows.clear()
-
-        # 2. GET the latest, clean data from the backend.
+        # Get latest data
         swaps: List[health.SwapDevice] = health.get_all_swaps()
         
-        # 3. CREATE new rows and TRACK them for the next refresh.
+        # Map existing rows by name for reuse
+        existing_rows = {row.get_title(): row for row in self._dynamic_swap_rows}
+        seen_names = set()
+
         for swap in swaps:
-            row = Adw.ActionRow()
-            row.set_title(swap.name)
+            seen_names.add(swap.name)
+            
             size_hr = _kb_to_human(swap.size_kb)
             used_hr = _kb_to_human(swap.used_kb)
-            subtitle = f"Size: {size_hr} | Used: {used_hr} | Priority: {swap.priority}"
-            row.set_subtitle(subtitle)
+            subtitle = f"Size: {size_hr}  •  Used: {used_hr}  •  Priority: {swap.priority}"
             
-            self.swap_list_group.add(row)
-            # This is the crucial step: we add the new row to our tracking list.
-            self._dynamic_swap_rows.append(row)
+            if swap.name in existing_rows:
+                # Update existing row
+                existing_rows[swap.name].set_subtitle(subtitle)
+            else:
+                # Create new row
+                row = Adw.ActionRow()
+                row.set_title(swap.name)
+                row.set_subtitle(subtitle)
+                
+                icon_name = "drive-harddisk-symbolic" if "/dev/zram" not in swap.name else "memory-symbolic"
+                row.add_prefix(Gtk.Image.new_from_icon_name(icon_name))
+                
+                self.swap_list_group.add(row)
+                self._dynamic_swap_rows.append(row)
 
-    def _populate_event_log(self):
-        """Populates the System Health Events log."""
-        for child in list(self.event_log_container):
-            if child != self.no_events_status_page:
-                self.event_log_container.remove(child)
+        # Remove stale rows
+        active_rows = []
+        for row in self._dynamic_swap_rows:
+            name = row.get_title()
+            if name not in seen_names:
+                self.swap_list_group.remove(row)
+            else:
+                active_rows.append(row)
+        self._dynamic_swap_rows = active_rows
 
-        devices = zdevice_ctl.list_devices()
-        all_logs: List[journal.JournalRecord] = []
-
-        if not devices:
-            self.no_events_status_page.set_visible(True)
-            # 3. FIX: Use the correct widget and method
-            self.no_events_label.set_label("No Active ZRAM Devices Found")
-            return
-
-        for device in devices:
-            unit = f"systemd-zram-setup@{device.name}.service"
-            all_logs.extend(journal.list_zram_logs(unit=unit, count=50))
-
-
-
-        all_logs.sort(key=lambda r: r.timestamp, reverse=True)
-        logs_to_display = all_logs[:25]
-
-        if not logs_to_display:
-            self.no_events_status_page.set_visible(True)
-            # 4. FIX: Use the correct widget and method
-            self.no_events_label.set_label("No Recent Issues Found")
+    def _update_health_button(self):
+        """Updates the health button state based on current system health."""
+        health_report = health.check_system_health()
+        
+        # Determine state
+        if not health_report.sysfs_root_accessible:
+            state = HealthState.ERROR
+            subtitle = "Critical system access issue"
+        elif health_report.zswap.available and health_report.zswap.enabled:
+            state = HealthState.WARNING
+            subtitle = "ZSwap conflict detected"
+        elif not health_report.systemd_available:
+            state = HealthState.WARNING
+            subtitle = "Limited functionality"
+        elif len(health_report.notes) > 0:
+            state = HealthState.WARNING
+            subtitle = f"{len(health_report.notes)} recommendation(s)"
         else:
-            self.no_events_status_page.set_visible(False)
-            for log_entry in logs_to_display:
-                            ts_str = log_entry.timestamp.strftime("%Y-%m-%d %H:%M:%S")
-                            # Use GLib.markup_escape_text to prevent Pango-related errors
-                            message = GLib.markup_escape_text(log_entry.message)
-                            
-                            label = Gtk.Label()
-                            label.set_markup(f"<small>{ts_str}</small>\n<b>{message}</b>")
-                            label.set_halign(Gtk.Align.START)
-                            label.set_wrap(True)
-
-                            icon_name = "dialog-information-symbolic"
-                            if log_entry.priority <= 3: # Error level
-                                icon_name = "dialog-error-symbolic"
-                            elif log_entry.priority <= 4: # Warning level
-                                icon_name = "dialog-warning-symbolic"
-                            
-                            icon = Gtk.Image.new_from_icon_name(icon_name)
-                            icon.set_valign(Gtk.Align.START) # Align icon to the top
-
-                            box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-                            box.set_margin_top(6)
-                            box.set_margin_bottom(6)
-                            box.append(icon)
-                            box.append(label)
-
-                            self.event_log_container.append(box)
+            state = HealthState.HEALTHY
+            subtitle = None
+        
+        self._health_button.set_state(state, subtitle)
+        
+        # Store report for dialog
+        self._current_health_report = health_report
+    
+    def _on_health_button_clicked(self, button):
+        """Opens the health report dialog when the button is clicked."""
+        if hasattr(self, '_current_health_report'):
+            dialog = HealthReportDialog(
+                parent_window=self.get_root(),
+                health_report=self._current_health_report
+            )
+            dialog.present()
+        else:
+            # Fallback: run health check now
+            health_report = health.check_system_health()
+            dialog = HealthReportDialog(
+                parent_window=self.get_root(),
+                health_report=health_report
+            )
+            dialog.present()

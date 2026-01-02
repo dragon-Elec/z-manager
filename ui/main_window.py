@@ -9,6 +9,8 @@ from gi.repository import Gtk, Adw, Gdk
 
 # We ONLY import the StatusPage class.
 from .status_page import StatusPage
+from .configure_page import ConfigurePage
+from .tune_page import TunePage
 
 class MainWindow(Gtk.ApplicationWindow):
     def __init__(self, *args, **kwargs):
@@ -105,11 +107,11 @@ class MainWindow(Gtk.ApplicationWindow):
         status_page = StatusPage()
         self.stack.add_named(status_page, "status")
 
-        config_placeholder = self.create_placeholder_page("Configure Page")
-        tune_placeholder = self.create_placeholder_page("Tune Page")
+        config_page = ConfigurePage()
+        tune_page = TunePage()
         
-        self.stack.add_named(config_placeholder, "config")
-        self.stack.add_named(tune_placeholder, "tune")
+        self.stack.add_named(config_page, "config")
+        self.stack.add_named(tune_page, "tune")
 
         self.stack.set_visible_child_name("status")
 

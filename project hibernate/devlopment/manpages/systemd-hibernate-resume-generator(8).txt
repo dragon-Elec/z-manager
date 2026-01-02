@@ -1,0 +1,93 @@
+
+
+man7.org > Linux > man-pages
+	
+
+Linux/UNIX system programming training
+systemd-hibernate-resume-generator(8) — Linux manual page
+
+NAME | SYNOPSIS | DESCRIPTION | KERNEL COMMAND LINE | SEE ALSO | COLOPHON
+
+SYSTEM...ERATOR(8)  systemd-hibernate-resume-generator SYSTEM...ERATOR(8)
+
+NAME         top
+
+       systemd-hibernate-resume-generator - Unit generator for resume=
+       kernel parameter
+
+SYNOPSIS         top
+
+       /usr/lib/systemd/system-generators/systemd-hibernate-resume-generator
+
+DESCRIPTION         top
+
+       systemd-hibernate-resume-generator is a generator that initiates
+       the procedure to resume the system from hibernation. When resume=
+       kernel command line option or HibernateLocation EFI variable is
+       detected, it enables the systemd-hibernate-resume.service(8) unit,
+       which will instruct the kernel to resume the system from the
+       hibernation image.
+
+KERNEL COMMAND LINE         top
+
+       systemd-hibernate-resume-generator understands the following
+       kernel command line parameters:
+
+       resume=
+           Takes a path to the resume device. Both persistent block
+           device paths like /dev/disk/by-foo/bar and fstab(5)-style
+           specifiers like "FOO=bar" are supported.
+
+           Added in version 217.
+
+       resume_offset=
+           Takes the page offset of the swap space from the resume
+           device. Defaults to "0".
+
+           Added in version 254.
+
+       resumeflags=
+           Takes the resume device mount options to use. Defaults
+           rootflags= if not specified.
+
+           Added in version 243.
+
+       noresume
+           Do not try to resume from hibernation. If this parameter is
+           present, resume= is ignored.
+
+           Added in version 240.
+
+SEE ALSO         top
+
+       systemd(1), systemd-hibernate-resume.service(8),
+       kernel-command-line(7)
+
+COLOPHON         top
+
+       This page is part of the systemd (systemd system and service
+       manager) project.  Information about the project can be found at
+       ⟨http://www.freedesktop.org/wiki/Software/systemd⟩.  If you have a
+       bug report for this manual page, see
+       ⟨http://www.freedesktop.org/wiki/Software/systemd/#bugreports⟩.
+       This page was obtained from the project's upstream Git repository
+       ⟨https://github.com/systemd/systemd.git⟩ on 2025-08-11.  (At that
+       time, the date of the most recent commit that was found in the
+       repository was 2025-08-11.)  If you discover any rendering
+       problems in this HTML version of the page, or you believe there is
+       a better or more up-to-date source for the page, or you have
+       corrections or improvements to the information in this COLOPHON
+       (which is not part of the original manual page), send a mail to
+       man-pages@man7.org
+
+systemd 258~rc2                                        SYSTEM...ERATOR(8)
+
+Pages that refer to this page: kernel-command-line(7),  systemd.directives(7),  systemd.generator(7),  systemd.index(7),  systemd-hibernate-resume.service(8)
+
+HTML rendering created 2025-09-06 by Michael Kerrisk, author of The Linux Programming Interface.
+
+For details of in-depth Linux/UNIX system programming training courses that I teach, look here.
+
+Hosting by jambit GmbH.
+		Cover of TLPI
+

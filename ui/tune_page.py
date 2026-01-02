@@ -5,7 +5,12 @@ gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
 from gi.repository import Gtk, Adw
 
-@Gtk.Template(filename='tune_page.ui.xml')
+import os
+
+def get_ui_path(file_name):
+    return os.path.join(os.path.dirname(__file__), file_name)
+
+@Gtk.Template(filename=get_ui_path('tune_page.ui'))
 class TunePage(Adw.Bin):
     """
     The page for tuning system kernel parameters related to ZRAM performance.

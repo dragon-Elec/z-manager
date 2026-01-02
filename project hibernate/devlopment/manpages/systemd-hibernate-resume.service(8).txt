@@ -1,0 +1,85 @@
+
+
+man7.org > Linux > man-pages
+	
+
+Linux/UNIX system programming training
+systemd-hibernate-resume.service(8) — Linux manual page
+
+NAME | SYNOPSIS | DESCRIPTION | SEE ALSO | NOTES | COLOPHON
+
+SYSTEM...SERVICE(8)  systemd-hibernate-resume.service SYSTEM...SERVICE(8)
+
+NAME         top
+
+       systemd-hibernate-resume.service, systemd-hibernate-clear.service,
+       systemd-hibernate-resume - Resume from hibernation
+
+SYNOPSIS         top
+
+       systemd-hibernate-resume.service
+
+       systemd-hibernate-clear.service
+
+       /usr/lib/systemd/systemd-hibernate-resume
+
+DESCRIPTION         top
+
+       systemd-hibernate-resume.service initiates the resume from
+       hibernation.
+
+       systemd-hibernate-resume only supports the in-kernel hibernation
+       implementation, see Swap suspend[1]. Internally, it works by
+       writing the major:minor of selected device node to
+       /sys/power/resume, along with the offset in memory pages
+       (/sys/power/resume_offset) if supported.
+
+       The resume device node is either passed directly through
+       arguments, or automatically acquired from kernel command line
+       options and/or HibernateLocation EFI variable. The latter will
+       normally be cleared by systemd-hibernate-resume.service on
+       resumption. If a stale variable is detected, it would be cleared
+       by systemd-hibernate-clear.service.
+
+       Failing to initiate a resume is not an error condition. It may
+       mean that there was no resume image (e. g. if the system has been
+       simply powered off and not hibernated). In such cases, the boot is
+       ordinarily continued.
+
+SEE ALSO         top
+
+       systemd(1), systemd-hibernate-resume-generator(8)
+
+NOTES         top
+
+        1. Swap suspend
+           https://docs.kernel.org/power/swsusp.html
+
+COLOPHON         top
+
+       This page is part of the systemd (systemd system and service
+       manager) project.  Information about the project can be found at
+       ⟨http://www.freedesktop.org/wiki/Software/systemd⟩.  If you have a
+       bug report for this manual page, see
+       ⟨http://www.freedesktop.org/wiki/Software/systemd/#bugreports⟩.
+       This page was obtained from the project's upstream Git repository
+       ⟨https://github.com/systemd/systemd.git⟩ on 2025-08-11.  (At that
+       time, the date of the most recent commit that was found in the
+       repository was 2025-08-11.)  If you discover any rendering
+       problems in this HTML version of the page, or you believe there is
+       a better or more up-to-date source for the page, or you have
+       corrections or improvements to the information in this COLOPHON
+       (which is not part of the original manual page), send a mail to
+       man-pages@man7.org
+
+systemd 258~rc2                                       SYSTEM...SERVICE(8)
+
+Pages that refer to this page: systemd.directives(7),  systemd.index(7),  systemd-hibernate-resume-generator(8)
+
+HTML rendering created 2025-09-06 by Michael Kerrisk, author of The Linux Programming Interface.
+
+For details of in-depth Linux/UNIX system programming training courses that I teach, look here.
+
+Hosting by jambit GmbH.
+		Cover of TLPI
+

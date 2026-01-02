@@ -1,0 +1,4682 @@
+### Initialize Libadwaita with AdwApplication (C)
+
+Demonstrates initializing Libadwaita by using AdwApplication instead of GtkApplication. This is the recommended approach as it handles initialization automatically. The example creates a simple window with a label.
+
+```c
+#include <adwaita.h>
+
+static void
+activate_cb (GtkApplication *app)
+{
+  GtkWidget *window = gtk_application_window_new (app);
+  GtkWidget *label = gtk_label_new ("Hello World");
+
+  gtk_window_set_title (GTK_WINDOW (window), "Hello");
+  gtk_window_set_default_size (GTK_WINDOW (window), 200, 200);
+  gtk_window_set_child (GTK_WINDOW (window), label);
+  gtk_window_present (GTK_WINDOW (window));
+}
+
+int
+main (int   argc,
+      char *argv[])
+{
+  g_autoptr (AdwApplication) app = NULL;
+
+  app = adw_application_new ("org.example.Hello", G_APPLICATION_DEFAULT_FLAGS);
+
+  g_signal_connect (app, "activate", G_CALLBACK (activate_cb), NULL);
+
+  return g_application_run (G_APPLICATION (app), argc, argv);
+}
+
+```
+
+--------------------------------
+
+### Initialize Libadwaita with adw_init() (C)
+
+Shows how to initialize Libadwaita using the adw_init() function, which can be called instead of gtk_init(). This method is suitable when using AdwApplication is not possible. The example creates a basic window with a label and runs the main loop.
+
+```c
+#include <adwaita.h>
+
+int
+main (int   argc,
+      char *argv[])
+{
+  GtkWidget *window, *label;
+
+  adw_init ();
+
+  window = gtk_window_new ();
+  label = gtk_label_new ("Hello World");
+
+  gtk_window_set_title (GTK_WINDOW (window), "Hello");
+  gtk_window_set_default_size (GTK_WINDOW (window), 200, 200);
+  gtk_window_set_child (GTK_WINDOW (window), label);
+  gtk_window_present (GTK_WINDOW (window));
+
+   while (g_list_model_get_n_items (gtk_window_get_toplevels ()) > 0)
+    g_main_context_iteration (NULL, TRUE);
+
+  return 0;
+}
+
+```
+
+--------------------------------
+
+### AdwNavigationView Example
+
+This XML snippet demonstrates the equivalent structure using AdwNavigationView and AdwNavigationPage, showcasing the updated properties and widget replacements.
+
+```xml
+<object class="AdwNavigationView">
+  <child>
+    <object class="AdwNavigationPage">
+      <property name="title" translatable="yes">Page 1</property>
+      <property name="tag">page-1</property>
+      <property name="child">
+        <object class="AdwToolbarView">
+          <child type="top">
+            <object class="AdwHeaderBar"/>
+          </child>
+          <property name="content">
+            <!-- ... -->
+          </property>
+        </object>
+      </property>
+    </object>
+  </child>
+  <child>
+    <object class="AdwNavigationPage">
+      <property name="title" translatable="yes">Page 2</property>
+      <property name="tag">page-2</property>
+      <property name="child">
+        <object class="AdwToolbarView">
+          <child type="top">
+            <object class="AdwHeaderBar"/>
+          </child>
+          <property name="content">
+            <!-- ... -->
+          </property>
+        </object>
+      </property>
+    </object>
+  </child>
+</object>
+```
+
+--------------------------------
+
+### AdwLeaflet Example for Navigation
+
+This XML snippet demonstrates a typical use case for AdwLeaflet with two pages, illustrating its structure before migration to AdwNavigationView.
+
+```xml
+<object class="AdwLeaflet">
+  <property name="can-unfold">False</property>
+  <property name="can-navigate-back">True</property>
+  <child>
+    <object class="AdwLeafletPage">
+      <property name="name">page-1</property>
+      <property name="child">
+        <object class="AdwToolbarView">
+          <child type="top">
+            <object class="GtkHeaderBar">
+              <property name="title-widget">
+                <object class="AdwWindowTitle">
+                  <property name="title" translatable="yes">Page 1</property>
+                </object>
+              </property>
+            </object>
+          </child>
+          <property name="content">
+            <!-- ... -->
+          </property>
+        </object>
+      </property>
+    </object>
+  </child>
+  <child>
+    <object class="AdwLeafletPage">
+      <property name="name">page-2</property>
+      <property name="child">
+        <object class="AdwToolbarView">
+          <child type="top">
+            <object class="GtkHeaderBar">
+              <child type="start">
+                <object class="GtkButton">
+                  <property name="icon-name">go-previous-symbolic</property>
+                  <property name="tooltip-text" translatable="yes">Back</property>
+                  <signal name="clicked" handler="back_clicked_cb" swapped="yes"/>
+                </object>
+              </child>
+              <property name="title-widget">
+                <object class="AdwWindowTitle">
+                  <property name="title" translatable="yes">Page 2</property>
+                </object>
+              </property>
+            </object>
+          </child>
+          <property name="content">
+            <!-- ... -->
+          </property>
+        </object>
+      </property>
+    </object>
+  </child>
+</object>
+```
+
+--------------------------------
+
+### AdwNavigationSplitView Example
+
+Demonstrates the structure of AdwNavigationSplitView, which collapses into an AdwNavigationView. It requires AdwNavigationPage for both sidebar and content, and AdwHeaderBar for navigation elements. This example uses an AdwBreakpoint to control collapsed state based on screen width.
+
+```xml
+<object class="AdwWindow">
+  <child>
+    <object class="AdwBreakpoint">
+      <condition>max-width: 400sp</condition>
+      <setter object="split_view" property="collapsed">True</setter>
+    </object>
+  </child>
+  <property name="content">
+    <object class="AdwNavigationSplitView" id="split_view">
+      <property name="sidebar">
+        <object class="AdwNavigationPage">
+          <property name="title" translatable="yes">Sidebar</property>
+          <property name="tag">sidebar</property>
+          <property name="child">
+            <object class="AdwToolbarView">
+              <child type="top">
+                <object class="AdwHeaderBar"/>
+              </child>
+              <property name="content">
+                <!-- sidebar -->
+              </property>
+            </object>
+          </property>
+        </object>
+      </property>
+      <property name="content">
+        <object class="AdwNavigationPage">
+          <property name="title" translatable="yes">Content</property>
+          <property name="tag">content</property>
+          <property name="child">
+            <object class="AdwToolbarView">
+              <child type="top">
+                <object class="AdwHeaderBar"/>
+              </child>
+              <property name="content">
+                <!-- content -->
+              </property>
+            </object>
+          </property>
+        </object>
+      </property>
+    </object>
+  </property>
+</object>
+```
+
+--------------------------------
+
+### AdwViewSwitcher and AdwBreakpoint Example (XML)
+
+Shows how AdwViewSwitcher and AdwViewSwitcherBar, combined with AdwBreakpoint, create adaptive navigation for applications. It switches between a header bar view switcher on wide screens and a bottom bar view switcher on narrow screens.
+
+```xml
+<object class="AdwWindow">
+  <child>
+    <object class="AdwBreakpoint">
+      <condition>max-width: 550sp</condition>
+      <setter object="switcher_bar" property="reveal">True</setter>
+      <setter object="header_bar" property="title-widget"/>
+    </object>
+  </child>
+  <property name="content">
+    <object class="AdwToolbarView">
+      <child type="top">
+        <object class="AdwHeaderBar" id="header_bar">
+          <property name="title-widget">
+            <object class="AdwViewSwitcher">
+              <property name="stack">stack</property>
+              <property name="policy">wide</property>
+            </object>
+          </property>
+        </object>
+      </child>
+      <property name="content">
+        <object class="AdwViewStack" id="stack"/>
+      </property>
+      <child type="bottom">
+        <object class="AdwViewSwitcherBar" id="switcher_bar">
+          <property name="stack">stack</property>
+        </object>
+      </child>
+    </object>
+  </property>
+</object>
+```
+
+--------------------------------
+
+### Migrate AdwLeaflet to AdwNavigationSplitView (XML)
+
+This snippet demonstrates the structural changes required when migrating from AdwLeaflet to AdwNavigationSplitView. It involves replacing AdwLeafletPage with AdwNavigationPage and adjusting how child widgets are structured within the navigation view. The example shows the setup for both sidebar and content sections.
+
+```XML
+<object class="AdwWindow">
+  <child>
+    <object class="AdwBreakpoint">
+      <condition>max-width: 400sp</condition>
+      <setter object="split_view" property="collapsed">True</setter>
+    </object>
+  </child>
+  <property name="content">
+    <object class="AdwNavigationSplitView" id="split_view">
+      <property name="sidebar">
+        <object class="AdwNavigationPage">
+          <property name="title" translatable="yes">Sidebar</property>
+          <property name="child">
+            <object class="AdwToolbarView">
+              <child type="top">
+                <object class="AdwHeaderBar"/>
+              </child>
+              <property name="content">
+                <!-- sidebar -->
+              </property>
+            </object>
+          </property>
+        </object>
+      </property>
+      <property name="content">
+        <object class="AdwNavigationPage">
+          <property name="title" translatable="yes">Content</property>
+          <property name="child">
+            <object class="AdwToolbarView">
+              <child type="top">
+                <object class="AdwHeaderBar"/>
+              </child>
+              <property name="content">
+                <!-- content -->
+              </property>
+            </object>
+          </property>
+        </object>
+      </property>
+    </object>
+  </property>
+</object>
+```
+
+--------------------------------
+
+### Using AdwHeaderBar instead of GtkHeaderBar
+
+Illustrates the migration from GtkHeaderBar to AdwHeaderBar, highlighting the replacement of the `show-title-buttons` property with more granular control over start and end title buttons.
+
+```APIDOC
+## Migrating to AdwHeaderBar
+
+### Description
+This section explains how to replace `GtkHeaderBar` with `AdwHeaderBar` in Libadwaita applications. `AdwHeaderBar` offers enhanced integration with other widgets and provides more specific control over the visibility of title buttons on the start and end sides.
+
+N/A (Widget Migration)
+
+N/A (Widget Migration)
+
+### Parameters
+N/A (Widget Migration)
+
+### Request Example
+```xml
+<object class="GtkHeaderBar">
+  <property name="show-title-buttons">False</property>
+</object>
+```
+
+#### Success Response (N/A)
+
+```xml
+<object class="AdwHeaderBar">
+  <property name="show-start-title-buttons">False</property>
+  <property name="show-end-title-buttons">False</property>
+</object>
+```
+
+### Notes
+- The `GtkHeaderBar:show-title-buttons` property is replaced by `AdwHeaderBar:show-start-title-buttons` and `AdwHeaderBar:show-end-title-buttons` for finer control.
+```
+
+--------------------------------
+
+### GtkListBox as a Boxed List Example
+
+This example demonstrates the structure of a basic boxed list using GtkListBox with the 'boxed-list' style class. It includes several AdwActionRows as child elements. Note that GtkListView is not suitable for this pattern at present.
+
+```xml
+<object class="GtkListBox">
+  <property name="selection-mode">none</property>
+  <style>
+    <class name="boxed-list"/>
+  </style>
+  <child>
+    <object class="AdwActionRow">
+      <property name="title">Item 1</property>
+    </object>
+  </child>
+  <child>
+    <object class="AdwActionRow">
+      <property name="title">Item 2</property>
+    </object>
+  </child>
+  <child>
+    <object class="AdwActionRow">
+      <property name="title">Item 3</property>
+    </object>
+  </child>
+</object>
+```
+
+--------------------------------
+
+### AdwClamp Widget Example (XML)
+
+Demonstrates the usage of AdwClamp to constrain a child widget's maximum size, providing padding when space is abundant and removing it otherwise. Commonly used for patterns like boxed lists.
+
+```xml
+<object class="AdwClamp">
+  <property name="child">
+    <object class="GtkBox">
+      <property name="orientation">vertical</property>
+      <property name="margin-top">24</property>
+      <property name="margin-bottom">24</property>
+      <property name="margin-start">12</property>
+      <property name="margin-end">12</property>
+      <property name="spacing">24</property>
+      <child>
+        <object class="GtkListBox">
+          <property name="selection-mode">none</property>
+          <style>
+            <class name="boxed-list"/>
+          </style>
+          <!-- rows -->
+        </object>
+      </child>
+      <!-- more lists -->
+    </object>
+  </property>
+</object>
+```
+
+--------------------------------
+
+### AdwSpringAnimation Constructor Declaration (C)
+
+Declares the constructor for AdwSpringAnimation. It takes a GtkWidget, start and end values, spring parameters, and an animation target. It returns a new AdwAnimation object.
+
+```c
+AdwAnimation*
+adw_spring_animation_new (
+  GtkWidget* widget,
+  double from,
+  double to,
+  AdwSpringParams* spring_params,
+  AdwAnimationTarget* target
+)
+```
+
+--------------------------------
+
+### AdwWrapBox Widget Example (XML)
+
+Illustrates the AdwWrapBox widget, which functions like GtkBox but wraps its children onto new lines when they exceed available horizontal space. Children are not arranged in a grid, similar to a wrapping label.
+
+```xml
+<object class="AdwWrapBox">
+  <property name="line-spacing">6</property>
+  <property name="child-spacing">6</property>
+  <!-- children -->
+</object>
+```
+
+--------------------------------
+
+### Create AdwTimedAnimation (C)
+
+Creates a new AdwTimedAnimation on a specified widget to animate a target value from a starting point to an ending point over a given duration. It requires a GtkWidget, double for the 'from' and 'to' values, a guint for the duration, and an AdwAnimationTarget.
+
+```c
+AdwAnimation*
+adw_timed_animation_new (
+  GtkWidget* widget,
+  double from,
+  double to,
+  guint duration,
+  AdwAnimationTarget* target
+)
+```
+
+--------------------------------
+
+### Get Style Manager - C (libadwaita)
+
+Retrieves the AdwStyleManager associated with an AdwApplication instance. This function is useful for accessing style properties through bindings or expressions. It takes a pointer to an AdwApplication as input and returns a pointer to an AdwStyleManager.
+
+```c
+AdwStyleManager*
+adw_application_get_style_manager (
+  AdwApplication* self
+)
+```
+
+--------------------------------
+
+### AdwTimedAnimation Constructor
+
+Creates a new AdwTimedAnimation on a GtkWidget to animate a target value from a starting value to an ending value over a specified duration.
+
+```APIDOC
+## AdwTimedAnimation Constructor
+
+### Description
+Creates a new `AdwTimedAnimation` on `widget` to animate `target` from `from` to `to`.
+
+CONSTRUCTOR
+
+N/A (Constructor)
+
+### Parameters
+### Request Example
+
+#### Success Response (200)
+- **AdwAnimation*** (AdwAnimation*) - The newly created animation. The data is owned by the called function.
+
+### Parameters Description
+- **widget** (GtkWidget) - Required - A widget to create animation on. The data is owned by the caller of the function.
+- **from** (double) - Required - A value to animate from.
+- **to** (double) - Required - A value to animate to.
+- **duration** (guint) - Required - A duration for the animation.
+- **target** (AdwAnimationTarget) - Required - A target value to animate. The called function takes ownership of the data, and is responsible for freeing it.
+```
+
+--------------------------------
+
+### AdwTabOverview Setup Extra Drop Target
+
+Sets up an extra drop target on tabs, allowing arbitrary content to be dragged onto them. This function defines the supported types for the drop target and can trigger automatic tab selection on hover.
+
+```APIDOC
+## void adw_tab_overview_setup_extra_drop_target
+
+### Description
+Sets the supported types for this drop target. Sets up an extra drop target on tabs. This allows to drag arbitrary content onto tabs, for example URLs in a web browser. If a tab is hovered for a certain period of time while dragging the content, it will be automatically selected. The `AdwTabOverview::extra-drag-drop` signal can be used to handle the drop.
+
+`void`
+
+`adw_tab_overview_setup_extra_drop_target`
+
+### Parameters
+### Request Example
+```json
+{
+  "self": "AdwTabOverview*",
+  "actions": "GdkDragAction",
+  "types": "GType[]",
+  "n_types": "gsize"
+}
+```
+
+#### Success Response (200)
+This method does not return a value.
+
+  "message": "Operation successful"
+}
+```
+
+### Remarks
+Available since: 1.3
+```
+
+--------------------------------
+
+### Gtk.Widget Properties: Margins
+
+This snippet details the margin properties for a widget, specifying the spacing around its edges. It includes top, bottom, start, and end margins.
+
+```text
+###### Gtk.Widget:margin-bottom
+Margin on bottom side of widget.
+###### Gtk.Widget:margin-end
+Margin on end of widget, horizontally.
+###### Gtk.Widget:margin-start
+Margin on start of widget, horizontally.
+###### Gtk.Widget:margin-top
+Margin on top side of widget.
+```
+
+--------------------------------
+
+### Get AdwWrapBox justification
+
+Retrieves the justification mode for complete lines within the AdwWrapBox. This determines how widgets on a full line are stretched to fill the line's width. It returns the current justification mode.
+
+```vala
+adw_wrap_box_get_justify (self);
+```
+
+--------------------------------
+
+### Set Start Icon Name for AdwButtonRow (C)
+
+Sets the start icon name for an AdwButtonRow. This function takes a pointer to the AdwButtonRow and a constant character pointer representing the icon name. The icon name can be NULL. Available since 1.6.
+
+```c
+void
+adw_button_row_set_start_icon_name (
+  AdwButtonRow* self,
+  const char* icon_name
+)
+
+```
+
+--------------------------------
+
+### Get AdwStyleManager for Display (C)
+
+Retrieves the AdwStyleManager associated with a GdkDisplay. This function is useful for applying styles to a specific display. It takes a GdkDisplay* as input and returns an AdwStyleManager*. The returned data is owned by the called function.
+
+```c
+AdwStyleManager*
+adw_style_manager_get_for_display (
+  GdkDisplay* display
+)
+```
+
+--------------------------------
+
+### Migrate GtkWindow to AdwWindow with ToolbarView (XML)
+
+This example demonstrates migrating a GtkWindow with a titlebar and action bar to an AdwWindow using AdwToolbarView. The AdwToolbarView integrates the header bar and action bar as top and bottom child widgets, respectively, with the main content placed in between.
+
+```XML
+<object class="GtkWindow">
+  <property name="titlebar">
+    <object class="AdwHeaderBar"/>
+  </property>
+  <property name="child">
+    <object class="GtkBox">
+      <property name="orientation">vertical</property>
+      <child>
+        <!-- content -->
+      </child>
+      <child>
+        <object class="GtkActionBar"/>
+      </child>
+    </object>
+  </property>
+</object>
+
+XML
+<object class="AdwWindow">
+  <property name="content">
+    <object class="AdwToolbarView">
+      <child type="top">
+        <object class="AdwHeaderBar"/>
+      </child>
+      <property name="content">
+        <!-- content -->
+      </property>
+      <child type="bottom">
+        <object class="GtkActionBar"/>
+      </child>
+    </object>
+  </property>
+</object>
+
+```
+
+--------------------------------
+
+### Get AdwWrapBox pack direction
+
+Retrieves the direction in which children are packed within each line of the AdwWrapBox. This affects the order in which children are laid out on a line (e.g., left-to-right or right-to-left). It returns the current pack direction.
+
+```vala
+adw_wrap_box_get_pack_direction (self);
+```
+
+--------------------------------
+
+### Get AdwWrapBox natural line length
+
+Retrieves the natural size for each line in the AdwWrapBox. This is used to determine the preferred width of each line before wrapping occurs. It returns the natural line length value.
+
+```vala
+adw_wrap_box_get_natural_line_length (self);
+```
+
+--------------------------------
+
+### Triple Pane Layout with AdwOverlaySplitView and AdwNavigationSplitView
+
+This example shows a triple pane layout using an AdwOverlaySplitView for the outer structure and an AdwNavigationSplitView for the inner content. It leverages AdwBreakpoint to control collapsing behavior. The outer view's content area holds the nested split view, allowing for an overlaid sidebar experience.
+
+```xml
+<object class="AdwWindow">
+  <child>
+    <object class="AdwBreakpoint">
+      <condition>max-width: 860sp</condition>
+      <setter object="outer_view" property="collapsed">True</setter>
+    </object>
+  </child>
+  <child>
+    <object class="AdwBreakpoint">
+      <condition>max-width: 500sp</condition>
+      <setter object="outer_view" property="collapsed">True</setter>
+      <setter object="inner_view" property="collapsed">True</setter>
+    </object>
+  </child>
+  <property name="content">
+    <object class="AdwOverlaySplitView" id="outer_view">
+      <property name="max-sidebar-width">260</property>
+      <property name="sidebar-width-fraction">0.179</property>
+      <property name="sidebar">
+        <!-- sidebar -->
+      </property>
+      <property name="content">
+        <object class="AdwNavigationSplitView" id="inner_view">
+          <property name="min-sidebar-width">290</property>
+          <property name="max-sidebar-width">520</property>
+          <property name="sidebar-width-fraction">0.355</property>
+          <property name="sidebar">
+            <!-- middle pane -->
+          </property>
+          <property name="content">
+            <!-- content -->
+          </property>
+        </object>
+      </property>
+    </object>
+  </property>
+</object>
+```
+
+--------------------------------
+
+### Get AdwWrapBox alignment
+
+Retrieves the alignment of children within each line of the AdwWrapBox. This property controls how children are positioned horizontally when a line is not fully filled. It returns the current alignment value.
+
+```vala
+adw_wrap_box_get_align (self);
+```
+
+--------------------------------
+
+### CSS Font Variable Usage Example
+
+Demonstrates how to apply system font variables for font family and size in CSS. This is typically used for specific text styles like code blocks or document content.
+
+```css
+.my-content {
+  font-family: var(--monospace-font-family);
+  font-size: var(--monospace-font-size);
+}
+```
+
+--------------------------------
+
+### Get AdwWrapBox wrap reverse
+
+Retrieves whether the wrap direction of the AdwWrapBox is reversed. When true, wrapping occurs in the opposite direction to the natural text direction. It returns a boolean value.
+
+```vala
+adw_wrap_box_get_wrap_reverse (self);
+```
+
+--------------------------------
+
+### Remove all children from AdwWrapBox
+
+This method removes all child widgets from the AdwWrapBox, effectively emptying the widget. This is useful for resetting the widget's content. This functionality is available starting from version 1.8.
+
+```vala
+adw_wrap_box_remove_all (self);
+```
+
+--------------------------------
+
+### Get AdwWrapBox line spacing unit
+
+Retrieves the unit of measurement used for line spacing in the AdwWrapBox. This allows line spacing to scale with text size. The return value indicates the unit (e.g., pixels, ems).
+
+```vala
+adw_wrap_box_get_line_spacing_unit (self);
+```
+
+--------------------------------
+
+### Get AdwWrapBox line spacing
+
+Retrieves the spacing value between lines of widgets in the AdwWrapBox. This property controls the vertical gap between rows of children. It returns the current line spacing value.
+
+```vala
+adw_wrap_box_get_line_spacing (self);
+```
+
+--------------------------------
+
+### Get AdwWrapBox line homogeneous
+
+Retrieves whether all lines in the AdwWrapBox should take up the same amount of vertical space. When true, lines adjust to match the height of the tallest child on any line. It returns a boolean value.
+
+```vala
+adw_wrap_box_get_line_homogeneous (self);
+```
+
+--------------------------------
+
+### Get AdwWrapBox wrap policy
+
+Retrieves the policy that determines when lines wrap in the AdwWrapBox. This controls whether wrapping occurs as soon as a child doesn't fit or only after children have been shrunk to their minimum size. It returns the current wrap policy.
+
+```vala
+adw_wrap_box_get_wrap_policy (self);
+```
+
+--------------------------------
+
+### Get AdwWrapBox child spacing unit
+
+Retrieves the unit of measurement used for child spacing in the AdwWrapBox. This allows spacing to scale with text size. The return value indicates the unit (e.g., pixels, ems).
+
+```vala
+adw_wrap_box_get_child_spacing_unit (self);
+```
+
+--------------------------------
+
+### Create AdwApplication Instance (C)
+
+Creates a new AdwApplication instance. Requires a valid application ID or disables certain features. Accepts GApplicationFlags. Returns the newly created AdwApplication.
+
+```c
+AdwApplication*
+adw_application_new (
+  const char* application_id,
+  GApplicationFlags flags
+)
+```
+
+--------------------------------
+
+### Get Visible Dialog - C
+
+Retrieves the currently visible dialog associated with an AdwApplicationWindow. This function takes a pointer to an AdwApplicationWindow as input and returns a pointer to an AdwDialog, representing the visible dialog. The returned dialog is owned by the instance and can be NULL if no dialog is currently displayed.
+
+```c
+AdwDialog*
+adw_application_window_get_visible_dialog (
+  AdwApplicationWindow* self
+)
+```
+
+--------------------------------
+
+### Get AdwWrapBox child spacing
+
+Retrieves the spacing value between widgets that are on the same line within the AdwWrapBox. This property helps control the horizontal gap between adjacent children on a single line. It returns the spacing value.
+
+```vala
+adw_wrap_box_get_child_spacing (self);
+```
+
+--------------------------------
+
+### AdwApplication Constructor
+
+Creates a new AdwApplication instance with the specified application ID and flags.
+
+```APIDOC
+## AdwApplication AdwApplication_new
+
+### Description
+Creates a new `AdwApplication`. If `application_id` is not `NULL`, then it must be valid. See `g_application_id_is_valid()`.
+If no application ID is given then some features (most notably application uniqueness) will be disabled.
+
+CONSTRUCTOR
+
+### Parameters
+### Request Example
+```json
+{
+  "application_id": "com.example.myapp",
+  "flags": "G_APPLICATION_FLAGS_NONE"
+}
+```
+
+#### Success Response (200)
+- **AdwApplication** (object) - The newly created AdwApplication.
+
+  "application": "<pointer_to_AdwApplication_object>"
+}
+
+--------------------------------
+
+### Get AdwWrapBox natural line length unit
+
+Retrieves the unit of measurement used for the natural line length in the AdwWrapBox. This allows the natural line length to scale with text size. The return value indicates the unit (e.g., pixels, ems).
+
+```vala
+adw_wrap_box_get_natural_line_length_unit (self);
+```
+
+--------------------------------
+
+### Get Swipe Area Declaration - C
+
+Declares the `adw_swipeable_get_swipe_area` function, which retrieves the swipeable area for a given navigation direction and drag state. It populates a GdkRectangle with the calculated area. If not implemented, it defaults to the widget's allocation.
+
+```c
+void
+adw_swipeable_get_swipe_area (
+  AdwSwipeable* self,
+  AdwNavigationDirection navigation_direction,
+  gboolean is_drag,
+  GdkRectangle* rect
+)
+
+```
+
+--------------------------------
+
+### Get GParamSpec of Animated Property (C)
+
+Retrieves the GParamSpec of the property being animated by an AdwPropertyAnimationTarget instance. This function takes a pointer to an AdwPropertyAnimationTarget as input and returns a pointer to its associated GParamSpec. The returned GParamSpec is owned by the instance.
+
+```c
+GParamSpec*
+adw_property_animation_target_get_pspec (
+  AdwPropertyAnimationTarget* self
+)
+```
+
+--------------------------------
+
+### Get AdwWrapBox justify last line
+
+Retrieves whether the last line of the AdwWrapBox should also be stretched to fill the entire widget width. This allows for consistent layout even when the last line isn't full. It returns a boolean value.
+
+```vala
+adw_wrap_box_get_justify_last_line (self);
+```
+
+--------------------------------
+
+### Overriding Standalone Colors with Background Colors in CSS
+
+Provides an example of how to override both background and standalone colors for specific widgets when custom background colors are set. This ensures that the standalone color maintains appropriate contrast.
+
+```css
+my-widget {
+  --accent-bg-color: var(--purple-3);
+  --accent-color: oklab(from var(--accent-bg-color) var(--standalone-color-oklab));
+}
+
+```
+
+--------------------------------
+
+### Get AdwSwipeable Snap Points (C)
+
+Retrieves an array of snap points for an AdwSwipeable object. Each snap point represents an acceptable progress value for ending a swipe. The number of snap points is returned via the n_snap_points argument. The caller is responsible for freeing the returned array.
+
+```c
+double*
+get_snap_points (
+  AdwSwipeable* self,
+  int* n_snap_points
+)
+```
+
+--------------------------------
+
+### Boxed Lists Overview
+
+Explains the concept of boxed lists in Libadwaita, including the required GTKListBox properties and style classes.
+
+```APIDOC
+## Boxed Lists
+
+Libadwaita provides an API to implement the boxed lists pattern. Boxed lists are composed of a `GtkListBox` with the `GtkListBox:selection-mode` set to `GTK_SELECTION_NONE` and with the `.boxed-list` or `.boxed-list-separate` style classes.
+
+`GtkListView` cannot be used as a boxed list at the moment.
+
+### Example Boxed List
+
+```xml
+<object class="GtkListBox">
+  <property name="selection-mode">none</property>
+  <style>
+    <class name="boxed-list"/>
+  </style>
+  <child>
+    <object class="AdwActionRow">
+      <property name="title">Item 1</property>
+    </object>
+  </child>
+  <child>
+    <object class="AdwActionRow">
+      <property name="title">Item 2</property>
+    </object>
+  </child>
+  <child>
+    <object class="AdwActionRow">
+      <property name="title">Item 3</property>
+    </object>
+  </child>
+</object>
+
+--------------------------------
+
+### AdwHeaderBar Title Widget XML Example
+
+This XML snippet shows how to configure an AdwHeaderBar to use a custom title widget, specifically an AdwWindowTitle. This allows for a custom title text to be displayed in the header bar. The 'title' property is marked as translatable.
+
+```xml
+<object class="AdwHeaderBar">
+  <property name="title-widget">
+    <object class="AdwWindowTitle">
+      <property name="title" translatable="yes">Title</property>
+    </object>
+  </property>
+</object>
+```
+
+--------------------------------
+
+### Get Disabled Text of AdwShortcutLabel (C)
+
+Retrieves the text displayed by an AdwShortcutLabel when no accelerator is set. This function takes a pointer to an AdwShortcutLabel instance as input and returns a constant character pointer to the disabled text. The returned string is owned by the instance and is a NUL-terminated UTF-8 string.
+
+```c
+const char*
+adw_shortcut_label_get_disabled_text (
+  AdwShortcutLabel* self
+)
+```
+
+--------------------------------
+
+### Overriding Adwaita UI Colors in CSS
+
+Shows how to override default Adwaita CSS color variables within an application's stylesheet. This allows for custom theming by re-declaring the color variables, for example, in the :root scope.
+
+```css
+:root {
+  --accent-bg-color: #e01b24;
+}
+
+```
+
+--------------------------------
+
+### AdwAvatar Constructor
+
+Creates a new AdwAvatar widget with specified size, text, and initials option.
+
+```APIDOC
+## AdwAvatarNew
+
+### Description
+Creates a new `AdwAvatar`.
+
+CONSTRUCTOR
+
+### Parameters
+### Request Example
+
+#### Success Response (200)
+- **GtkWidget** (GtkWidget) - The newly created `AdwAvatar`.
+
+### Parameters
+####
+```
+
+--------------------------------
+
+### Set Animation Target Value with adw_timed_animation_set_value_to (C)
+
+Sets the target value for an AdwTimedAnimation. The animation will interpolate from its starting value (either AdwTimedAnimation:value-from or AdwTimedAnimation:reverse if TRUE) to this specified value. This function modifies the 'value-to' property of the AdwTimedAnimation object.
+
+```c
+void
+adw_timed_animation_set_value_to (
+  AdwTimedAnimation* self,
+  double value
+)
+```
+
+--------------------------------
+
+### Create AdwApplicationWindow - C
+
+Creates a new AdwApplicationWindow associated with a GtkApplication instance. This function takes a GtkApplication pointer as input and returns a GtkWidget representing the new window. The ownership of the data is managed by the caller and the called function respectively.
+
+```c
+GtkWidget*
+adw_application_window_new (
+  GtkApplication* app
+)
+```
+
+--------------------------------
+
+### AdwLayout Constructor
+
+Creates a new AdwLayout widget with specified content.
+
+```APIDOC
+## AdwLayout New
+
+### Description
+Creates a new `AdwLayout` that contains `content`.
+Available since: 1.6
+
+Constructor
+
+N/A (Constructor)
+
+### Parameters
+### Request Example
+```
+AdwLayout* adw_layout_new (GtkWidget* content)
+```
+
+#### Success Response (200)
+- **AdwLayout*** (AdwLayout*) - A new `AdwLayout`.
+
+// Example usage (conceptual):
+GtkWidget* my_content = gtk_label_new("Hello, AdwLayout!");
+AdwLayout* layout = adw_layout_new(my_content);
+
+--------------------------------
+
+### Gtk.Widget Properties: Tooltips and Appearance
+
+This snippet details properties related to widget tooltips and appearance. It includes settings for enabling tooltips, providing markup-based or plain text tooltips, and setting widget opacity.
+
+```text
+###### Gtk.Widget:has-tooltip
+Enables or disables the emission of the `GtkWidget::query-tooltip` signal on `widget`.
+###### Gtk.Widget:tooltip-markup
+Sets the text of tooltip to be the given string, which is marked up with Pango markup.
+###### Gtk.Widget:tooltip-text
+Sets the text of tooltip to be the given string.
+###### Gtk.Widget:opacity
+The requested opacity of the widget.
+```
+
+--------------------------------
+
+### Create AdwToast Instance
+
+This C function creates a new AdwToast instance. It takes a 'title' string as input, which can be formatted using Pango markup. The function returns a pointer to the newly created AdwToast, and the caller is responsible for managing its memory.
+
+```c
+AdwToast*
+adw_toast_new (
+  const char* title
+)
+
+```
+
+--------------------------------
+
+### Create AdwAvatar Widget (C)
+
+Constructs a new AdwAvatar widget. It requires an integer for size, a string for text to determine initials and color, and a boolean to indicate if initials should be shown as a fallback. It returns the newly created GtkWidget.
+
+```c
+GtkWidget*
+adw_avatar_new (
+  int size,
+  const char* text,
+  gboolean show_initials
+)
+```
+
+--------------------------------
+
+### Create a new AdwWrapBox widget
+
+This function creates a new instance of the AdwWrapBox widget. It is the primary constructor for this widget. No specific dependencies are mentioned beyond the Adw library itself. The function returns a new AdwWrapBox widget.
+
+```vala
+Adw.WrapBox.new ();
+```
+
+--------------------------------
+
+### Create AdwShortcutsItem from Action (C)
+
+Creates a new AdwShortcutsItem using a provided title and action name. This function is available since libadwaita version 1.8. It takes a constant character pointer for the title and action name as input and returns a pointer to the newly created AdwShortcutsItem.
+
+```c
+AdwShortcutsItem*
+adw_shortcuts_item_new_from_action (
+  const char* title,
+  const char* action_name
+)
+```
+
+--------------------------------
+
+### AdwAboutDialog Constructor
+
+Creates a new AdwAboutDialog using AppStream metadata, automatically setting various properties based on the provided metadata.
+
+```APIDOC
+## AdwAboutDialog new_from_appdata
+
+### Description
+Creates a new `AdwAboutDialog` using AppStream metadata. This automatically sets properties like application icon, name, developer name, version, website, support URL, issue URL, and license type from the AppStream data. If `release_notes_version` is provided, it also sets the release notes version and description.
+
+CONSTRUCTOR
+
+N/A (This is a constructor, not a REST endpoint)
+
+### Parameters
+### Request Example
+```json
+{
+  "resource_path": "/path/to/appstream/metadata",
+  "release_notes_version": "1.0.0"
+}
+```
+
+#### Success Response (200)
+N/A (This is a constructor that returns an object)
+
+(Returns an `AdwDialog*` pointer to the newly created `AdwAboutDialog`)
+
+### Parameters
+* **resource_path** (const char*) - Required - The resource path containing AppStream metadata.
+* **release_notes_version** (const char*) - Optional - The version string to retrieve release notes for. Can be `NULL`.
+
+### Return Value
+* **AdwDialog*** - The newly created `AdwAboutDialog`.
+```
+
+--------------------------------
+
+### AdwShortcutLabel Constructor
+
+Creates a new AdwShortcutLabel widget displaying a given accelerator string.
+
+```APIDOC
+## AdwShortcutLabel new
+
+### Description
+Creates a new `AdwShortcutLabel` showing `accelerator`.
+Available since: 1.8
+
+Constructor
+
+N/A (Widget constructor)
+
+### Parameters
+### Request Example
+```json
+{
+  "accelerator": "<Control>S"
+}
+```
+
+#### Success Response (200)
+- **GtkWidget** - The newly created `AdwShortcutLabel`.
+
+  "widget": "<AdwShortcutLabel widget object>"
+}
+
+--------------------------------
+
+### Create AdwMessageDialog Instance (C)
+
+Demonstrates how to create a new AdwMessageDialog instance using the `adw_message_dialog_new` function. It shows how to optionally format the body content after creation. This function is deprecated since version 1.6 and replaced by `AdwAlertDialog`.
+
+```c
+GtkWidget* adw_message_dialog_new (
+  GtkWindow* parent,
+  const char* heading,
+  const char* body
+)
+
+/* Example Usage */
+GtkWidget *dialog;
+
+dialog = adw_message_dialog_new (parent, _("Replace File?"), NULL);
+adw_message_dialog_format_body (ADW_MESSAGE_DIALOG (dialog),
+                                _("A file named \"%s\" already exists.  Do you want to replace it?"),
+                                filename);
+```
+
+--------------------------------
+
+### Migrating to AdwWindow or AdwApplicationWindow
+
+Explains the process of migrating from GtkWindow or GtkApplicationWindow to AdwWindow or AdwApplicationWindow, emphasizing the use of AdwToolbarView and setting minimum window sizes for breakpoint integration.
+
+```APIDOC
+## Migrating to AdwWindow or AdwApplicationWindow
+
+### Description
+This section details the migration from `GtkWindow` or `GtkApplicationWindow` to `AdwWindow` or `AdwApplicationWindow`, respectively. This migration is necessary to utilize Libadwaita's adaptive widgets and breakpoints. It involves structuring the window content with `AdwToolbarView` and setting appropriate minimum dimensions.
+
+N/A (Widget Migration)
+
+N/A (Widget Migration)
+
+### Parameters
+N/A (Widget Migration)
+
+### Request Example
+```xml
+<object class="GtkWindow">
+  <property name="titlebar">
+    <!-- titlebar -->
+  </property>
+  <property name="child">
+    <!-- content -->
+  </property>
+</object>
+```
+
+#### Success Response (N/A)
+
+```xml
+<object class="AdwWindow">
+  <property name="width-request">360</property>
+  <property name="height-request">294</property>
+  <property name="content">
+    <object class="AdwToolbarView">
+      <child type="top">
+        <!-- titlebar -->
+      </child>
+      <property name="content">
+        <!-- content -->
+      </object>
+  </property>
+</object>
+```
+
+### Notes
+- The `AdwWindow` or `AdwApplicationWindow` must have a minimum size set (e.g., using `gtk_widget_set_size_request()` or properties `GtkWidget:width-request` and `GtkWidget:height-request`). A common minimum size for mobile responsiveness is 360x294 pixels.
+- Ensure that all child widgets fit within the minimum window size, considering text translations and scaling. Use properties like `GtkLabel:ellipsize`, `GtkLabel:wrap`, `GtkButton:can-shrink`, etc., to manage content fitting.
+```
+
+--------------------------------
+
+### Create AdwNavigationPage with Tag (C)
+
+Creates a new AdwNavigationPage instance with a given child widget, title, and tag. This function is available since version 1.4 of libadwaita. It takes a GtkWidget, a title string, and a tag string as input and returns a pointer to the newly created AdwNavigationPage. The caller owns the memory for the input parameters.
+
+```c
+AdwNavigationPage*
+adw_navigation_page_new_with_tag (
+  GtkWidget* child,
+  const char* title,
+  const char* tag
+)
+```
+
+--------------------------------
+
+### Create AdwShortcutsSection
+
+Creates a new AdwShortcutsSection with a specified title. The title is optional and must be a NUL-terminated UTF-8 string. The caller owns the returned object and is responsible for freeing it.
+
+```c
+AdwShortcutsSection*
+adw_shortcuts_section_new (
+  const char* title
+)
+```
+
+--------------------------------
+
+### Using AdwToolbarView instead of GtkBox
+
+Demonstrates how to replace GtkBox with AdwToolbarView for managing header bars and other toolbars, including adding top and bottom bars and setting content.
+
+```APIDOC
+## Replacing GtkBox with AdwToolbarView
+
+### Description
+This section explains how to migrate from using `GtkBox` for header bars and toolbars to using the `AdwToolbarView` widget in Libadwaita. `AdwToolbarView` simplifies the management of top and bottom bars and handles content display adaptively.
+
+N/A (Widget Migration)
+
+N/A (Widget Migration)
+
+### Parameters
+N/A (Widget Migration)
+
+### Request Example
+```xml
+<object class="GtkBox">
+  <property name="orientation">vertical</property>
+  <child>
+    <object class="AdwHeaderBar">
+      <!-- ... -->
+    </object>
+  </child>
+  <child>
+    <object class="...">
+      <property name="vexpand">True</property>
+      <!-- ... -->
+    </object>
+  </child>
+</object>
+```
+
+#### Success Response (N/A)
+
+```xml
+<object class="AdwToolbarView">
+  <child type="top">
+    <object class="AdwHeaderBar">
+      <!-- ... -->
+    </object>
+  </child>
+  <property name="content">
+    <object class="...">
+      <!-- ... -->
+    </object>
+  </property>
+</object>
+```
+
+### Notes
+- `AdwToolbarView` replaces the need for `GtkWidget:vexpand` on content widgets.
+- `AdwToolbarView` defaults to flat header bars, removing the need for the `.flat` style class. Use `AdwToolbarView:top-bar-style` and `AdwToolbarView:bottom-bar-style` properties set to `ADW_TOOLBAR_RAISED` for a raised style.
+```
+
+--------------------------------
+
+### Create AdwShortcutLabel - C
+
+Creates a new AdwShortcutLabel widget to display a given accelerator string. This function takes a constant character pointer as input and returns a GtkWidget pointer representing the new label. The accelerator string must be a NUL-terminated UTF-8 string.
+
+```c
+GtkWidget*
+adw_shortcut_label_new (
+  const char* accelerator
+)
+```
+
+--------------------------------
+
+### C: Create AdwAboutWindow from AppData
+
+Creates a new AdwAboutWindow using AppStream metadata. This function automatically sets properties like application-icon, application-name, developer-name, version, website, support-url, issue-url, and license-type from the AppStream data. It can optionally set release notes based on a provided version. This function is deprecated since version 1.6 and `AdwAboutDialog` should be used instead.
+
+```c
+GtkWidget*
+adw_about_window_new_from_appdata (
+  const char* resource_path,
+  const char* release_notes_version
+)
+```
+
+--------------------------------
+
+### AdwMultiLayoutView: Implement Adaptive Multi-Layouts
+
+Illustrates AdwMultiLayoutView for managing multiple distinct layouts within a single view. It uses breakpoints to switch between layouts, such as a sidebar on larger screens and a bottom sheet on smaller ones, by mapping children to slots with matching IDs.
+
+```xml
+<object class="AdwWindow">
+  <child>
+    <object class="AdwBreakpoint">
+      <condition>max-width: 400sp</condition>
+      <setter object="multi_layout_view" property="layout-name">bottom-sheet</setter>
+    </object>
+  </child>
+  <property name="content">
+    <object class="AdwMultiLayoutView" id="multi_layout_view">
+      <child>
+        <object class="AdwLayout">
+          <property name="name">sidebar</property>
+          <property name="content">
+            <object class="AdwOverlaySplitView">
+              <property name="sidebar-position">end</property>
+              <property name="sidebar">
+                <object class="AdwLayoutSlot">
+                  <property name="id">secondary</property>
+                </object>
+              </property>
+              <property name="content">
+                <object class="AdwLayoutSlot">
+                  <property name="id">primary</property>
+                </object>
+              </property>
+            </object>
+          </property>
+        </object>
+      </child>
+      <child>
+        <object class="AdwLayout">
+          <property name="name">bottom-sheet</property>
+          <property name="content">
+            <object class="AdwBottomSheet">
+              <property name="open">True</property>
+              <property name="content">
+                <object class="AdwLayoutSlot">
+                  <property name="id">primary</property>
+                </object>
+              </property>
+              <property name="sheet">
+                <object class="AdwLayoutSlot">
+                  <property name="id">secondary</property>
+                </object>
+              </property>
+            </object>
+          </property>
+        </object>
+      </child>
+      <child type="primary">
+        <!-- primary child -->
+      </child>
+      <child type="secondary">
+        <!-- secondary child -->
+      </child>
+    </object>
+  </property>
+</object>
+```
+
+--------------------------------
+
+### AdwAboutWindow::activate-link Signal Declaration (C)
+
+This C code snippet shows the declaration of the `activate_link` function for the `AdwAboutWindow` signal. It outlines the function signature, including its return type, name, and parameters.
+
+```c
+gboolean
+activate_link (
+  AdwAboutWindow* self,
+  gchar* uri,
+  gpointer user_data
+)
+```
+
+--------------------------------
+
+### Gtk.Widget Properties: Focus and Visibility
+
+This snippet details properties related to a widget's focusability, visibility, and sensitivity to input. It covers whether a widget can receive focus, if it currently has focus, and if it responds to user input.
+
+```text
+###### Gtk.Widget:focusable
+Whether this widget itself will accept the input focus.
+###### Gtk.Widget:has-focus
+Whether the widget has the input focus.
+###### Gtk.Widget:sensitive
+Whether the widget responds to input.
+###### Gtk.Widget:visible
+Whether the widget is visible.
+```
+
+--------------------------------
+
+### GtkWidget Signals: Tooltip and State Changes
+
+This snippet lists GtkWidget signals related to tooltips and changes in widget state. It includes signals for querying tooltips and when the widget's state flags are updated.
+
+```text
+###### GtkWidget::query-tooltip
+Emitted when the widget’s tooltip is about to be shown.
+###### GtkWidget::state-flags-changed
+Emitted when the widget state changes.
+```
+
+--------------------------------
+
+### Gtk.Widget Properties: Layout and Sizing
+
+This snippet covers widget properties that control layout, sizing, and expansion behavior. It includes horizontal and vertical alignment, expansion properties, and size requests.
+
+```text
+###### Gtk.Widget:halign
+How to distribute horizontal space if widget gets extra space.
+###### Gtk.Widget:hexpand
+Whether to expand horizontally.
+###### Gtk.Widget:hexpand-set
+Whether to use the `hexpand` property.
+###### Gtk.Widget:valign
+How to distribute vertical space if widget gets extra space.
+###### Gtk.Widget:vexpand
+Whether to expand vertically.
+###### Gtk.Widget:vexpand-set
+Whether to use the `vexpand` property.
+###### Gtk.Widget:width-request
+Overrides for width request of the widget.
+###### Gtk.Widget:height-request
+Overrides for height request of the widget.
+```
+
+--------------------------------
+
+### Gtk.Widget Properties: Events and Layout Manager
+
+This snippet covers properties related to event handling and the layout manager of a widget. It includes how to limit event propagation and how the layout manager is used for sizing and allocation.
+
+```text
+###### Gtk.Widget:limit-events
+Makes this widget act like a modal dialog, with respect to event delivery.
+###### Gtk.Widget:layout-manager
+The `GtkLayoutManager` instance to use to compute the preferred size of the widget, and allocate its children.
+```
+
+--------------------------------
+
+### Create Callback Animation Target - C
+
+Creates a new AdwAnimationTarget that invokes a specified callback function during the animation process. It takes the callback function, user data, and a destroy notify function as parameters. The function returns the newly created callback target.
+
+```c
+AdwAnimationTarget*
+adw_callback_animation_target_new (
+  AdwAnimationTargetFunc callback,
+  gpointer user_data,
+  GDestroyNotify destroy
+)
+```
+
+--------------------------------
+
+### Create AdwBanner Instance (C)
+
+Creates a new AdwBanner instance. This function takes a UTF-8 encoded string as the banner title. The returned GtkWidget is owned by the caller.
+
+```c
+GtkWidget*
+adw_banner_new (
+  const char* title
+)
+```
+
+--------------------------------
+
+### AdwAboutWindow::activate-link Signal
+
+This signal is emitted when a URL is activated. Applications can connect to this signal to override the default behavior of calling `gtk_show_uri()`.
+
+```APIDOC
+## AdwAboutWindow::activate-link Signal
+
+### Description
+Emitted when a URL is activated. Applications may connect to it to override the default behavior, which is to call `gtk_show_uri()`.
+
+Signal
+
+N/A (This is a signal, not an HTTP endpoint)
+
+### Parameters
+### Request Example
+```json
+{
+  "signal": "activate-link",
+  "uri": "https://example.com"
+}
+```
+
+#### Success Response (200)
+- **activated** (boolean) - TRUE if the link has been activated.
+
+  "activated": true
+}
+```
+
+### Signal Details
+#### Declaration
+```c
+gboolean
+activate_link (
+  AdwAboutWindow* self,
+  gchar* uri,
+  gpointer user_data
+)
+```
+
+#### Parameters
+- **uri** (gchar*) - The URI to activate. The data is owned by the caller of the function. The value is a NUL terminated UTF-8 string.
+
+#### Return value
+- **gboolean** - TRUE if the link has been activated.
+
+### Notes
+- Available since: 1.2
+- Deprecated since: 1.6
+- Use `AdwAboutDialog`.
+```
+
+--------------------------------
+
+### Original AdwViewSwitcherTitle Implementation (XML)
+
+This snippet shows the original XML structure for using AdwViewSwitcherTitle within an AdwHeaderBar. It highlights the use of a separate title-widget for the header bar, which is being replaced in newer implementations.
+
+```xml
+<object class="AdwWindow">
+  <property name="width-request">360</property>
+  <property name="height-request">294</property>
+  <property name="content">
+    <object class="AdwToolbarView">
+      <child type="top">
+        <object class="AdwHeaderBar">
+          <property name="centering-policy">strict</property>
+          <property name="title-widget">
+            <object class="AdwViewSwitcherTitle" id="title">
+              <property name="stack">stack</property>
+              <property name="title" translatable="yes">Title</property>
+            </object>
+          </property>
+        </object>
+      </child>
+      <property name="content">
+        <object class="AdwViewStack" id="stack">
+          <!-- ... -->
+        </object>
+      </property>
+      <child type="bottom">
+        <object class="AdwViewSwitcherBar">
+          <property name="stack">stack</property>
+          <property name="reveal"
+                    bind-source="title"
+                    bind-property="title-visible"
+                    bind-flags="sync-create"/>
+        </object>
+      </child>
+    </object>
+  </property>
+</object>
+```
+
+--------------------------------
+
+### GtkWidget Signals: Focus and Input Events
+
+This snippet details GtkWidget signals related to focus management and input events. It includes signals for key navigation failures, focus movement, and mnemonic activation.
+
+```text
+###### GtkWidget::keynav-failed
+Emitted if keyboard navigation fails.
+###### GtkWidget::move-focus
+Emitted when the focus is moved.
+###### GtkWidget::mnemonic-activate
+Emitted when a widget is activated via a mnemonic.
+```
+
+--------------------------------
+
+### Gtk.Widget Properties: Naming and Hierarchy
+
+This snippet describes properties related to a widget's name and its position within the widget hierarchy. It includes the widget's name, its parent widget, and the root widget of its tree.
+
+```text
+###### Gtk.Widget:name
+The name of the widget.
+###### Gtk.Widget:parent
+The parent widget of this widget.
+###### Gtk.Widget:root
+The `GtkRoot` widget of the widget tree containing this widget.
+```
+
+--------------------------------
+
+### AdwTabView: Create a Dynamic Tab Container
+
+Demonstrates the AdwTabView widget, a dynamic tab container that works with AdwTabBar, AdwTabButton, and AdwTabOverview to create adaptive tabbed interfaces. It utilizes breakpoints to control the visibility of UI elements like the tab overview button and the tab bar based on screen width.
+
+```xml
+<object class="AdwWindow">
+  <child>
+    <object class="AdwBreakpoint">
+      <condition>max-width: 500px</condition>
+      <setter object="overview_btn" property="visible">True</setter>
+      <setter object="new_tab_btn" property="visible">False</setter>
+      <setter object="tab_bar" property="visible">False</setter>
+    </object>
+  </child>
+  <property name="content">
+    <object class="AdwTabOverview">
+      <property name="view">view</property>
+      <property name="enable-new-tab">True</property>
+      <property name="child">
+        <object class="AdwToolbarView">
+          <property name="top-bar-style">raised</property>
+          <child type="top">
+            <object class="AdwHeaderBar">
+              <child type="end">
+                <object class="AdwTabButton" id="overview_btn">
+                  <property name="visible">False</property>
+                  <property name="view">view</property>
+                  <property name="action-name">overview.open</property>
+                </object>
+              </child>
+              <child type="end">
+                <object class="GtkButton" id="new_tab_btn">
+                  <property name="icon-name">tab-new-symbolic</property>
+                </object>
+              </child>
+            </object>
+          </child>
+          <child type="top">
+            <object class="AdwTabBar" id="tab_bar">
+              <property name="view">view</property>
+            </object>
+          </child>
+          <property name="content">
+            <object class="AdwTabView" id="view"/>
+          </property>
+        </object>
+      </child>
+    </object>
+  </property>
+</object>
+```
+
+--------------------------------
+
+### Create AdwLayoutSlot - C
+
+Creates a new AdwLayoutSlot with its ID set to the provided string. This function is available since version 1.6. It takes a constant character pointer 'id' as input and returns a GtkWidget representing the new AdwLayoutSlot.
+
+```c
+GtkWidget*
+adw_layout_slot_new (
+  const char* id
+)
+```
+
+--------------------------------
+
+### Create AdwAlertDialog - C
+
+Creates a new AdwAlertDialog with a specified heading and body. The heading and body can be NULL if they are to be formatted using separate functions. This function is available since libadwaita 1.5.
+
+```c
+AdwDialog* adw_alert_dialog_new (
+  const char* heading,
+  const char* body
+)
+c
+AdwDialog *dialog;
+
+dialog = adw_alert_dialog_new (_("Replace File?"), NULL);
+adw_alert_dialog_format_body (ADW_ALERT_DIALOG (dialog),
+                              _("A file named “%s” already exists.  Do you want to replace it?"),
+                              filename);
+```
+
+--------------------------------
+
+### Adwshow_about_window Function Declaration (C)
+
+This C code snippet shows the declaration of the adw_show_about_window function. It is a convenience function for displaying an application's about window. It takes a parent GtkWindow and a variable argument list for properties. Note that this function is not directly available to language bindings.
+
+```c
+void
+adw_show_about_window (
+  GtkWindow* parent,
+  const char* first_property_name,
+  ...
+)
+```
+
+--------------------------------
+
+### Create New AdwLayout Widget (C)
+
+Creates a new AdwLayout widget. This function takes a GtkWidget as content. The caller owns the returned AdwLayout and is responsible for freeing it.
+
+```c
+AdwLayout*
+adw_layout_new (
+  GtkWidget* content
+)
+```
+
+--------------------------------
+
+### Apply default window background and foreground colors (.background)
+
+The `.background` style class sets a widget's background and foreground colors to match the default window colors. This is useful for widgets needing an opaque background. It is equivalent to applying specific CSS variables for background and foreground colors.
+
+```css
+.background {
+  background-color: var(--window-bg-color);
+  color: var(--window-fg-color);
+}
+
+```
+
+--------------------------------
+
+### AdwBreakpointCondition Constructors
+
+These functions create new AdwBreakpointCondition instances, allowing for logical AND/OR operations, and triggering on length or ratio changes.
+
+```APIDOC
+## Constructors
+
+### `adw_breakpoint_condition_new_and`
+
+Creates a condition that triggers when `condition_1` and `condition_2` are both true.
+
+Available since: 1.4
+
+### `adw_breakpoint_condition_new_length`
+
+Creates a condition that triggers on length changes.
+
+Available since: 1.4
+
+### `adw_breakpoint_condition_new_or`
+
+Creates a condition that triggers when either `condition_1` or `condition_2` is true.
+
+Available since: 1.4
+
+### `adw_breakpoint_condition_new_ratio`
+
+Creates a condition that triggers on ratio changes.
+
+Available since: 1.4
+```
+
+--------------------------------
+
+### Navigation Function Calls
+
+This C code snippet illustrates the replacement of adw_leaflet_navigate() calls with adw_navigation_view_push() and adw_navigation_view_pop() for managing page navigation.
+
+```c
+/* Replace adw_leaflet_navigate() with adw_navigation_view_push() or adw_navigation_view_pop() */
+// Example for pushing a page:
+adw_navigation_view_push(navigation_view, ADW_NAVIGATION_DIRECTION_FORWARD, "page-tag");
+
+// Example for popping a page:
+adw_navigation_view_pop(navigation_view, ADW_NAVIGATION_DIRECTION_BACK);
+
+/* Using actions */
+// Push a page using its tag:
+g_action_map_lookup_action(G_ACTION_MAP(window), "navigation.push").activate(context, "page-tag");
+
+// Pop the visible page:
+g_action_map_lookup_action(G_ACTION_MAP(window), "navigation.pop").activate(context, NULL);
+```
+
+--------------------------------
+
+### AdwBreakpointCondition Instance Methods
+
+These methods allow for copying, freeing, and obtaining a string representation of an AdwBreakpointCondition.
+
+```APIDOC
+## Instance methods
+
+### `adw_breakpoint_condition_copy`
+
+Copies `self`.
+
+Available since: 1.4
+
+### `adw_breakpoint_condition_free`
+
+Frees `self`.
+
+Available since: 1.4
+
+### `adw_breakpoint_condition_to_string`
+
+Returns a textual representation of `self`.
+
+Available since: 1.4
+```
+
+--------------------------------
+
+### Create AdwSpinRow with Range (C)
+
+Creates a new AdwSpinRow with the given minimum, maximum, and step values. This is a convenience constructor for creating a numeric AdwSpinRow without manually creating an adjustment. The precision is derived from the step value, but can be adjusted manually.
+
+```c
+GtkWidget*
+adw_spin_row_new_with_range (
+  double min,
+  double max,
+  double step
+)
+```
+
+--------------------------------
+
+### GtkWidget Signals: Widget Lifecycle and State Changes
+
+This snippet lists signals inherited from GtkWidget that are related to the widget's lifecycle and state changes. It includes signals for destroy, map, unmap, realize, unrealize, show, and hide events.
+
+```text
+###### GtkWidget::destroy
+Signals that all holders of a reference to the widget should release the reference that they hold.
+###### GtkWidget::map
+Emitted when `widget` is going to be mapped.
+###### GtkWidget::unmap
+Emitted when `widget` is going to be unmapped.
+###### GtkWidget::realize
+Emitted when `widget` is associated with a `GdkSurface`.
+###### GtkWidget::unrealize
+Emitted when the `GdkSurface` associated with `widget` is destroyed.
+###### GtkWidget::show
+Emitted when `widget` is shown.
+###### GtkWidget::hide
+Emitted when `widget` is hidden.
+```
+
+--------------------------------
+
+### Migrate GtkBox to AdwToolbarView for Header Bars
+
+Replaces a GtkBox containing header bars and toolbars with AdwToolbarView. This involves moving child widgets to 'top' or 'bottom' slots and setting the main content. It simplifies layout management by removing the need for vexpand on content.
+
+```xml
+<object class="GtkBox">
+  <property name="orientation">vertical</property>
+  <child>
+    <object class="AdwHeaderBar">
+      <!-- ... -->
+    </object>
+  </child>
+  <child>
+    <object class="...">
+      <property name="vexpand">True</property>
+      <!-- ... -->
+    </object>
+  </child>
+</object>
+xml
+<object class="AdwToolbarView">
+  <child type="top">
+    <object class="AdwHeaderBar">
+      <!-- ... -->
+    </object>
+  </child>
+  <property name="content">
+    <object class="...">
+      <!-- ... -->
+    </object>
+  </property>
+</object>
+```
+
+--------------------------------
+
+### Create AdwSwipeTracker Instance (C)
+
+Creates a new AdwSwipeTracker for a given AdwSwipeable widget. The function takes ownership of the created tracker and requires the caller to free it. It is designed for use with libadwaita widgets.
+
+```c
+AdwSwipeTracker*
+adw_swipe_tracker_new (
+  AdwSwipeable* swipeable
+)
+```
+
+--------------------------------
+
+### AdwEntryRow: show-apply-button
+
+Sets whether the AdwEntryRow can show an apply button. When true, typing text reveals an apply button that triggers the 'apply' signal upon activation.
+
+```APIDOC
+## AdwEntryRow_show_apply_button
+
+### Description
+Sets whether `self` can show the apply button. When set to `TRUE`, typing text in the entry will reveal an apply button. Clicking it or pressing the `Enter` key will hide the button and emit the `AdwEntryRow::apply` signal. This is useful if changing the entry contents can trigger an expensive operation, e.g. network activity, to avoid triggering it after typing every character.
+
+`void`
+
+`AdwEntryRow* self`
+
+### Parameters
+- **show_apply_button** (gboolean) - Required - Whether to show the apply button.
+
+### Request Example
+```json
+{
+  "show_apply_button": true
+}
+```
+
+#### Success Response (200)
+None (This is a void function)
+
+--------------------------------
+
+### AdwAboutDialog::activate-link Signal Declaration
+
+This C function declaration defines the signature for the 'activate-link' signal of AdwAboutDialog. It takes the AdwAboutDialog instance, a URI string, and user data as parameters, returning a boolean indicating activation status. The signal is emitted when a URL is activated, allowing for custom handling.
+
+```c
+gboolean
+activate_link (
+  AdwAboutDialog* self,
+  gchar* uri,
+  gpointer user_data
+)
+```
+
+--------------------------------
+
+### Set Minimum Size for AdwWindow
+
+Configures the minimum size for an AdwWindow to ensure content fits correctly, especially when using breakpoints. This uses the GtkWidget:width-request and GtkWidget:height-request properties, setting a target size suitable for mobile devices in portrait and landscape.
+
+```xml
+<object class="AdwWindow">
+  <property name="width-request">360</property>
+  <property name="height-request">294</property>
+  <property name="content">
+    <object class="AdwToolbarView">
+      <child type="top">
+        <!-- titlebar -->
+      </child>
+      <property name="content">
+        <!-- content -->
+    </object>
+  </property>
+</object>
+```
+
+--------------------------------
+
+### Replace AdwViewSwitcherTitle with AdwViewSwitcher (UI File)
+
+Demonstrates how to replace AdwViewSwitcherTitle with AdwViewSwitcher within a UI file, including the necessary AdwBreakpoint configuration. This approach uses setters to dynamically manage the header bar's title widget and switcher bar's reveal property based on window width.
+
+```xml
+<object class="AdwWindow">
+  <property name="title" translatable="yes">Title</property>
+  <child>
+    <object class="AdwBreakpoint">
+      <condition>max-width: 550sp</condition>
+      <setter object="header_bar" property="title-widget"/>
+      <setter object="switcher_bar" property="reveal">True</setter>
+    </object>
+  </child>
+  <property name="child">
+    <object class="AdwToolbarView">
+      <child type="top">
+        <object class="AdwHeaderBar" id="header_bar">
+          <property name="title-widget">
+            <object class="AdwViewSwitcher">
+              <property name="policy">wide</property>
+              <property name="stack">stack</property>
+            </object>
+          </property>
+        </object>
+      </child>
+      <property name="content">
+        <object class="AdwViewStack" id="stack">
+          <!-- ... -->
+        </object>
+      </property>
+      <child type="bottom">
+        <object class="AdwViewSwitcherBar" id="switcher_bar">
+          <property name="stack">stack</property>
+        </object>
+      </child>
+    </object>
+  </property>
+</object>
+```
+
+--------------------------------
+
+### Create AdwSpinnerPaintable - C
+
+Creates a new AdwSpinnerPaintable for a given GtkWidget. This function is available since version 1.6. It takes a GtkWidget as input and returns a new AdwSpinnerPaintable object.
+
+```c
+AdwSpinnerPaintable*
+adw_spinner_paintable_new (
+  GtkWidget* widget
+)
+
+```
+
+--------------------------------
+
+### Implement Split Button with AdwSplitButton
+
+Replaces a GTKBox-based split button implementation with `AdwSplitButton`. This widget provides built-in support for split button functionality, including menu integration and icon display. It simplifies the creation of split buttons compared to manual GTKBox arrangements.
+
+```xml
+<object class="AdwSplitButton">
+  <property name="menu-model">some_menu</property>
+  <property name="icon-name">view-list-symbolic</property>
+</object>
+```
+
+--------------------------------
+
+### Prepend a child widget to AdwWrapBox
+
+This method adds a given child widget to the beginning of the AdwWrapBox's children list. It's the inverse of appending and useful for prioritizing certain widgets. The child widget is added before the first existing child.
+
+```vala
+adw_wrap_box_prepend (self, child);
+```
+
+--------------------------------
+
+### Gtk.Widget Properties: Default Widget Behavior
+
+This snippet covers properties related to a widget's role as a default widget. It includes whether the widget is the default and if it receives the default action when focused.
+
+```text
+###### Gtk.Widget:has-default
+Whether the widget is the default widget.
+###### Gtk.Widget:receives-default
+Whether the widget will receive the default action when it is focused.
+```
+
+--------------------------------
+
+### Set Version for AdwAboutWindow (C)
+
+Sets the version string for an AdwAboutWindow. This version is displayed prominently and can be shown with release notes. The function takes a pointer to the AdwAboutWindow and the version string as input. Note that this function is deprecated.
+
+```c
+void
+adw_about_window_set_version (
+  AdwAboutWindow* self,
+  const char* version
+)
+```
+
+--------------------------------
+
+### Set AdwNavigationPage Title (C)
+
+Sets the title for an AdwNavigationPage. This title is displayed in the AdwHeaderBar, used as a tooltip for the back button on the next page, and is accessible to screen readers. The provided title string is owned by the caller.
+
+```c
+void
+adw_navigation_page_set_title (
+  AdwNavigationPage* self,
+  const char* title
+)
+```
+
+--------------------------------
+
+### Using Adwaita UI Colors in CSS
+
+Demonstrates how to apply predefined Adwaita UI colors for background and foreground elements using CSS variables. These variables ensure consistency across the UI and adapt to light and dark styles.
+
+```css
+my-widget {
+  background-color: var(--accent-bg-color);
+  color: var(--accent-fg-color);
+}
+
+```
+
+--------------------------------
+
+### AdwPropertyAnimationTarget Constructor
+
+Creates a new AdwPropertyAnimationTarget for a specified property on a GObject.
+
+```APIDOC
+## AdwPropertyAnimationTarget new_for_pspec
+
+### Description
+Creates a new `AdwPropertyAnimationTarget` for the `pspec` property on `object`.
+
+(Constructor - typically associated with a creation function)
+
+N/A (This is a constructor, not a REST endpoint)
+
+### Parameters
+### Request Example
+```json
+{
+  "object": "GObject*",
+  "pspec": "GParamSpec*"
+}
+```
+
+#### Success Response (Constructor Return)
+- **AdwAnimationTarget*** (AdwAnimationTarget*) - A pointer to the newly created `AdwPropertyAnimationTarget`.
+
+  "animation_target": "AdwAnimationTarget*"
+}
+```
+
+### Remarks
+- Available since: 1.2
+- The caller of the function takes ownership of the returned data and is responsible for freeing it.
+```
+
+--------------------------------
+
+### Set Application Color Scheme (C)
+
+Sets the requested application color scheme using AdwStyleManager. This function takes the style manager instance and the desired color scheme as input. The final appearance is determined by both application and system preferences. Dependencies: libadwaita.
+
+```c
+void
+adw_style_manager_set_color_scheme (
+  AdwStyleManager* self,
+  AdwColorScheme color_scheme
+)
+
+```
+
+--------------------------------
+
+### List Row Types
+
+Details various predefined list row classes available in Libadwaita for use within boxed lists.
+
+```APIDOC
+## Rows
+
+A number of predefined list row classes are available and intended to be used inside boxed lists:
+
+### Action Rows
+`AdwActionRow` is a basic row. It has a title, a subtitle, an icon, and can have prefix and suffix children.
+
+### Switch Rows
+`AdwSwitchRow` is an `AdwActionRow` with an embedded `GtkSwitch`. It’s used to represent two states: “on” and “off”.
+
+### Expander Rows
+`AdwExpanderRow` is similar to `AdwActionRow`, but can expand to show other rows.
+
+### Combo Rows
+`AdwComboRow` is a row with an embedded drop down menu, similar to `GtkDropDown`.
+
+### Entry Rows
+`AdwEntryRow` is a row with an embedded entry. It can have prefix and suffix widgets, and an apply button.
+
+### Password Entry Rows
+`AdwPasswordEntryRow` is a variant of `AdwEntryRow` tailored for entering secrets. It conceals the text and provides a button to show it, along with a `Caps Lock` indicator.
+
+### Spin Rows
+`AdwSpinRow` is a `AdwActionRow` with an embedded `GtkSpinButton`.
+
+### Property Rows
+When used together with the `.property` style class, `AdwActionRow` and `AdwExpanderRow` deemphasize their title and emphasize their subtitle instead, which is useful for displaying read-only properties:
+
+```xml
+<object class="AdwActionRow">
+  <property name="title" translatable="yes">Property Name</property>
+  <property name="subtitle">Value</property>
+  <property name="subtitle-selectable">True</property>
+  <style>
+    <class name="property"/>
+  </style>
+</object>
+```
+
+### Button Rows
+`AdwButtonRow` is a list row that acts as a button. It can be useful for presenting actions at the end of a boxed list.
+
+### Preferences Group
+`AdwPreferencesGroup` provides a boxed list along with a title and a description. It’s mainly meant to be used as a child of `AdwPreferencesPage`, but can also be used separately.
+The `AdwPreferencesGroup:separate-rows` property can be used to separate rows in its boxed list.
+```
+
+--------------------------------
+
+### Responsive Toggle Button Visibility
+
+Shows how to dynamically control the visibility of a toggle button for a sidebar based on screen size using AdwBreakpoint. This ensures the utility pane is always visible on larger screens but toggleable on mobile.
+
+```xml
+<object class="AdwBreakpoint">
+  <condition>max-width: 400sp</condition>
+  <setter object="split_view" property="collapsed">True</setter>
+  <setter object="toggle_pane_button" property="visible">True</setter>
+</object>
+<!-- ... -->
+<object class="GtkToggleButton" id="toggle_pane_button">
+  <property name="icon-name">sidebar-show-symbolic</property>
+  <property name="active">True</property>
+  <property name="visible">False</property>
+</object>
+```
+
+--------------------------------
+
+### Declare AdwTabOverviewsetup_extra_drop_target
+
+Declares the AdwTabOverviewsetup_extra_drop_target function, which sets up supported types for an extra drop target on tabs. It accepts the tab overview instance, supported drag actions, an array of GType, and the number of types. The 'extra-drag-drop' signal can be utilized to manage the drop event. This function is available from version 1.3.
+
+```c
+void
+adw_tab_overview_setup_extra_drop_target (
+  AdwTabOverview* self,
+  GdkDragAction actions,
+  GType* types,
+  gsize n_types
+)
+
+```
+
+--------------------------------
+
+### Set AdwWindowTitle Title (C)
+
+Sets the title of an AdwWindowTitle widget. The title identifies the current view or content and should not typically include the application name. The input title must be a NUL-terminated UTF-8 string.
+
+```C
+void
+adw_window_title_set_title (
+  AdwWindowTitle* self,
+  const char* title
+)
+```
+
+--------------------------------
+
+### AdwWrapBoxClass Structure
+
+This snippet shows the C structure definition for `AdwWrapBoxClass`, which is the class structure for AdwWrapBox. It includes its parent class.
+
+```c
+struct AdwWrapBoxClass {
+  GtkWidgetClass parent_class;
+  
+}
+```
+
+--------------------------------
+
+### Set AdwWrapBox wrap policy
+
+Sets the policy for line wrapping in the AdwWrapBox. You can choose to wrap as soon as a child doesn't fit (`ADW_WRAP_POLICY_WRAP_IMMEDIATELY`) or only after children have been shrunk to their minimum size (`ADW_WRAP_POLICY_MINIMUM`). The policy is applied immediately.
+
+```vala
+adw_wrap_box_set_wrap_policy (self, policy);
+```
+
+--------------------------------
+
+### Create AdwWindowTitle Widget (C)
+
+This C code snippet demonstrates how to create a new AdwWindowTitle widget using the adw_window_title_new function. It takes a title and an optional subtitle as parameters. The function returns a GtkWidget representing the new window title.
+
+```c
+GtkWidget*
+adw_window_title_new (
+  const char* title,
+  const char* subtitle
+)
+```
+
+--------------------------------
+
+### Insert a child widget after another in AdwWrapBox
+
+This method inserts a child widget into the AdwWrapBox's children list at a specific position, immediately after a sibling widget. This allows for precise control over child order. The sibling widget must already be present in the AdwWrapBox.
+
+```vala
+adw_wrap_box_insert_child_after (self, child, sibling);
+```
+
+--------------------------------
+
+### Migrate GtkWindow to AdwWindow with AdwToolbarView
+
+Transforms a GtkWindow with a separate titlebar and child content into an AdwWindow. The titlebar is moved to the 'top' child of an AdwToolbarView, which then becomes the main content of the AdwWindow. This integrates adaptive widgets and breakpoint support.
+
+```xml
+<object class="GtkWindow">
+  <property name="titlebar">
+    <!-- titlebar -->
+  </property>
+  <property name="child">
+    <!-- content -->
+  </property>
+</object>
+xml
+<object class="AdwWindow">
+  <property name="content">
+    <object class="AdwToolbarView">
+      <child type="top">
+        <!-- titlebar -->
+      </child>
+      <property name="content">
+        <!-- content -->
+    </object>
+  </property>
+</object>
+```
+
+--------------------------------
+
+### AdwEnumListModel Constructor
+
+Creates a new AdwEnumListModel for a given enum type.
+
+```APIDOC
+## AdwEnumListModel new
+
+### Description
+Creates a new `AdwEnumListModel` for `enum_type`.
+
+Constructor (Implicit POST)
+
+N/A (Constructor)
+
+### Parameters
+### Request Example
+
+#### Success Response (200)
+- **AdwEnumListModel*** (AdwEnumListModel) - The newly created `AdwEnumListModel`. The caller takes ownership and is responsible for freeing it.
+
+--------------------------------
+
+### GObject Signals: Property Notification
+
+This snippet describes the `notify` signal inherited from GObject, which is emitted whenever a property's value is set on an object.
+
+```text
+###### GObject::notify
+The notify signal is emitted on an object when one of its properties has its value set through g_object_set_property(), g_object_set(), et al.
+```
+
+--------------------------------
+
+### Set AdwWrapBox justification
+
+Sets the justification mode for complete lines within the AdwWrapBox. This property controls whether and how widgets on a full line are stretched to fill the entire width of the line. The justification is applied immediately.
+
+```vala
+adw_wrap_box_set_justify (self, justify);
+```
+
+--------------------------------
+
+### Using AdwViewSwitcherTitle with GtkStack
+
+Demonstrates how to replace AdwViewSwitcherTitle:subtitle functionality using a GtkStack. This involves conditionally setting the visible child of the stack and the reveal state of a switcher bar based on screen width breakpoints. It ensures proper display of titles and subtitles across different screen sizes.
+
+```xml
+<object class="AdwWindow">
+  <child>
+    <object class="AdwBreakpoint">
+      <condition>max-width: 550sp</condition>
+      <setter object="title_stack" property="visible-child">window_title</setter>
+      <setter object="switcher_bar" property="reveal">True</setter>
+    </object>
+  </child>
+  <property name="child">
+    <object class="AdwToolbarView">
+      <child type="top">
+        <object class="AdwHeaderBar">
+          <property name="title-widget">
+            <object class="GtkStack" id="title_stack">
+              <child>
+                <object class="AdwViewSwitcher">
+                  <property name="policy">wide</property>
+                  <property name="stack">stack</stack>
+                </object>
+              </child>
+              <child>
+                <object class="AdwWindowTitle" id="window_title">
+                  <property name="title" translatable="yes">Title</property>
+                  <property name="subtitle" translatable="yes">Subtitle</property>
+                </object>
+              </child>
+            </object>
+          </property>
+        </object>
+      </child>
+      <property name="content">
+        <object class="AdwViewStack" id="stack">
+          <!-- ... -->
+        </object>
+      </property>
+      <child type="bottom">
+        <object class="AdwViewSwitcherBar" id="switcher_bar">
+          <property name="stack">stack</property>
+        </object>
+      </child>
+    </object>
+  </property>
+</object>
+```
+
+--------------------------------
+
+### Triple Pane Layout with Nested AdwNavigationSplitView
+
+This code demonstrates a triple pane layout where an AdwNavigationSplitView is nested within another AdwNavigationSplitView's sidebar. It utilizes AdwBreakpoint to manage collapsing and sidebar width fractions based on screen size. The outer view controls the main split, and the inner view creates the nested sidebar and content panes.
+
+```xml
+<object class="AdwWindow">
+  <child>
+    <object class="AdwBreakpoint">
+      <condition>max-width: 860sp</condition>
+      <setter object="outer_view" property="collapsed">True</setter>
+      <setter object="inner_view" property="sidebar-width-fraction">0.33</setter>
+    </object>
+  </child>
+  <child>
+    <object class="AdwBreakpoint">
+      <condition>max-width: 500sp</condition>
+      <setter object="outer_view" property="collapsed">True</setter>
+      <setter object="inner_view" property="sidebar-width-fraction">0.33</setter>
+      <setter object="inner_view" property="collapsed">True</setter>
+    </object>
+  </child>
+  <property name="content">
+    <object class="AdwNavigationSplitView" id="outer_view">
+      <property name="min-sidebar-width">470</property>
+      <property name="max-sidebar-width">780</property>
+      <property name="sidebar-width-fraction">0.47</property>
+      <property name="sidebar">
+        <object class="AdwNavigationPage">
+          <property name="child">
+            <object class="AdwNavigationSplitView" id="inner_view">
+              <property name="max-sidebar-width">260</property>
+              <property name="sidebar-width-fraction">0.38</property>
+              <property name="sidebar">
+                <!-- sidebar -->
+              </property>
+              <property name="content">
+                <!-- middle pane -->
+              </property>
+            </object>
+          </property>
+        </object>
+      </property>
+      <property name="content">
+        <!-- content -->
+      </property>
+    </object>
+  </property>
+</object>
+```
+
+--------------------------------
+
+### Replace AdwViewSwitcherTitle with AdwViewSwitcher (XML)
+
+This snippet shows the XML structure for replacing AdwViewSwitcherTitle with AdwViewSwitcher in an AdwHeaderBar. It involves changing the title-widget to an AdwViewSwitcher and adjusting associated properties like policy.
+
+```xml
+<object class="AdwHeaderBar" id="header_bar">
+  <!-- ... -->
+  <property name="title-widget">
+    <object class="AdwViewSwitcher">
+      <property name="policy">wide</property>
+      <property name="stack">stack</property>
+    </object>
+  </property>
+  <!-- ... -->
+</object>
+<!-- ... -->
+<object class="AdwViewSwitcherBar" id="switcher_bar">
+  <property name="stack">stack</property>
+</object>
+```
+
+--------------------------------
+
+### Set Tooltip for AdwTabPage (C)
+
+Sets the tooltip for an AdwTabPage. The tooltip string can be marked up using Pango. If this property is not set, the tab's title will be used as the tooltip.
+
+```c
+void
+adw_tab_page_set_tooltip (
+  AdwTabPage* self,
+  const char* tooltip
+)
+```
+
+--------------------------------
+
+### Migrate GtkHeaderBar to AdwHeaderBar Properties
+
+Replaces GtkHeaderBar with AdwHeaderBar and adapts the 'show-title-buttons' property. The functionality is split into 'show-start-title-buttons' and 'show-end-title-buttons' for more granular control over button visibility.
+
+```xml
+<object class="GtkHeaderBar">
+  <property name="show-title-buttons">False</property>
+</object>
+xml
+<object class="AdwHeaderBar">
+  <property name="show-start-title-buttons">False</property>
+  <property name="show-end-title-buttons">False</property>
+</object>
+```
+
+--------------------------------
+
+### Gtk.Accessible Properties: Accessible Role
+
+This snippet details the `accessible-role` property inherited from Gtk.Accessible, which specifies the accessibility role of the widget implementation.
+
+```text
+###### Gtk.Accessible:accessible-role
+The accessible role of the given `GtkAccessible` implementation.
+```
+
+--------------------------------
+
+### AdwSwipeable Interface Structure (C)
+
+Defines the structure of the AdwSwipeable interface, including function pointers for its methods. This is used internally by GTK+ and libadwaita to manage swipeable widgets.
+
+```c
+struct AdwSwipeableInterface {
+  GTypeInterface parent;
+  double (* get_distance) (
+    AdwSwipeable* self
+  );
+  double* (* get_snap_points) (
+    AdwSwipeable* self,
+    int* n_snap_points
+  );
+  double (* get_progress) (
+    AdwSwipeable* self
+  );
+  double (* get_cancel_progress) (
+    AdwSwipeable* self
+  );
+  void (* get_swipe_area) (
+    AdwSwipeable* self,
+    AdwNavigationDirection navigation_direction,
+    gboolean is_drag,
+    GdkRectangle* rect
+  );
+  
+}
+```
+
+--------------------------------
+
+### AdwOverlaySplitView with Toggle Button
+
+Illustrates AdwOverlaySplitView, useful for utility panes, showing the sidebar as an overlay. It binds the 'show-sidebar' property to a GtkToggleButton's 'active' state for controlling visibility. An AdwBreakpoint can be used to collapse the view on smaller screens.
+
+```xml
+<object class="AdwWindow">
+  <child>
+    <object class="AdwBreakpoint">
+      <condition>max-width: 400sp</condition>
+      <setter object="split_view" property="collapsed">True</setter>
+    </object>
+  </child>
+  <property name="content">
+    <object class="AdwToolbarView">
+      <property name="top-bar-style">raised</property>
+      <child type="top">
+        <object class="AdwHeaderBar">
+          <child type="start">
+            <object class="GtkToggleButton" id="show_sidebar_button">
+              <property name="icon-name">sidebar-show-symbolic</property>
+              <property name="active">True</property>
+            </object>
+          </child>
+        </object>
+      </child>
+      <property name="content">
+        <object class="AdwOverlaySplitView" id="split_view">
+          <property name="show-sidebar"
+                    bind-source="show_sidebar_button"
+                    bind-property="active"
+                    bind-flags="sync-create|bidirectional"/>
+          <property name="sidebar">
+            <!-- utility pane -->
+          </property>
+          <property name="content">
+            <!-- main view -->
+          </property>
+        </object>
+      </property>
+    </object>
+  </property>
+</object>
+```
+
+--------------------------------
+
+### Create Ratio Breakpoint Condition (C)
+
+Creates a condition that triggers when the screen ratio (width/height) changes. This function is available since libadwaita version 1.4. It takes the ratio type, width, and height as parameters and returns a new AdwBreakpointCondition.
+
+```c
+AdwBreakpointCondition*
+adw_breakpoint_condition_new_ratio (
+  AdwBreakpointConditionRatioType type,
+  int width,
+  int height
+)
+```
+
+--------------------------------
+
+### Gtk.Widget Properties: Scale Factor
+
+This snippet documents the scale factor property of a Gtk.Widget, which represents the scaling applied to the widget's display.
+
+```text
+###### Gtk.Widget:scale-factor
+The scale factor of the widget.
+```
+
+--------------------------------
+
+### AdwToggle:use-underline
+
+Sets whether an embedded underline in the label indicates a mnemonic.
+
+```APIDOC
+## AdwToggle:use-underline
+
+### Description
+Sets whether an embedded underline in the label indicates a mnemonic. See `AdwToggle:label`.
+
+`void`
+
+N/A (This is a function call, not a REST endpoint)
+
+### Parameters
+### Request Example
+```c
+adw_toggle_set_use_underline (toggle_widget, TRUE);
+```
+
+#### Success Response (200)
+N/A (This is a void function)
+
+### Parameters
+### Request Example
+```c
+adw_toggle_set_use_underline (self, use_underline);
+```
+
+### Parameters
+`self` (AdwToggle*) - The AdwToggle widget.
+`use_underline` (gboolean) - Whether an underline in the label indicates a mnemonic.
+```
+
+--------------------------------
+
+### Replacing AdwSqueezer with Breakpoints and GtkBox
+
+Provides two methods to replace AdwSqueezer. The first uses a single GtkBox with a breakpoint to toggle its orientation between horizontal and vertical. The second approach suggests using a GtkStack or GtkWidget:visible property to switch between different widgets, similar to how AdwSqueezer behaves.
+
+```xml
+<object class="AdwSqueezer">
+  <property name="homogeneous">False</property>
+  <child>
+    <object class="GtkBox">
+      <property name="spacing">6</property>
+      <child>
+        <object class="GtkButton">
+          <property name="label">Button 1</property>
+        </object>
+      </child>
+      <child>
+        <object class="GtkButton">
+          <property name="label">Button 2</property>
+        </object>
+      </child>
+    </object>
+  </child>
+  <child>
+    <object class="GtkBox">
+      <property name="orientation">vertical</property>
+      <property name="spacing">6</property>
+      <child>
+        <object class="GtkButton">
+          <property name="label">Button 1</property>
+        </object>
+      </child>
+      <child>
+        <object class="GtkButton">
+          <property name="label">Button 2</property>
+        </object>
+      </child>
+    </object>
+  </child>
+</object>
+xml
+<object class="GtkBox" id="box">
+  <property name="spacing">6</property>
+  <child>
+    <object class="GtkButton">
+      <property name="label">Button 1</property>
+    </object>
+  </child>
+  <child>
+    <object class="GtkButton">
+      <property name="label">Button 2</property>
+    </object>
+  </child>
+</object>
+
+<!-- ... -->
+
+<object class="AdwBreakpoint">
+  <condition>max-width: 400sp</condition>
+  <setter object="box" property="orientation">vertical</setter>
+</object>
+```
+
+--------------------------------
+
+### Create AdwSpringParams with Damping Ratio (C)
+
+Creates a new AdwSpringParams object using mass, stiffness, and a damping ratio. The damping ratio determines the spring's oscillation behavior, from underdamped to overdamped. This function takes ownership of the returned parameters.
+
+```c
+AdwSpringParams*
+adw_spring_params_new (
+  double damping_ratio,
+  double mass,
+  double stiffness
+)
+```
+
+--------------------------------
+
+### AdwFlap Bottom Sheet Replacement with AdwBottomSheet
+
+A vertical 'AdwFlap' used as a bottom sheet can be directly replaced with the 'AdwBottomSheet' widget. This provides a dedicated widget for bottom sheet functionality.
+
+```xml
+<!-- Example of using AdwBottomSheet -->
+<object class="AdwWindow">
+  <property name="content">
+    <object class="AdwBottomSheet">
+      <!-- ... bottom sheet content ... -->
+    </object>
+  </property>
+</object>
+```
+
+--------------------------------
+
+### Set Layout Name in C for AdwMultiLayoutView
+
+Sets the current layout of an AdwMultiLayoutView to the layout specified by `name`. This function takes a pointer to the AdwMultiLayoutView and the name of the desired layout as a null-terminated UTF-8 string. The data for the name is owned by the caller. Available since version 1.6.
+
+```c
+void
+adw_multi_layout_view_set_layout_name (
+  AdwMultiLayoutView* self,
+  const char* name
+)
+```
+
+--------------------------------
+
+### Set Content Widget for AdwWindow (C)
+
+Sets the content widget for an AdwWindow. This function should be preferred over gtk_window_set_child(). It takes the AdwWindow instance and the GtkWidget to be set as content. The content widget can be NULL, and ownership is retained by the caller.
+
+```c
+void
+adw_window_set_content (
+  AdwWindow* self,
+  GtkWidget* content
+)
+```
+
+--------------------------------
+
+### Applying Opaque Background Style with Custom Colors (CSS)
+
+This CSS snippet demonstrates how to apply an opaque background to a button using the .opaque style class, in conjunction with custom CSS properties for background and foreground colors. This is useful for creating buttons with appearance similar to .suggested-action but with custom color schemes. It can be combined with .circular or .pill modifiers.
+
+```css
+#custom-suggested-action-button {
+  background-color: var(--accent-bg-color);
+  color: var(--accent-fg-color);
+}
+```
+
+--------------------------------
+
+### Create AdwBreakpoint with Condition (C)
+
+Creates a new AdwBreakpoint with the provided condition. This function is available since version 1.4 of libadwaita. It takes ownership of the condition and is responsible for freeing it. The caller also takes ownership of the returned AdwBreakpoint.
+
+```c
+AdwBreakpoint*
+adw_breakpoint_new (
+  AdwBreakpointCondition* condition
+)
+```
+
+--------------------------------
+
+### Apply default view background and foreground colors (.view)
+
+The `.view` style class applies the default view background and foreground colors to any widget. This is useful for maintaining a consistent visual theme within different view areas of an application. It directly maps to specific CSS color variables.
+
+```css
+.view {
+  background-color: var(--view-bg-color);
+  color: var(--view-fg-color);
+}
+
+```
+
+--------------------------------
+
+### AdwBreakpointCondition Functions
+
+Provides functionality to parse a condition from a string representation.
+
+```APIDOC
+## Functions
+
+### `adw_breakpoint_condition_parse`
+
+Parses a condition from a string.
+
+Available since: 1.4
+```
+
+--------------------------------
+
+### Using Adwaita Accent Colors with Style Classes in CSS
+
+Demonstrates how to apply Adwaita's accent colors to widgets using the `.accent` CSS style class. This is commonly used for interactive or important elements like GtkLabel.
+
+```css
+.accent {
+  /* Styles using accent colors */
+}
+
+```
+
+--------------------------------
+
+### AdwActionRow with '.property' Style Class
+
+This XML snippet shows how to style an AdwActionRow to display read-only properties. By applying the '.property' style class, the title is de-emphasized, and the subtitle becomes more prominent and selectable.
+
+```xml
+<object class="AdwActionRow">
+  <property name="title" translatable="yes">Property Name</property>
+  <property name="subtitle">Value</property>
+  <property name="subtitle-selectable">True</property>
+  <style>
+    <class name="property"/>
+  </style>
+</object>
+```
+
+--------------------------------
+
+### Create AdwEnumListModel - C
+
+Creates a new AdwEnumListModel for a specified enum type. The function takes a GType as input and returns a pointer to the newly created AdwEnumListModel. The caller is responsible for freeing the memory.
+
+```c
+AdwEnumListModel*
+adw_enum_list_model_new (
+  GType enum_type
+)
+```
+
+--------------------------------
+
+### Replace AdwLeaflet:visible-child with AdwNavigationSplitView:show-content
+
+Replace the 'AdwLeaflet:visible-child' and 'AdwLeaflet:visible-child-name' properties with 'AdwNavigationSplitView:show-content'. Content can also be shown using the 'navigation.push' action or the sidebar using the 'navigation.pop' action. 'AdwNavigationSplitView' resizes the sidebar dynamically by default, but this can be controlled with 'AdwNavigationSplitView:min-sidebar-width' and 'AdwNavigationSplitView:max-sidebar-width'.
+
+```xml
+<object class="AdwWindow">
+  <property name="content">
+    <object class="AdwToolbarView">
+      <property name="top-bar-style">raised</property>
+      <child type="top">
+        <object class="AdwHeaderBar">
+          <object class="GtkToggleButton" id="toggle_pane_button">
+            <property name="icon-name">sidebar-show-symbolic</property>
+            <property name="active">True</property>
+          </object>
+      </child>
+      <property name="content">
+        <object class="AdwFlap">
+          <property name="reveal-flap"
+                    bind-source="toggle_pane_button"
+                    bind-property="active"
+                    bind-flags="sync-create|bidirectional"/>
+          <property name="flap">
+            <!-- utility pane -->
+          </property>
+          <property name="separator">
+            <object class="GtkSeparator"/>
+          </property>
+          <property name="content">
+            <!-- main view -->
+          </property>
+        </object>
+      </property>
+    </object>
+  </property>
+</object>
+```
+
+--------------------------------
+
+### Convert AdwAccentColor to GdkRGBA (C)
+
+Converts an AdwAccentColor to its corresponding GdkRGBA background color. The function takes the accent color as input and a pointer to a GdkRGBA struct where the result will be stored. The foreground color is implicitly white. Available since libadwaita 1.6.
+
+```c
+void
+adw_accent_color_to_rgba (
+  AdwAccentColor self,
+  GdkRGBA* rgba
+)
+```
+
+--------------------------------
+
+### AdwMultiLayoutView:layout-name
+
+Sets the current layout of an AdwMultiLayoutView by its name. This corresponds to the `adw_multi_layout_view_set_layout_name` method.
+
+```APIDOC
+## PUT /websites/gnome_pages_gitlab_gnome_libadwaita_doc_1-latest/adw_multi_layout_view_set_layout_name
+
+### Description
+Makes the layout with `name` the current layout of `self`. See `AdwLayout:name`.
+
+PUT
+
+/websites/gnome_pages_gitlab_gnome_libadwaita_doc_1-latest/adw_multi_layout_view_set_layout_name
+
+### Parameters
+- **name** (string) - Required - The name of the layout.
+
+### Request Example
+```json
+{
+  "name": "example_layout_name"
+}
+```
+
+#### Success Response (200)
+- **status** (string) - Indicates success.
+
+  "status": "success"
+}
+
+--------------------------------
+
+### Set AdwEntryRow Apply Button Visibility (C)
+
+This C function allows you to control whether the apply button is displayed in an AdwEntryRow. When enabled, typing in the entry reveals the button, and pressing Enter or clicking it triggers the apply action and emits a signal. This is useful for deferring expensive operations until the user explicitly confirms.
+
+```c
+void
+adw_entry_row_set_show_apply_button (
+  AdwEntryRow* self,
+  gboolean show_apply_button
+)
+```
+
+--------------------------------
+
+### Adapt AdwComboRow API Changes
+
+AdwComboRow API has been overhauled to mirror GtkDropDown. hdy_combo_row_bind_name_model() can be replaced by AdwComboRow:model and AdwComboRow:expression. hdy_combo_row_bind_model() can be replaced by AdwComboRow:model, AdwComboRow:factory, and AdwComboRow:list-factory. hdy_combo_row_set_for_enum() can be replaced by AdwEnumListModel and AdwComboRow:expression. The 'HdyComboRow:selected-index' property is renamed to 'AdwComboRow:selected' and its type changed from gint to guint.
+
+```c
+expr = gtk_property_expression_new (ADW_TYPE_ENUM_LIST_ITEM, NULL, "nick");
+model = G_LIST_MODEL (adw_enum_list_model_new (GTK_TYPE_ORIENTATION));
+
+adw_combo_row_set_expression (row, expr);
+adw_combo_row_set_model (row, model);
+
+```
+
+--------------------------------
+
+### AdwAboutDialog:set_translator_credits
+
+Sets the translator credits string for the AdwAboutDialog. This string will be displayed on the Credits page and can include names, email addresses, and URLs, separated by newlines if there are multiple translators.
+
+```APIDOC
+## void adw_about_dialog_set_translator_credits
+
+### Description
+Sets the translator credits string. It will be displayed on the Credits page. This string should be `"translator-credits"` or `"translator_credits"` and should be marked as translatable. The string may contain email addresses and URLs. When there is more than one translator, they must be separated by a newline in the same string.
+
+`void`
+
+`AdwAboutDialog:set_translator_credits`
+
+### Parameters
+* **self** (AdwAboutDialog*) - The `AdwAboutDialog` object.
+* **translator_credits** (const char*) - The translator credits. The data is owned by the caller of the method. The value is a NUL terminated UTF-8 string.
+
+### Request Example
+```json
+{
+  "self": "<AdwAboutDialog_object>",
+  "translator_credits": "Translator Name 1 <translator1@example.com>\nTranslator Name 2 <translator2@example.com>"
+}
+```
+
+#### Success Response (200)
+This method does not return a value.
+
+  "message": "Translator credits set successfully."
+}
+
+--------------------------------
+
+### Using Adwaita Standalone Colors in CSS
+
+Illustrates the usage of standalone Adwaita colors, particularly for text, where better contrast is needed against neutral backgrounds. The `--accent-color` variable is employed for this purpose.
+
+```css
+my-widget {
+  color: var(--accent-color);
+}
+
+```
+
+--------------------------------
+
+### Set AdwWrapBox line homogeneous
+
+Sets whether all lines in the AdwWrapBox should take up the same amount of vertical space. If set to true, lines will expand to match the height of the tallest child on any line, creating a uniform look. The setting is applied immediately.
+
+```vala
+adw_wrap_box_set_line_homogeneous (self, homogeneous);
+```
+
+--------------------------------
+
+### Style AdwActionRow or AdwExpanderRow as a property display (.property)
+
+The `.property` style class modifies `AdwActionRow` and `AdwExpanderRow` to emphasize the subtitle over the title, making it suitable for displaying read-only properties. This GTK-specific XML demonstrates its application within a widget definition.
+
+```xml
+<object class="AdwActionRow">
+  <property name="title" translatable="yes">Property Name</property>
+  <property name="subtitle">Value</property>
+  <property name="subtitle-selectable">True</property>
+  <style>
+    <class name="property"/>
+  </style>
+</object>
+
+```
+
+--------------------------------
+
+### Convert Length Unit to Pixels (C)
+
+Converts a given value from a specified length unit to pixels using provided GtkSettings. Handles various AdwLengthUnit types and returns the equivalent pixel value.
+
+```C
+double
+adw_length_unit_to_px (
+  AdwLengthUnit unit,
+  double value,
+  GtkSettings* settings
+)
+```
+
+--------------------------------
+
+### AdwTabView::page-reordered Signal Declaration
+
+This C code snippet shows the declaration of the AdwTabView::page-reordered signal, including the function signature and parameter types.
+
+```c
+void
+page_reordered (
+  AdwTabView* self,
+  AdwTabPage* page,
+  gint position,
+  gpointer user_data
+)
+```
+
+--------------------------------
+
+### CSS Opacity Helper Variables in Adwaita
+
+Provides CSS variables for common opacity values used for borders, dimmed text, and disabled elements. These variables support automatic high contrast mode switching.
+
+```css
+:root {
+  --border-opacity: 15%; /* Regular */
+  --dim-opacity: 55%; /* Regular */
+  --disabled-opacity: 50%; /* Regular */
+}
+
+/* High contrast mode overrides */
+@media (forced-colors: active) {
+  :root {
+    --border-opacity: 50%;
+    --dim-opacity: 90%;
+    --disabled-opacity: 40%;
+  }
+}
+```
+
+--------------------------------
+
+### Gtk.Widget Properties: Overflow Handling
+
+This snippet describes the overflow property of a Gtk.Widget, which defines how content that extends beyond the widget's bounds is handled.
+
+```text
+###### Gtk.Widget:overflow
+How content outside the widget’s content area is treated.
+```
+
+--------------------------------
+
+### Replicate HdyHeaderGroup Behavior with AdwHeaderBar Bindings
+
+HdyHeaderGroup is removed. Its behavior can be replicated by dynamically changing AdwHeaderBar:show-start-title-buttons and AdwHeaderBar:show-end-title-buttons, often by binding them to AdwLeaflet:folded property.
+
+```xml
+<object class="AdwLeaflet" id="leaflet">
+  <child>
+    <object class="GtkBox">
+      <property name="orientation">vertical</property>
+      <object class="AdwHeaderBar">
+        <binding name="show-end-title-buttons">
+          <lookup name="folded">leaflet</lookup>
+        </binding>
+      </object>
+      ...
+    </object>
+  </child>
+  ...
+  <child>
+    <object class="GtkBox">
+       <property name="orientation">vertical</property>
+      <object class="AdwHeaderBar">
+        <binding name="show-start-title-buttons">
+          <lookup name="folded">leaflet</lookup>
+        </binding>
+      </object>
+      ...
+    </object>
+  </child>
+</object>
+
+```
+
+--------------------------------
+
+### Using Adwaita Destructive Colors in CSS
+
+Shows how to use the destructive color variables, such as `--destructive-bg-color`, `--destructive-fg-color`, and `--destructive-color`, for actions that are potentially dangerous, like deleting items. These are often applied via style classes like `.destructive-action`.
+
+```css
+.destructive-action {
+  /* Styles using destructive colors */
+}
+
+```
+
+--------------------------------
+
+### Set AdwWrapBox line spacing unit
+
+Sets the unit of measurement for line spacing in the AdwWrapBox. This enables line spacing to scale with the text scale factor, providing more consistent vertical spacing across different text sizes. The unit is applied immediately.
+
+```vala
+adw_wrap_box_set_line_spacing_unit (self, unit);
+```
+
+--------------------------------
+
+### AdwNavigationView::popped Signal
+
+Emitted after a page has been popped from the navigation stack.
+
+```APIDOC
+## AdwNavigationView::popped Signal
+
+### Description
+Emitted after `page` has been popped from the navigation stack. See `adw_navigation_view_pop()`.
+When using `adw_navigation_view_pop_to_page()` or `adw_navigation_view_pop_to_tag()`, this signal is emitted for each of the popped pages. Default handler: The default handler is called after the handlers added via `g_signal_connect()`.
+
+Signal
+
+AdwNavigationView
+
+### Parameters
+- None
+
+- None
+
+- None
+
+### Request Example
+```json
+{
+  "example": "N/A"
+}
+```
+
+#### Success Response (200)
+- **page** (AdwNavigationPage) - The popped page. The data is owned by the caller of the function.
+
+  "example": "N/A"
+}
+```
+
+### Availability
+Available since: 1.4
+```
+
+--------------------------------
+
+### AdwOverlaySplitView:sidebar-width-fraction
+
+Sets the preferred sidebar width as a fraction of the total width of the AdwOverlaySplitView. The width is constrained by min-sidebar-width and max-sidebar-width.
+
+```APIDOC
+## void AdwOverlaySplitView:sidebar-width-fraction
+
+### Description
+Sets the preferred sidebar width as a fraction of the total width of `self`. The preferred width is additionally limited by `AdwOverlaySplitView:min-sidebar-width` and `AdwOverlaySplitView:max-sidebar-width`. The sidebar widget can be allocated with larger width if its own minimum width exceeds the preferred width.
+
+void
+
+AdwOverlaySplitView
+
+### Parameters
+- **self** (AdwOverlaySplitView*) - The AdwOverlaySplitView instance.
+- **fraction** (double) - The preferred width fraction.
+
+### Request Example
+```json
+{
+  "self": "<AdwOverlaySplitView_instance>",
+  "fraction": 0.3
+}
+```
+
+#### Success Response (200)
+(void return type)
+
+(No response body for void functions)
+```
+
+--------------------------------
+
+### C Declaration of AdwTabOverview::extra-drag-value Signal
+
+This C code snippet shows the function signature for the AdwTabOverview::extra-drag-value signal. This signal is emitted when the dropped content is preloaded, requiring AdwTabOverview:extra-drag-preload to be TRUE and the content type to be set via adw_tab_overview_setup_extra_drop_target(). It returns the preferred GdkDragAction for the drop.
+
+```c
+GdkDragAction
+extra_drag_value (
+  AdwTabOverview* self,
+  AdwTabPage* page,
+  const GValue* value,
+  gpointer user_data
+)
+
+```
+
+--------------------------------
+
+### Set Paintable for AdwStatusPage (C)
+
+Sets the GdkPaintable for an AdwStatusPage. This action will also clear the 'icon-name' property. The paintable can be NULL to unset it. The ownership of the paintable data remains with the caller.
+
+```c
+void
+adw_status_page_set_paintable (
+  AdwStatusPage* self,
+  GdkPaintable* paintable
+)
+```
+
+--------------------------------
+
+### CSS for Miscellaneous Colors in Adwaita
+
+Provides CSS variables for general-purpose shade and scrollbar outline colors. These are used for scroll undershoots, transitions, and ensuring scrollbar visibility in various contexts.
+
+```css
+/* Miscellaneous Colors */
+:root {
+  --shade-color: rgb(0 0 6 / 7%); /* Light mode */
+  --scrollbar-outline-color: #ffffff; /* Light mode */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --shade-color: rgb(0 0 6 / 25%); /* Dark mode */
+    --scrollbar-outline-color: rgb(0 0 6 / 50%); /* Dark mode */
+  }
+}
+```
+
+--------------------------------
+
+### Set AdwDialog Content Size Following - C
+
+Sets whether the `AdwDialog` should automatically size itself based on its content. If enabled, the dialog will adopt the content's natural size and resize dynamically if the content changes size. This overrides explicit `content-width` and `content-height` properties. This function is available since libadwaita 1.5.
+
+```c
+void
+adw_dialog_set_follows_content_size (
+  AdwDialog* self,
+  gboolean follows_content_size
+)
+```
+
+--------------------------------
+
+### Add Spacing Between Linked Button Groups
+
+Introduces extra spacing between groups of linked buttons when multiple groups are used for separation. This is achieved by inserting a `GtkSeparator` with the 'spacer' style class between button groups to visually distinguish them.
+
+```xml
+<object class="GtkSeparator">
+  <style>
+    <class name="spacer"/>
+  </style>
+</object>
+```
+
+--------------------------------
+
+### AdwExpanderRowset_title_lines
+
+Sets the number of lines at the end of which the title label will be ellipsized. If the value is 0, the number of lines won’t be limited.
+
+```APIDOC
+## void AdwExpanderRowset_title_lines
+
+### Description
+Sets the number of lines at the end of which the title label will be ellipsized. If the value is 0, the number of lines won’t be limited.
+
+void
+
+### Parameters
+### Request Example
+
+#### Success Response (200)
+
+### See Also
+- **title_lines** (int) - The number of lines at the end of which the title label will be ellipsized.
+
+### Availability
+Since: 1.3
+```
+
+--------------------------------
+
+### AdwAlertDialog::response Signal Declaration
+
+This is the C declaration for the AdwAlertDialog::response signal. It indicates that the signal is emitted when the dialog is closed and includes parameters for the dialog instance, the response ID, and user data.
+
+```c
+void
+response (
+  AdwAlertDialog* self,
+  gchar* response,
+  gpointer user_data
+)
+```
+
+--------------------------------
+
+### Append a child widget to AdwWrapBox
+
+This method appends a given child widget to the end of the AdwWrapBox's children list. It's useful for dynamically adding widgets to the box. The child widget is added after the last existing child.
+
+```vala
+adw_wrap_box_append (self, child);
+```
+
+--------------------------------
+
+### AdwNavigationView::popped Signal Declaration (C)
+
+Declares the signature of the 'popped' signal for AdwNavigationView. This signal is emitted after a page is removed from the navigation stack. It takes the navigation view itself, the popped page, and user data as parameters.
+
+```c
+void
+popped (
+  AdwNavigationView* self,
+  AdwNavigationPage* page,
+  gpointer user_data
+)
+```
+
+--------------------------------
+
+### AdwTimedAnimation:value-to Property
+
+Manages the target value for the timed animation. The animation interpolates between the 'value-from' and 'value-to' properties.
+
+```APIDOC
+## AdwTimedAnimation:value-to Property
+
+### Description
+The value to animate to. The animation will start at `AdwTimedAnimation:value-from` and end at this value. If `AdwTimedAnimation:reverse` is `TRUE`, the animation will start at this value instead.
+
+N/A (Property)
+
+N/A (Property)
+
+### Parameters
+### Request Example
+
+#### Success Response (200)
+- **value_to** (double) - The target value for the animation.
+
+  "value_to": 1.0
+}
+
+--------------------------------
+
+### Set AdwWrapBox justify last line
+
+Sets whether the last line of the AdwWrapBox should be stretched to fill the entire widget width, similar to other lines. This can provide a more uniform appearance. The setting is applied immediately.
+
+```vala
+adw_wrap_box_set_justify_last_line (self, justify);
+```
+
+--------------------------------
+
+### Replace AdwFlap:locked with AdwOverlaySplitView:pin-sidebar
+
+The 'AdwFlap:locked' property is replaced by 'AdwOverlaySplitView:pin-sidebar'. This property controls whether the sidebar can be pinned or not in the split view.
+
+```xml
+<!-- Example of using AdwOverlaySplitView:pin-sidebar -->
+<object class="AdwOverlaySplitView">
+  <property name="pin-sidebar">True</property>
+  <!-- ... other properties ... -->
+</object>
+```
+
+--------------------------------
+
+### CSS for Popover Colors in Adwaita
+
+Specifies CSS variables for background, foreground, and shade colors used in GtkPopover. The shade color is used for scroll undershoots and transitions and is available since version 1.4.
+
+```css
+/* Popover Colors */
+:root {
+  --popover-bg-color: #ffffff; /* Light mode */
+  --popover-fg-color: rgb(0 0 6 / 80%); /* Light mode */
+  --popover-shade-color: rgb(0 0 6 / 7%); /* Light mode */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --popover-bg-color: #36363a; /* Dark mode */
+    --popover-fg-color: #ffffff; /* Dark mode */
+    --popover-shade-color: rgb(0 0 6 / 25%); /* Dark mode */
+  }
+}
+```
+
+--------------------------------
+
+### AdwLeaflet:transition-type Property
+
+This section details the `transition-type` property of the AdwLeaflet. It describes the animation types used for transitions between modes and children, including its default value and getter/setter methods. The property is deprecated since version 1.4.
+
+```APIDOC
+## AdwLeaflet:transition-type
+
+### Description
+The type of animation used for transitions between modes and children. The transition type can be changed without problems at runtime, so it is possible to change the animation based on the mode or child that is about to become current.
+
+Property (Read, Write)
+
+N/A (This is a property, not an endpoint)
+
+### Parameters
+### Request Example
+```json
+{
+  "transition_type": "ADW_LEAFLET_TRANSITION_TYPE_SLIDE_LEFT"
+}
+```
+
+#### Success Response (200)
+- **transition-type** (AdwLeafletTransitionType) - The current transition type.
+
+  "transition_type": "ADW_LEAFLET_TRANSITION_TYPE_OVER"
+}
+```
+
+### Deprecation
+Deprecated since: 1.4
+
+### Getter Method
+`adw_leaflet_get_transition_type()`
+
+### Setter Method
+`adw_leaflet_set_transition_type()`
+
+### Default Value
+`ADW_LEAFLET_TRANSITION_TYPE_OVER`
+```
+
+--------------------------------
+
+### AdwMessageDialog::response Declaration (C)
+
+Declares the AdwMessageDialog::response virtual method. This C function is used to emit the 'response' signal from an AdwMessageDialog instance, passing a response identifier. It takes a pointer to the AdwMessageDialog and a constant character pointer representing the response ID as parameters.
+
+```c
+void
+response (
+  AdwMessageDialog* self,
+  const char* response
+)
+
+```
+
+--------------------------------
+
+### Set AdwWrapBox child spacing unit
+
+Sets the unit of measurement for child spacing in the AdwWrapBox. This enables child spacing to scale with the text scale factor, providing more consistent visual spacing across different text sizes. The unit is applied immediately.
+
+```vala
+adw_wrap_box_set_child_spacing_unit (self, unit);
+```
+
+--------------------------------
+
+### Set AdwWrapBox pack direction
+
+Sets the direction in which children are packed within each line of the AdwWrapBox. This property allows control over the layout order of children on a line, supporting different text directions. The direction is applied immediately.
+
+```vala
+adw_wrap_box_set_pack_direction (self, direction);
+```
+
+--------------------------------
+
+### AdwMessageDialog::response Signal Declaration
+
+This C code snippet shows the declaration of the AdwMessageDialog::response signal. It is emitted when the dialog is closed and includes parameters for the dialog itself, the response ID, and user data.
+
+```c
+void
+response (
+  AdwMessageDialog* self,
+  gchar* response,
+  gpointer user_data
+)
+```
+
+--------------------------------
+
+### AdwCarousel::page-changed Signal Declaration (C)
+
+This is the C function signature for the AdwCarousel::page-changed signal. It takes the carousel instance, the index of the new page, and user data as parameters. This signal is emitted after a page has been changed.
+
+```c
+void
+page_changed (
+  AdwCarousel* self,
+  guint index,
+  gpointer user_data
+)
+```
+
+--------------------------------
+
+### AdwWrapBox: wrap-policy
+
+Configures the line wrapping policy for AdwWrapBox. This property determines how children are distributed across lines and whether they can be shrunk below their natural size.
+
+```APIDOC
+## AdwWrapBox: wrap-policy
+
+### Description
+The policy for line wrapping. If set to `ADW_WRAP_NATURAL`, the box will wrap to the next line as soon as the previous line cannot fit any more children without shrinking them past their natural size. If set to `ADW_WRAP_MINIMUM`, the box will try to fit as many children into each line as possible, shrinking them down to their minimum size before wrapping to the next line.
+
+Set/Get property
+
+N/A (This is a property of a UI element, not a REST endpoint)
+
+### Parameters
+#### Property Details
+- **wrap-policy** (AdwWrapPolicy) - Read/Write - The policy for line wrapping.
+  - Available since: 1.7
+  - Default value: `ADW_WRAP_NATURAL`
+
+#### Getter Method
+`adw_wrap_box_get_wrap_policy()`
+
+#### Setter Method
+`adw_wrap_box_set_wrap_policy()`
+
+### Request Example
+```javascript
+// Example of setting the wrap policy (conceptual, not actual API call)
+wrapBox.wrapPolicy = AdwWrapPolicy.ADW_WRAP_MINIMUM;
+```
+
+#### Success Response (Property Value)
+- **wrap-policy** (AdwWrapPolicy) - The current wrap policy setting.
+
+  "wrap-policy": "ADW_WRAP_MINIMUM"
+}
+
+--------------------------------
+
+### C: adw_animation_set_follow_enable_animations_setting
+
+Sets whether to skip the animation when animations are globally disabled. The default behavior is to skip. Set to FALSE to disable this behavior. Useful for essential animations or demo applications. See GtkSettings:gtk-enable-animations.
+
+```c
+void
+adw_animation_set_follow_enable_animations_setting (
+  AdwAnimation* self,
+  gboolean setting
+)
+```
+
+--------------------------------
+
+### Replace AdwFlap with AdwOverlaySplitView for Utility Panes
+
+Utility pane use cases of 'AdwFlap' are replaced with 'AdwOverlaySplitView'. The 'flap' property becomes 'AdwOverlaySplitView:sidebar', and 'reveal-flap' becomes 'AdwOverlaySplitView:show-sidebar'. The separator child is removed as 'AdwOverlaySplitView' includes one. Breakpoints can be used to control collapsed state with a max-width condition.
+
+```xml
+<object class="AdwWindow">
+  <child>
+    <object class="AdwBreakpoint">
+      <condition>max-width: 400sp</condition>
+      <setter object="split_view" property="collapsed">True</setter>
+    </object>
+  </child>
+  <property name="content">
+    <object class="AdwToolbarView">
+      <property name="top-bar-style">raised</property>
+      <child type="top">
+        <object class="AdwHeaderBar">
+          <object class="GtkToggleButton" id="toggle_pane_button">
+            <property name="icon-name">sidebar-show-symbolic</property>
+            <property name="active">True</property>
+          </object>
+      </child>
+      <property name="content">
+        <object class="AdwOverlaySplitView" id="split_view">
+          <property name="show-sidebar"
+                    bind-source="toggle_pane_button"
+                    bind-property="active"
+                    bind-flags="sync-create|bidirectional"/>
+          <property name="sidebar">
+            <!-- utility pane -->
+          </property>
+          <property name="content">
+            <!-- main view -->
+          </property>
+        </object>
+      </property>
+    </object>
+  </property>
+</object>
+```
+
+--------------------------------
+
+### AdwToggleGroup: toggles Property
+
+Details about the 'toggles' property of the AdwToggleGroup, which provides a selection model for the group's toggles.
+
+```APIDOC
+## AdwToggleGroup: toggles Property
+
+### Description
+A selection model with the group's toggles. This can be used to keep an up-to-date view. The model also implements `GtkSelectionModel` and can be used to track and change the active toggle.
+
+GET
+
+N/A (This is a property, not an endpoint)
+
+### Parameters
+### Request Example
+
+#### Success Response (200)
+- **toggles** (Gtk.SelectionModel) - A selection model containing the group's toggles.
+
+N/A (Direct property access in code)
+```
+
+--------------------------------
+
+### Declare AdwTabBar::extra-drag-value Signal (C)
+
+This C code snippet shows the declaration of the AdwTabBar::extra-drag-value signal. It specifies the function signature, including the self object, the page the content was dropped onto, the GValue being dropped, and user data. The signal returns a GdkDragAction.
+
+```c
+GdkDragAction
+extra_drag_value (
+  AdwTabBar* self,
+  AdwTabPage* page,
+  const GValue* value,
+  gpointer user_data
+)
+```
+
+--------------------------------
+
+### Reorder a child widget in AdwWrapBox
+
+This method reorders a child widget within the AdwWrapBox's children list, moving it to the position immediately after a specified sibling widget. This allows for dynamic rearrangement of children. Both child and sibling must be direct children of the AdwWrapBox.
+
+```vala
+adw_wrap_box_reorder_child_after (self, child, sibling);
+```
+
+--------------------------------
+
+### Set AdwWrapBox child spacing
+
+Sets the spacing value between widgets on the same line within the AdwWrapBox. This allows customization of the horizontal gap between adjacent children on a single line. The spacing is applied immediately.
+
+```vala
+adw_wrap_box_set_child_spacing (self, spacing);
+```
+
+--------------------------------
+
+### Set Wrap Box Wrap Policy (C)
+
+Sets the policy for line wrapping in an AdwWrapBox. The policy determines whether the box wraps to the next line based on natural child size (ADW_WRAP_NATURAL) or minimum child size (ADW_WRAP_MINIMUM). Available since version 1.7.
+
+```c
+void
+adw_wrap_box_set_wrap_policy (
+  AdwWrapBox* self,
+  AdwWrapPolicy wrap_policy
+)
+
+```
+
+--------------------------------
+
+### Set AdwWrapBox wrap reverse
+
+Sets whether the wrap direction of the AdwWrapBox is reversed. When enabled, lines wrap in the opposite direction of the natural text flow, which can be useful for certain layouts. The setting is applied immediately.
+
+```vala
+adw_wrap_box_set_wrap_reverse (self, reverse);
+```
+
+--------------------------------
+
+### Gtk.Orientable Properties: Orientation
+
+This snippet documents the `orientation` property inherited from Gtk.Orientable, indicating the orientation of the widget (e.g., horizontal or vertical).
+
+```text
+###### Gtk.Orientable:orientation
+The orientation of the orientable.
+```
+
+--------------------------------
+
+### AdwTabView::page-reordered Signal
+
+Emitted after a page in the AdwTabView has been reordered to a new position.
+
+```APIDOC
+## AdwTabView::page-reordered Signal
+
+### Description
+Emitted after `page` has been reordered to `position`. The default handler is called after the handlers added via `g_signal_connect()`.
+
+Signal (Callback)
+
+N/A (This is a signal, not an HTTP endpoint)
+
+### Parameters
+#### Signal Parameters
+- **page** (AdwTabPage) - The page that was reordered. The data is owned by the caller of the function.
+- **position** (gint) - The new position the page was moved to, starting at 0.
+- **user_data** (gpointer) - User data passed when the signal was connected.
+
+### Request Example
+N/A (This is a signal, not an HTTP endpoint)
+
+#### Signal Emission
+- **void**: No return value.
+
+N/A (This is a signal, not an HTTP endpoint)
+```
+
+--------------------------------
+
+### Set Alert Dialog Response Appearance (C)
+
+Sets the visual appearance for a specific response button in an AdwAlertDialog. It takes the dialog instance, the response ID (a string), and the desired appearance (e.g., suggested, destructive, default) as arguments. This allows developers to visually distinguish important or potentially harmful actions for the user.
+
+```c
+void
+adw_alert_dialog_set_response_appearance (
+  AdwAlertDialog* self,
+  const char* response,
+  AdwResponseAppearance appearance
+)
+```
+
+--------------------------------
+
+### GtkWidget Signals: Direction Change
+
+This snippet documents the `direction-changed` signal from GtkWidget, which is emitted when the text direction of a widget changes.
+
+```text
+###### GtkWidget::direction-changed
+Emitted when the text direction of a widget changes.
+```
+
+--------------------------------
+
+### Set AdwWrapBox alignment
+
+Sets the alignment of children within each line of the AdwWrapBox. This property controls how children are positioned horizontally when a line does not contain enough children to fill its entire width. The alignment is applied immediately.
+
+```vala
+adw_wrap_box_set_align (self, align);
+```
+
+--------------------------------
+
+### Convert Text-Only Button to AdwButtonContent
+
+Transforms a standard GTK text-only button into one using `AdwButtonContent` for improved styling. This involves replacing the button's child with an `AdwButtonContent` instance, specifying an icon name and label. This method is suitable for most text-only buttons, with exceptions for primary dialog buttons like 'Cancel' and 'Open'.
+
+```xml
+<object class="GtkButton">
+  <property name="label" translatable="yes">_Open</property>
+  <property name="use-underline">True</property>
+</object>
+xml
+<object class="GtkButton">
+  <property name="child">
+    <object class="AdwButtonContent">
+      <property name="icon-name">document-open-symbolic</property>
+      <property name="label" translatable="yes">_Open</property>
+      <property name="use-underline">True</property>
+    </object>
+  </property>
+</object>
+```
+
+--------------------------------
+
+### Set AdwWrapBox line spacing
+
+Sets the spacing value between lines of widgets in the AdwWrapBox. This allows customization of the vertical gap between rows of children. The spacing is applied immediately.
+
+```vala
+adw_wrap_box_set_line_spacing (self, spacing);
+```
+
+--------------------------------
+
+### CSS for Dialog Colors in Adwaita
+
+Defines CSS variables for background and foreground colors used in AdwAlertDialog. These colors adapt to light and dark themes. Available since version 1.2.
+
+```css
+/* Dialog Colors */
+:root {
+  --dialog-bg-color: #fafafb; /* Light mode */
+  --dialog-fg-color: rgb(0 0 6 / 80%); /* Light mode */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --dialog-bg-color: #36363a; /* Dark mode */
+    --dialog-fg-color: #ffffff; /* Dark mode */
+  }
+}
+```
+
+--------------------------------
+
+### AdwPreferencesPage:use-underline Property
+
+Documentation for the 'use-underline' property of AdwPreferencesPage. This property controls whether an embedded underline in the title indicates a mnemonic.
+
+```APIDOC
+## AdwPreferencesPage:use-underline Property
+
+### Description
+Whether an embedded underline in the title indicates a mnemonic.
+
+Getter: `adw_preferences_page_get_use_underline()`
+Setter: `adw_preferences_page_set_use_underline()`
+
+N/A (This describes a property of an object, not a REST endpoint)
+
+### Parameters
+### Request Example
+```json
+{
+  "use_underline": true
+}
+```
+
+#### Success Response (200)
+- **use_underline** (gboolean) - Indicates if an embedded underline in the title signifies a mnemonic.
+
+  "use_underline": false
+}
+
+--------------------------------
+
+### CSS for Monospace Font Variables in Adwaita
+
+Defines CSS variables for monospace font family and size, suitable for displaying code, logs, or shell commands.
+
+```css
+:root {
+  --monospace-font-family: "Adwaita Mono";
+  --monospace-font-size: 11pt;
+}
+```
+
+--------------------------------
+
+### Parse Breakpoint Condition String - C
+
+Parses a condition string into an AdwBreakpointCondition object. Supports length conditions (min/max width/height with units px, pt, sp) and ratio conditions (min/max aspect ratio). Logical operators 'and', 'or' and parentheses can be used for complex conditions. Assumes 'px' unit if omitted. Returns ownership of the AdwBreakpointCondition to the caller.
+
+```c
+AdwBreakpointCondition*
+adw_breakpoint_condition_parse (
+  const char* str
+)
+```
+
+--------------------------------
+
+### AdwBreakpointConditionto_string
+
+Returns a textual representation of the AdwBreakpointCondition. The returned string can be parsed by adw_breakpoint_condition_parse(). This function is available since version 1.4.
+
+```APIDOC
+## AdwBreakpointConditionto_string
+
+### Description
+Returns a textual representation of `self`. The returned string can be parsed by `adw_breakpoint_condition_parse()`.
+
+Not applicable (function)
+
+Not applicable (function)
+
+### Parameters
+### Request Example
+
+#### Success Response
+- **return value** (char*) - A newly allocated text string. The caller of the method takes ownership of the returned data, and is responsible for freeing it. The value is a NUL terminated UTF-8 string.
+
+"some_condition_string"
+
+--------------------------------
+
+### Set Sidebar Width Fraction (C)
+
+Sets the preferred sidebar width as a fraction of the total width of the AdwOverlaySplitView. This value is constrained by the minimum and maximum sidebar width properties. The sidebar may be allocated a larger width if its own minimum width exceeds the preferred width.
+
+```c
+void
+adw_overlay_split_view_set_sidebar_width_fraction (
+  AdwOverlaySplitView* self,
+  double fraction
+)
+```
+
+--------------------------------
+
+### Set Sidebar Position for AdwNavigationSplitView (C)
+
+This C function allows you to set the position of the sidebar within an AdwNavigationSplitView. The position can be set to GTK_PACK_START (sidebar before content, sidebar is root when collapsed) or GTK_PACK_END (sidebar after content, content is root when collapsed). Requires libadwaita 1.7 or later.
+
+```c
+void
+adw_navigation_split_view_set_sidebar_position (
+  AdwNavigationSplitView* self,
+  GtkPackType position
+)
+```
+
+--------------------------------
+
+### Set AdwSqueezerPage Enabled State (C)
+
+Sets whether a child page within an AdwSqueezer is enabled. Disabled children are ignored when determining the best fit for available space, allowing programmatic control over visibility based on constraints. This function is deprecated since version 1.4.
+
+```c
+void
+adw_squeezer_page_set_enabled (
+  AdwSqueezerPage* self,
+  gboolean enabled
+)
+```
+
+--------------------------------
+
+### AdwAvatar:set_custom_image
+
+Sets a custom image for the AdwAvatar. This image will be displayed instead of the default initials or icon.
+
+```APIDOC
+## AdwAvatar:set_custom_image
+
+### Description
+Sets the custom image paintable. Custom image is displayed instead of initials or icon. Sets property| `Adw.Avatar:custom-image`
+
+void
+
+AdwAvatar
+
+### Parameters
+* **self** (AdwAvatar*) - Required - The AdwAvatar instance.
+* **custom_image** (GdkPaintable*) - Optional - A custom image. The argument can be `NULL`. The data is owned by the caller of the method.
+
+### Request Example
+```json
+{
+  "self": "<AdwAvatar_instance>",
+  "custom_image": "<GdkPaintable_instance_or_null>"
+}
+```
+
+#### Success Response (200)
+This method does not return a value.
+
+--------------------------------
+
+### Set AdwViewStack Visible Child Name (C)
+
+Sets the visible child of an AdwViewStack by its name. This function takes a pointer to the AdwViewStack and a constant character pointer representing the name of the child to be made visible. The name must be a NUL-terminated UTF-8 string.
+
+```c
+void
+adw_view_stack_set_visible_child_name (
+  AdwViewStack* self,
+  const char* name
+)
+```
+
+--------------------------------
+
+### Apply default border style (.frame)
+
+The `.frame` style class adds a default border to any widget. This is useful for visually separating elements or creating a framed appearance. The border is defined using a standard CSS border property with a variable for the border color.
+
+```css
+.frame {
+  border: 1px solid var(--border-color);
+}
+
+```
+
+--------------------------------
+
+### Set Title for AdwShortcutsSection (C)
+
+Sets the title of an AdwShortcutsSection. The title must be a NUL-terminated UTF-8 string. The caller retains ownership of the string data. This function is available since libadwaita version 1.8.
+
+```c
+void
+adw_shortcuts_section_set_title (
+  AdwShortcutsSection* self,
+  const char* title
+)
+```
+
+--------------------------------
+
+### AdwCarousel Signal: page-changed
+
+Details about the 'page-changed' signal emitted by AdwCarousel, including its parameters and behavior.
+
+```APIDOC
+## AdwCarousel::page-changed
+
+### Description
+This signal is emitted after a page has been changed. It can be used to implement “infinite scrolling” by amending the pages after every scroll. An empty carousel is indicated by `(int)index == -1`.
+
+Signal
+
+N/A (This is a widget signal, not an HTTP endpoint)
+
+### Parameters
+#### Signal Parameters
+- **index** (guint) - The current page index. An empty carousel is indicated by `(int)index == -1`.
+- **user_data** (gpointer) - User data passed when the signal was connected.
+
+### Request Example
+N/A (This is a signal callback, not a request)
+
+#### Signal Emission
+Emitted when the carousel's page changes.
+
+N/A (This is a signal callback, not a response)
+```
+
+--------------------------------
+
+### Set Selected Page in AdwViewStackPages (C)
+
+Sets the visible child in the associated AdwViewStack. This function takes a pointer to the AdwViewStackPages object and the specific AdwViewStackPage to be displayed. The page object is owned by the caller.
+
+```c
+void
+adw_view_stack_pages_set_selected_page (
+  AdwViewStackPages* self,
+  AdwViewStackPage* page
+)
+```
+
+--------------------------------
+
+### CSS Window Radius Variable in Adwaita
+
+Defines a CSS variable for the window radius, which matches the current window's radius, accounting for maximized or fullscreen states. Useful for styling focus rings near window edges.
+
+```css
+:root {
+  --window-radius: 15px;
+}
+```
+
+--------------------------------
+
+### CSS Border Color Variable in Adwaita
+
+Defines a CSS variable for border color that dynamically adjusts based on the current foreground color and opacity settings, supporting high contrast mode.
+
+```css
+:root {
+  --border-color: color-mix(in srgb, currentColor var(--border-opacity), transparent);
+}
+```
+
+--------------------------------
+
+### CSS for Document Font Variables in Adwaita
+
+Defines CSS variables for document font family and size, intended for use in articles, messages, and general content.
+
+```css
+:root {
+  --document-font-family: "Adwaita Sans";
+  --document-font-size: 12pt;
+}
+```
+
+--------------------------------
+
+### AdwHeaderBar:title-widget Property Declaration
+
+This is the declaration for the 'title-widget' property of AdwHeaderBar. It specifies that the property is of type Gtk.Widget and is both readable and writable. This property allows for the customization of the header bar's title.
+
+```c
+property title-widget: Gtk.Widget [ read, write ]
+```
+
+--------------------------------
+
+### Set AdwActionRow Title Ellipsizing Lines (C)
+
+Sets the number of lines at the end of which the title label will be ellipsized. If the value is 0, the number of lines won't be limited. This function modifies the 'title-lines' property of an AdwActionRow.
+
+```c
+void
+adw_action_row_set_title_lines (
+  AdwActionRow* self,
+  int title_lines
+)
+
+```
+
+--------------------------------
+
+### CSS: Override Accent Color for Individual Widget
+
+This CSS snippet shows how to override both the accent background color and the standalone accent color for a specific widget in Libadwaita. This allows for fine-grained control over widget appearance.
+
+```css
+my-widget {
+  --accent-bg-color: var(--accent-purple); /* Always use the purple color */
+  --accent-color: oklab(from var(--accent-bg-color) var(--standalone-color-oklab));
+}
+
+```
+
+--------------------------------
+
+### Set Custom Image for AdwAvatar (C)
+
+Sets a custom GdkPaintable to be displayed by an AdwAvatar widget. This custom image will be shown instead of the default initials or icon. The provided GdkPaintable is owned by the caller.
+
+```c
+void
+adw_avatar_set_custom_image (
+  AdwAvatar* self,
+  GdkPaintable* custom_image
+)
+```
+
+--------------------------------
+
+### Set Mnemonic Underline for AdwButtonContent (C)
+
+Sets whether an underline in the button's label indicates a mnemonic, which can be used to activate the parent button. This function takes a pointer to an AdwButtonContent object and a boolean value indicating the desired state.
+
+```c
+void
+adw_button_content_set_use_underline (
+  AdwButtonContent* self,
+  gboolean use_underline
+)
+```
+
+--------------------------------
+
+### AdwShortcutsSection: Set Title
+
+Sets the title of an AdwShortcutsSection. This method is available since version 1.8.
+
+```APIDOC
+## POST /websites/gnome_pages_gitlab_gnome_libadwaita_doc_1-latest/AdwShortcutsSection/set_title
+
+### Description
+Sets the title of `self`.
+
+POST
+
+/websites/gnome_pages_gitlab_gnome_libadwaita_doc_1-latest/AdwShortcutsSection/set_title
+
+### Parameters
+- **self** (AdwShortcutsSection*) - Required - The AdwShortcutsSection to set the title for.
+- **title** (const char*) - Required - The title to use. The argument can be NULL. The value is a NUL terminated UTF-8 string.
+```
+
+--------------------------------
+
+### CSS: Override Accent Color with Dark Foreground
+
+This CSS snippet illustrates how to override the accent background color and set a dark foreground color when using a bright accent color in Libadwaita. This ensures text legibility against light backgrounds.
+
+```css
+:root {
+  --accent-bg-color: var(--yellow-3);
+  --accent-fg-color: rgb(0 0 0 / 80%);
+}
+
+```
+
+--------------------------------
+
+### Set Pop on Escape for AdwNavigationView (C)
+
+This C function sets whether pressing the Escape key will pop the current page from an AdwNavigationView. This is particularly useful for applications like web browsers where custom navigation behavior might be desired. It takes a pointer to the AdwNavigationView and a boolean indicating the desired behavior.
+
+```c
+void
+adw_navigation_view_set_pop_on_escape (
+  AdwNavigationView* self,
+  gboolean pop_on_escape
+)
+
+```
+
+--------------------------------
+
+### Set Top Bar Style (C)
+
+Sets the appearance of the top bars for an AdwToolbarView. The 'style' parameter determines if the bars are flat with a subtle shadow, raised with a persistent shadow, or raised with a subtle border. This function is available since libadwaita 1.4.
+
+```c
+void
+adw_toolbar_view_set_top_bar_style (
+  AdwToolbarView* self,
+  AdwToolbarStyle style
+)
+```
+
+--------------------------------
+
+### Set Title Widget for AdwHeaderBar (C)
+
+This C code snippet demonstrates how to set a custom GtkWidget as the title for an AdwHeaderBar. If NULL is provided, the header bar will display the window's title. This function takes a pointer to the AdwHeaderBar and a pointer to the GtkWidget to be used as the title.
+
+```c
+void
+adw_header_bar_set_title_widget (
+  AdwHeaderBar* self,
+  GtkWidget* title_widget
+)
+```
+
+--------------------------------
+
+### Overriding Accent Color for Destructive Actions (CSS)
+
+This CSS snippet shows how to override the accent color for destructive action buttons using CSS variables. It sets --accent-bg-color, --accent-fg-color, and --accent-color to values associated with destructive actions, allowing for a distinct visual style. This method is recommended over the deprecated .opaque class for custom button styling.
+
+```css
+#custom-destructive-action-button {
+  --accent-bg-color: var(--destructive-bg-color);
+  --accent-fg-color: var(--destructive-fg-color);
+  --accent-color: var(--destructive-color);
+}
+```
+
+--------------------------------
+
+### Set Visible Page Name in AdwPreferencesWindow (C)
+
+This C code snippet demonstrates how to make a specific preferences page visible within an `AdwPreferencesWindow`. It takes a pointer to the `AdwPreferencesWindow` and the name of the page as a string. Note that this method is deprecated since version 1.6.
+
+```c
+void
+adw_preferences_window_set_visible_page_name (
+  AdwPreferencesWindow* self,
+  const char* name
+)
+```
+
+--------------------------------
+
+### Set Navigatable State for AdwLeafletPage (C)
+
+Sets whether an AdwLeafletPage can be navigated to when folded. If set to FALSE, the page will be ignored by navigation functions and swipe gestures. This is useful for preventing navigation to non-interactive elements like separators. Deprecated since Adwaita 1.4.
+
+```c
+void
+adw_leaflet_page_set_navigatable (
+  AdwLeafletPage* self,
+  gboolean navigatable
+)
+```
+
+--------------------------------
+
+### Remove a child widget from AdwWrapBox
+
+This method removes a specified child widget from the AdwWrapBox. It is essential for managing the dynamic content of the widget. The child widget must be a direct child of the AdwWrapBox.
+
+```vala
+adw_wrap_box_remove (self, child);
+```
+
+--------------------------------
+
+### Set View Switcher Enabled in AdwViewSwitcherTitle (C)
+
+This C function sets whether the view switcher within an AdwViewSwitcherTitle widget is enabled. If disabled, the title is displayed instead. This is useful for programmatically hiding the view switcher based on certain conditions or window constraints.
+
+```c
+void
+adw_view_switcher_title_set_view_switcher_enabled (
+  AdwViewSwitcherTitle* self,
+  gboolean enabled
+)
+
+```
+
+--------------------------------
+
+### CSS: Override Accent Background Color
+
+This CSS snippet demonstrates how to override the default accent background color in Libadwaita applications, forcing it to use a specific green color. It utilizes CSS variables for customization.
+
+```css
+:root {
+  --accent-bg-color: var(--accent-green); /* Always use the green color */
+}
+
+```
+
+--------------------------------
+
+### Set AdwFlap Transition Type (C)
+
+Sets the type of animation for reveal and fold transitions in an AdwFlap widget. The function takes a pointer to the AdwFlap widget and an AdwFlapTransitionType enum value. Transparency of the flap can be managed using the '.background' style class.
+
+```c
+void
+adw_flap_set_transition_type (
+  AdwFlap* self,
+  AdwFlapTransitionType transition_type
+)
+
+```
+
+--------------------------------
+
+### AdwSwipeable.get_swipe_area
+
+Retrieves the area from which a swipe gesture can be initiated on an AdwSwipeable widget. This is useful for implementing edge swipes or restricting swipe functionality to specific parts of the widget.
+
+```APIDOC
+## GET AdwSwipeable.get_swipe_area
+
+### Description
+Gets the area `self` can start a swipe from for the given direction and gesture type. This can be used to restrict swipes to only be possible from a certain area, for example, to only allow edge swipes, or to have a draggable element and ignore swipes elsewhere. If not implemented, the default implementation returns the allocation of `self`, allowing swipes from anywhere.
+
+GET
+
+AdwSwipeable.get_swipe_area
+
+### Parameters
+### Request Example
+
+#### Success Response (200)
+- **rect** (GdkRectangle) - A pointer to a rectangle that will be set by the function to store the swipe area.
+
+### Error Handling
+None specified.
+```
+
+--------------------------------
+
+### Set Response Label for AdwMessageDialog (C)
+
+Sets the label for a specific response button in an AdwMessageDialog. The label can include an embedded underline for a mnemonic. This function is deprecated and users should migrate to AdwAlertDialog. It takes a pointer to the dialog, the response ID, and the new label as arguments.
+
+```c
+void
+adw_message_dialog_set_response_label (
+  AdwMessageDialog* self,
+  const char* response,
+  const char* label
+)
+```
+
+--------------------------------
+
+### Set Vertical Alignment for AdwSqueezer (C)
+
+Sets the vertical alignment for the children of an AdwSqueezer widget. This parameter influences how children are positioned when they exceed the squeezer's available space, particularly during transitions. The alignment ranges from 0.0 (top) to 1.0 (bottom). This function is deprecated.
+
+```c
+void
+adw_squeezer_set_yalign (
+  AdwSqueezer* self,
+  float yalign
+)
+```
+
+--------------------------------
+
+### Set Visible Child Name for AdwLeaflet (C)
+
+Sets the visible child of an AdwLeaflet by its name. This method is deprecated since version 1.4. It takes a pointer to the AdwLeaflet object and the name of the child to make visible.
+
+```c
+void
+adw_leaflet_set_visible_child_name (
+  AdwLeaflet* self,
+  const char* name
+)
+```
+
+--------------------------------
+
+### Set Show Drag Handle for AdwBottomSheet (C)
+
+Sets whether to display a drag handle on the AdwBottomSheet. This function affects the UI by potentially hiding the default title of AdwHeaderBar and reserving space in AdwToolbarView. It also enables pointer-based swiping interactions.
+
+```c
+void
+adw_bottom_sheet_set_show_drag_handle (
+  AdwBottomSheet* self,
+  gboolean show_drag_handle
+)
+```
+
+=== COMPLETE CONTENT === This response contains all available snippets from this library. No additional content exists. Do not make further requests.

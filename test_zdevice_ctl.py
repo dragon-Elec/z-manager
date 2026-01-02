@@ -50,7 +50,9 @@ class TestGetWritebackStatus(unittest.TestCase):
 
     @patch('core.zdevice_ctl.read_file')
     @patch('core.zdevice_ctl.zram_sysfs_dir')
-    def test_get_writeback_status_with_backing(self, mock_sysfs_dir, mock_read):
+    @patch('core.zdevice_ctl.is_block_device')
+    def test_get_writeback_status_with_backing(self, mock_is_block_dev, mock_sysfs_dir, mock_read):
+        mock_is_block_dev.return_value = True
         mock_sysfs_dir.return_value = "/sys/block/zram0"
         
         def read_side_effect(path):
@@ -74,7 +76,9 @@ class TestGetWritebackStatus(unittest.TestCase):
 
     @patch('core.zdevice_ctl.read_file')
     @patch('core.zdevice_ctl.zram_sysfs_dir')
-    def test_get_writeback_status_no_backing(self, mock_sysfs_dir, mock_read):
+    @patch('core.zdevice_ctl.is_block_device')
+    def test_get_writeback_status_no_backing(self, mock_is_block_dev, mock_sysfs_dir, mock_read):
+        mock_is_block_dev.return_value = True
         mock_sysfs_dir.return_value = "/sys/block/zram0"
         
         def read_side_effect(path):

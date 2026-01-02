@@ -94,11 +94,11 @@ zramctl --reset /dev/zram0  # DELETES /dev/zram0!
 
 ## 7. Architecture Decisions
 
-**Hybrid approach (implemented):**
-- zramctl for **reading** device list (convenient)
+**Full Sysfs approach (implemented):**
+- sysfs for **reading** device list (parsing `/sys/block/zram*` directly)
 - sysfs for **writing** configuration (reliable)
 
-**Why:** zramctl parsing works but sysfs writes never fail across versions.
+**Why:** Shifted to pure sysfs because it is "overall honest" — it represents the true kernel state without the abstraction or version-dependency faults of `zramctl`.
 
 ---
 

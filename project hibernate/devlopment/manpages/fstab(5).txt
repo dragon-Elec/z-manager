@@ -1,0 +1,216 @@
+
+
+man7.org > Linux > man-pages
+	
+
+Linux/UNIX system programming training
+fstab(5) — Linux manual page
+
+NAME | SYNOPSIS | DESCRIPTION | FILES | NOTES | HISTORY | SEE ALSO | REPORTING BUGS | AVAILABILITY
+
+FSTAB(5)                       File formats                      FSTAB(5)
+
+NAME         top
+
+       fstab - static information about the filesystems
+
+SYNOPSIS         top
+
+       /etc/fstab
+
+DESCRIPTION         top
+
+       The file fstab contains descriptive information about the
+       filesystems the system can mount. fstab is only read by programs,
+       and not written; it is the duty of the system administrator to
+       properly create and maintain this file. The order of records in
+       fstab is important because fsck(8), mount(8), and umount(8)
+       sequentially iterate through fstab doing their thing.
+
+       The file is not read by mount(8) only but often is used by many
+       other tools and daemons, and proper functionality may require
+       additional steps. For example, on systemd-based systems, it’s
+       recommended to use systemctl daemon-reload after fstab
+       modification.
+
+       Each filesystem is described on a separate line, with fields
+       separated by tabs or spaces. The line is split into fields before
+       being parsed. This means that any spaces or tabs within the fields
+       must be escaped using \040 or \011, even within quoted strings
+       (e.g. LABEL="foo\040bar").
+
+       Lines starting with '#' are comments. Blank lines are ignored.
+
+       The following is a typical example of an fstab entry:
+
+           LABEL=t-home2   /home      ext4    defaults,auto_da_alloc      0  2
+
+   The first field (fs_spec).
+       This field describes the block special device, remote filesystem
+       or filesystem image for loop device to be mounted or swap file or
+       swap device to be enabled.
+
+       For ordinary mounts, it will hold (a link to) a block special
+       device node (as created by mknod(2)) for the device to be mounted,
+       like /dev/cdrom or /dev/sdb7. For NFS mounts, this field is
+       <host>:<dir>, e.g., knuth.aeb.nl:/. For filesystems with no
+       storage, any string can be used, and will show up in df(1) output,
+       for example. Typical usage is proc for procfs; mem, none, or tmpfs
+       for tmpfs. Other special filesystems, like udev and sysfs, are
+       typically not listed in fstab.
+
+       LABEL=<label> or UUID=<uuid> may be given instead of a device
+       name. This is the recommended method, as device names are often a
+       coincidence of hardware detection order, and can change when other
+       disks are added or removed. For example, 'LABEL=Boot' or
+       'UUID=3e6be9de-8139-11d1-9106-a43f08d823a6'. (Use a
+       filesystem-specific tool like e2label(8), xfs_admin(8), or
+       fatlabel(8) to set LABELs on filesystems).
+
+       It’s also possible to use PARTUUID= and PARTLABEL=. These
+       partitions identifiers are supported for example for GUID
+       Partition Table (GPT).
+
+       See mount(8), blkid(8) or lsblk(8) for more details about device
+       identifiers.
+
+       Note that mount(8) uses UUIDs as strings. The string
+       representation of the UUID should be based on lower case
+       characters. But when specifying the volume ID of FAT or NTFS file
+       systems upper case characters are used (e.g UUID="A40D-85E7" or
+       UUID="61DB7756DB7779B3").
+
+   The second field (fs_file).
+       This field describes the mount point (target) for the filesystem.
+       For swap area, this field should be specified as `none'. If the
+       name of the mount point contains spaces or tabs these can be
+       escaped as `\040' and '\011' respectively.
+
+   The third field (fs_vfstype).
+       This field describes the type of the filesystem. Linux supports
+       many filesystem types: ext4, xfs, btrfs, f2fs, vfat, ntfs,
+       hfsplus, tmpfs, sysfs, proc, iso9660, udf, squashfs, nfs, cifs,
+       and many more. For more details, see mount(8).
+
+       An entry swap denotes a file or partition to be used for swapping,
+       cf. swapon(8). An entry none is useful for bind or move mounts.
+
+       More than one type may be specified in a comma-separated list.
+
+       mount(8) and umount(8) support filesystem subtypes. The subtype is
+       defined by '.subtype' suffix. For example 'fuse.sshfs'. It’s
+       recommended to use subtype notation rather than add any prefix to
+       the first fstab field (for example 'sshfs#example.com' is
+       deprecated).
+
+   The fourth field (fs_mntops).
+       This field describes the mount options associated with the
+       filesystem.
+
+       It is formatted as a comma-separated list of options and is
+       optional for mount(8) or swapon(8). The usual convention is to use
+       at least "defaults" keyword there.
+
+       It usually contains the type of mount (ro or rw, the default is
+       rw), plus any additional options appropriate to the filesystem
+       type (including performance-tuning options). For details, see
+       mount(8) or swapon(8).
+
+       Basic filesystem-independent options are:
+
+       defaults
+           use default options. The default depends on the kernel and the
+           filesystem. mount(8) does not have any hardcoded set of
+           default options. The kernel default is usually rw, suid, dev,
+           exec, auto, nouser, and async.
+
+       noauto
+           do not mount when mount -a is given (e.g., at boot time)
+
+       user
+           allow a user to mount
+
+       owner
+           allow device owner to mount
+
+       comment
+           or x-<name> for use by fstab-maintaining programs
+
+       nofail
+           do not report errors for this device if it does not exist.
+
+   The fifth field (fs_freq).
+       This field is used by dump(8) to determine which filesystems need
+       to be dumped. Defaults to zero (don’t dump) if not present.
+
+   The sixth field (fs_passno).
+       This field is used by fsck(8) to determine the order in which
+       filesystem checks are done at boot time. The root filesystem
+       should be specified with a fs_passno of 1. Other filesystems
+       should have a fs_passno of 2. Filesystems within a drive will be
+       checked sequentially, but filesystems on different drives will be
+       checked at the same time to utilize parallelism available in the
+       hardware. Defaults to zero (don’t check the filesystem) if not
+       present.
+
+FILES         top
+
+       /etc/fstab, <fstab.h>
+
+NOTES         top
+
+       The proper way to read records from fstab is to use the routines
+       getmntent(3) or libmount.
+
+       The keyword ignore as a filesystem type (3rd field) is no longer
+       supported by the pure libmount based mount utility (since
+       util-linux v2.22).
+
+       This document describes handling of fstab by util-linux and
+       libmount. For systemd, read systemd documentation. There are
+       slight differences.
+
+HISTORY         top
+
+       The ancestor of this fstab file format appeared in 4.0BSD.
+
+SEE ALSO         top
+
+       getmntent(3), fs(5), findmnt(8), mount(8), swapon(8)
+
+REPORTING BUGS         top
+
+       For bug reports, use the issue tracker
+       <https://github.com/util-linux/util-linux/issues>.
+
+AVAILABILITY         top
+
+       fstab is part of the util-linux package which can be downloaded
+       from Linux Kernel Archive
+       <https://www.kernel.org/pub/linux/utils/util-linux/>. This page is
+       part of the util-linux (a random collection of Linux utilities)
+       project. Information about the project can be found at 
+       ⟨https://www.kernel.org/pub/linux/utils/util-linux/⟩. If you have a
+       bug report for this manual page, send it to
+       util-linux@vger.kernel.org. This page was obtained from the
+       project's upstream Git repository
+       ⟨git://git.kernel.org/pub/scm/utils/util-linux/util-linux.git⟩ on
+       2025-08-11. (At that time, the date of the most recent commit that
+       was found in the repository was 2025-08-05.) If you discover any
+       rendering problems in this HTML version of the page, or you
+       believe there is a better or more up-to-date source for the page,
+       or you have corrections or improvements to the information in this
+       COLOPHON (which is not part of the original manual page), send a
+       mail to man-pages@man7.org
+
+util-linux 2.42-start-521-ec46  2025-08-09                       FSTAB(5)
+
+Pages that refer to this page: quota(1),  systemd-dissect(1),  getfsent(3),  getmntent(3),  crypttab(5),  integritytab(5),  lxc.container.conf(5),  nfs(5),  proc_pid_mounts(5),  repart.d(5),  systemd.automount(5),  systemd.mount(5),  systemd.swap(5),  veritytab(5),  bootparam(7),  kernel-command-line(7),  spufs(7),  systemd.generator(7),  e2mmpstatus(8),  findmnt(8),  fsck(8@@e2fsprogs),  fsck(8),  fsck.btrfs(8),  fsck.xfs(8),  mount(8),  quotacheck(8),  quotaon(8),  swapon(8),  systemd-fstab-generator(8),  systemd-gpt-auto-generator(8),  systemd-hibernate-resume-generator(8),  systemd-makefs@.service(8),  systemd-remount-fs.service(8),  systemd-repart(8),  xfs_fsr(8)
+
+HTML rendering created 2025-09-06 by Michael Kerrisk, author of The Linux Programming Interface.
+
+For details of in-depth Linux/UNIX system programming training courses that I teach, look here.
+
+Hosting by jambit GmbH.
+		Cover of TLPI
+

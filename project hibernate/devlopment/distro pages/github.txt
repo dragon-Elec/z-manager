@@ -1,0 +1,288 @@
+suspend-then-hibernate doesn't enter hibernation #35743
+Closed
+Closed
+suspend-then-hibernate doesn't enter hibernation
+#35743
+@pjungkamp
+Description
+pjungkamp
+opened on Dec 24, 2024
+Contributor
+systemd version the issue has been seen with
+
+256.8
+Used distribution
+
+nixos-unstable
+Linux kernel version used
+
+6.12.5
+CPU architectures issue was seen on
+
+x86_64
+Component
+
+No response
+Expected behaviour you didn't see
+
+Using systemctl suspend-then-hibernate with HibernateDelaySec in sleep.conf should suspend the system and set an RTC alarm for entering hibernation. When the system is woken by the RTC alarm (not user input), the system should enter hibernation.
+Unexpected behaviour you saw
+
+When my Framework Laptop 13 (Intel Core Ultra 1 Series) is woken by the RTC alarm, it just resumes to idle instead of entering hibernation.
+Steps to reproduce the problem
+
+    Set HibernateDelaySec in sleep.conf
+    Use systemctl suspend-then-hibernate
+    Wait until HibernateDelaySec elapsed.
+
+The system resumes without entering hibernation.
+
+This in my case leads to my GNOME lock-screen which, after 15 minutes, tries to suspend the system again, doing this in an endless loop. I haven't tried what happens when my system is on actual low battery, but I also don't want to try....
+Additional program output to the terminal or log subsystem illustrating the issue
+
+Dez 23 22:30:07 systemd[1]: Starting System Suspend then Hibernate...
+Dez 23 22:30:07 systemd-sleep[3243]: Successfully froze unit 'user.slice'.
+Dez 23 22:30:07 systemd-sleep[3243]: Performing sleep operation 'suspend'...
+Dez 23 22:30:07 kernel: PM: suspend entry (s2idle)
+Dez 23 22:30:07 kernel: Filesystems sync: 0.003 seconds
+Dez 23 23:30:07 kernel: Freezing user space processes
+Dez 23 23:30:07 kernel: Freezing user space processes completed (elapsed 0.001 seconds)
+Dez 23 23:30:07 kernel: OOM killer disabled.
+Dez 23 23:30:07 kernel: Freezing remaining freezable tasks
+Dez 23 23:30:07 kernel: Freezing remaining freezable tasks completed (elapsed 0.001 seconds)
+Dez 23 23:30:07 kernel: printk: Suspending console(s) (use no_console_suspend to debug)
+Dez 23 23:30:07 kernel: ACPI: EC: interrupt blocked
+Dez 23 23:30:07 kernel: ACPI: EC: interrupt unblocked
+Dez 23 23:30:07 kernel: pci 0000:00:08.0: Setting to D3hot
+Dez 23 23:30:07 kernel: pci 0000:00:0b.0: Setting to D3hot
+Dez 23 23:30:07 kernel: i915 0000:00:02.0: [drm] GT0: GuC firmware i915/mtl_guc_70.bin version 70.36.0
+Dez 23 23:30:07 kernel: spd5118 14-0050: Failed to write b = 0: -6
+Dez 23 23:30:07 kernel: spd5118 14-0050: PM: dpm_run_callback(): spd5118_resume [spd5118] returns -6
+Dez 23 23:30:07 kernel: spd5118 14-0050: PM: failed to resume async: error -6
+Dez 23 23:30:07 kernel: i915 0000:00:02.0: [drm] GT0: GUC: submission enabled
+Dez 23 23:30:07 kernel: i915 0000:00:02.0: [drm] GT0: GUC: SLPC enabled
+Dez 23 23:30:07 kernel: i915 0000:00:02.0: [drm] GT0: GUC: RC enabled
+Dez 23 23:30:07 kernel: i915 0000:00:02.0: [drm] GT1: GuC firmware i915/mtl_guc_70.bin version 70.36.0
+Dez 23 23:30:07 kernel: i915 0000:00:02.0: [drm] GT1: HuC firmware i915/mtl_huc_gsc.bin version 8.5.4
+Dez 23 23:30:07 kernel: nvme nvme0: 22/0/0 default/read/poll queues
+Dez 23 23:30:07 kernel: i915 0000:00:02.0: [drm] GT1: GUC: submission enabled
+Dez 23 23:30:07 kernel: i915 0000:00:02.0: [drm] GT1: GUC: SLPC enabled
+Dez 23 23:30:07 kernel: i915 0000:00:02.0: [drm] GT1: GUC: RC enabled
+Dez 23 23:30:07 kernel: mei_gsc_proxy 0000:00:16.0-0f73db04-97ab-4125-b893-e904ad0d5464: bound 0000:00:02.0 (ops i915_gsc_proxy_component_ops [i915])
+Dez 23 23:30:07 kernel: OOM killer enabled.
+Dez 23 23:30:07 kernel: Restarting tasks ... done.
+Dez 23 23:30:07 kernel: random: crng reseeded on system resumption
+Dez 23 23:30:07 systemd-resolved[838]: Clock change detected. Flushing caches.
+Dez 23 23:30:07 systemd-resolved[838]: Switching to fallback DNS server 1.1.1.1#cloudflare-dns.com.
+Dez 23 23:30:07 systemd-sleep[3243]: System returned from sleep operation 'suspend-then-hibernate'.
+Dez 23 23:30:07 kernel: PM: suspend exit
+Dez 23 23:30:07 systemd[1]: Starting Logrotate Service...
+Dez 23 23:30:07 systemd-sleep[3243]: Successfully thawed unit 'user.slice'.
+Dez 23 23:30:07 systemd[1]: systemd-suspend-then-hibernate.service: Deactivated successfully.
+Dez 23 23:30:07 systemd[1]: Finished System Suspend then Hibernate.
+Dez 23 23:30:07 systemd[1]: Stopped target Sleep.
+Dez 23 23:30:07 systemd[1]: Reached target Suspend; Hibernate if not used for a period of time.
+Dez 23 23:30:07 systemd-logind[945]: Operation 'suspend' finished.
+Dez 23 23:30:07 systemd-resolved[838]: Closing all remaining TCP connections.
+Dez 23 23:30:07 systemd-resolved[838]: Resetting learnt feature levels on all servers.
+Dez 23 23:30:07 ModemManager[1806]: <msg> [sleep-monitor-systemd] system is resuming
+Dez 23 23:30:07 fwupd[2641]: 22:30:07.286 FuPluginIntelMe      failed to get public key using file-id 0x40002300: generic failure [0xb]
+Dez 23 23:30:07 systemd[1]: Starting Post-Resume Actions...
+Dez 23 23:30:07 systemd[1]: Stopped target Suspend; Hibernate if not used for a period of time.
+
+Activity
+pjungkamp
+added
+bug 🐛Programming errors, that need preferential fixing
+on Dec 24, 2024
+pjungkamp
+changed the title [-]`suspend-then-hibernate` doesn't h[/-] [+]`suspend-then-hibernate` doesn't enter hibernation[/+] on Dec 24, 2024
+pjungkamp
+pjungkamp commented on Dec 24, 2024
+pjungkamp
+on Dec 24, 2024 · edited by pjungkamp
+ContributorAuthor
+
+I think this might be a firmware issue. Running dmidecode after the system resumed itself from suspend-then-hibernate indicates a Wake-up Type: Power Switch, but I think it should return something pertaining to the APM timer.
+
+$ dmidecode -H1
+# dmidecode 3.6
+Getting SMBIOS data from sysfs.
+SMBIOS 3.6 present.
+54 structures occupying 4244 bytes.
+Table at 0x5EDEE000.
+
+Handle 0x0001, DMI type 1, 27 bytes
+System Information
+	Manufacturer: Framework
+	Product Name: Laptop 13 (Intel Core Ultra Series 1)
+	Version: A5
+	Serial Number: <REDACTED>
+	UUID: <REDACTED>
+	Wake-up Type: Power Switch
+	SKU Number: FRANDPCP05
+	Family: Laptop
+
+systemd/src/sleep/sleep.c
+
+Lines 340 to 349 in 544b771
+         wakeup_type_byte = (uint8_t) buf[24]; 
+         /* 0 is Reserved and 8 is AC Power Restored. As per table 12 in 
+          * https://www.dmtf.org/sites/default/files/standards/documents/DSP0134_3.4.0.pdf */ 
+         if (wakeup_type_byte >= 128) 
+                 return log_debug_errno(SYNTHETIC_ERRNO(EINVAL), "Expected value in range 0-127"); 
+  
+         if (wakeup_type_byte == 3) { 
+                 log_debug("DMI BIOS System Information indicates wakeup type is APM Timer"); 
+                 return true; 
+         } 
+
+pjungkamp
+mentioned this on Dec 24, 2024
+
+    Linux on Core Ultra: use_acpi_alarm=N breaks suspend-then-hibernate FrameworkComputer/SoftwareFirmwareIssueTracker#29
+
+pjungkamp
+pjungkamp commented on Dec 24, 2024
+pjungkamp
+on Dec 24, 2024
+ContributorAuthor
+
+I'm sorry for causing a fuzz here. My issue is resolved by adding use_acpi_alarm=1 to rtc_cmos. There was a known bug where this parameter was necessary for Framework 13 AMD systems, but I didn't find any reports for Intel based machines.
+
+I expected use_acpi_alarm to be true by default on my system, since use_acpi_alarm_quirks was applied to all Intel systems for years, but this was disabled for me.
+
+$ cat /sys/module/rtc_cmos/parameters/use_acpi_alarm
+N
+
+It seems like the use_acpi_alarm_quirks function is only called as part of acpi_cmos_wake_setup in the kernel. But acpi_cmos_wake_setup is not used when there are RTC related entries in the FADT ACPI table. here
+
+I don't know whether this is a bug in rtc_cmos or with the Framework Laptops ACPI tables. But it's not a bug in systemd!
+pjungkamp
+closed this as completedon Dec 24, 2024
+nicholasmaniscalco
+nicholasmaniscalco commented on Jan 21
+nicholasmaniscalco
+on Jan 21
+
+Came across this issue while searching for a solution to my issue on a Framework 13 12th Gen Intel.
+
+I'm trying to get hibernate-then-suspend to work. My device wakes from s2idle after HibernateDelaySec, but fails to hibernate.
+
+My /sys/module/rtc_cmos/parameters/use_acpi_alarm is Y. Can you confirm that yours works as you'd expect?
+
+Over here I've got Debian testing running 6.12.9.
+
+Thanks!
+pjungkamp
+pjungkamp commented on Jan 21
+pjungkamp
+on Jan 21
+ContributorAuthor
+
+My suspend-then-hibernate works fine now. Here's an excerpt from my syslog.
+
+Jan 20 04:02:52 framework systemd-logind[966]: The system will suspend now!
+Jan 20 04:02:53 framework systemd[1]: Starting System Suspend then Hibernate...
+Jan 20 04:02:53 framework systemd-sleep[377237]: Performing sleep operation 'suspend'...
+Jan 20 05:02:54 framework systemd-sleep[377237]: System returned from sleep operation 'suspend-then-hibernate'.
+Jan 20 05:02:54 framework systemd-sleep[377237]: Performing sleep operation 'hibernate'...
+Jan 20 11:14:22 framework systemd-sleep[377237]: System returned from sleep operation 'suspend-then-hibernate'.
+
+Have you properly set up hibernation? Is systemctl hibernate working for you?
+
+If so, what does dmidecode -H1 report as the Wake-Up Type when your Laptop wakes after HibernateDelaySec elapsed?
+
+If it's Power Switch despite being woken by a timer, you're running into a similar problem as I am. You should consider posting on the Framework community forum or the firmware issue tracker at https://github.com/FrameworkComputer/SoftwareFirmwareIssueTracker although I haven't received any response on my issue there yet....
+nicholasmaniscalco
+nicholasmaniscalco commented on Jan 22
+nicholasmaniscalco
+on Jan 22
+
+    Have you properly set up hibernation? Is systemctl hibernate working for you?
+
+Thanks! Sorry, I should have included more detail.
+
+Yes, I have hibernate working. My issue seems to be that once HibernateDelaySec has elapsed, the system wakes from suspend and should then hibernate, but instead it remains awake until the desktop environment (KDE) re-suspends.
+
+The following dmesg entries are illustrative. My HibernateDelaySec is 7200 and my KDE is configured to suspend the session after 5 minutes,
+
+Jan 19 19:09:47 frame kernel: PM: suspend entry (s2idle)
+Jan 19 21:09:47 frame kernel: PM: suspend exit
+Jan 19 21:14:47 frame kernel: PM: suspend entry (s2idle)
+Jan 19 23:14:47 frame kernel: PM: suspend exit
+Jan 19 23:19:47 frame kernel: PM: suspend entry (s2idle)
+Jan 20 01:19:47 frame kernel: PM: suspend exit
+Jan 20 01:24:47 frame kernel: PM: suspend entry (s2idle)
+Jan 20 03:24:47 frame kernel: PM: suspend exit
+Jan 20 03:29:47 frame kernel: PM: suspend entry (s2idle)
+
+From the above, I see that the system remains in s2idle for two hours (7200 seconds) as expected (good!). Then instead of immediately entering hibernate, five minutes elapse and the system returns to s2idle (bad). In s2idle for 2 hours, then running for 5 minutes, then suspended for 2 hours, then running for 5 minutes, etc. The whole time the laptop is sitting on a table, no peripherals connected, no AC cable, lid remains closed.
+
+My issue seems to be sporadic. On some days, the system wakes and then hibernates as I would expect. And on others, I get the repeated "back and forth" as illustrated above. When testing with very short HibernateDelaySec durations (e.g. 30 seconds), I see the expected behavior.
+
+I have verified that use_acpi_alarm is enabled:
+
+$ cat /sys/module/rtc_cmos/parameters/use_acpi_alarm
+Y
+
+    If so, what does dmidecode -H1 report as the Wake-Up Type when your Laptop wakes after HibernateDelaySec elapsed?
+
+Good question! I haven't yet been able to catch it. I should rig something up to capture and log that automatically.
+
+    If it's Power Switch despite being woken by a timer, you're running into a similar problem as I am. You should consider posting on the Framework community forum or the firmware issue tracker at https://github.com/FrameworkComputer/SoftwareFirmwareIssueTracker although I haven't received any response on my issue there yet....
+
+Good to know. I'll follow that report as well. Thanks!
+spamik
+spamik commented on Jul 5
+spamik
+on Jul 5
+
+@nicholasmaniscalco Did you have any success with this? I have a quite very similar situation with new Framework 13 / AMD. Sometimes it works, sometimes it wake up after HibernateDelaySec timeout but remains powered on insted of start hibernation. cat /sys/module/rtc_cmos/parameters/use_acpi_alarm says Y, dmidecoed says Wake-up type: power switch when I find out laptop powered when didn't start hibernation. Not sure how to test what is dmidedoce saying when it works. I use elogind but probably this part will be the same...
+nicholasmaniscalco
+nicholasmaniscalco commented on Jul 6
+nicholasmaniscalco
+on Jul 6
+
+Hey @spamik, I never solved it. Anecdotally, with my Framework 13 (12th gen Intel), disabling bluetooth before suspend seemed to make suspend-then-hibernate work more reliably, but I didn't test it enough to say for sure.
+spamik
+spamik commented on Jul 6
+spamik
+on Jul 6
+
+@nicholasmaniscalco Thanks, I'll give it a chance. I'll rather get it working as hibernating system with 96GB RAM takes some times (especially if you remember you need to do something right 3 sec after you push the hibernating button) and in s2idle it barely survives 2 days... I've noticed that in log, when hibernation doesn't start, usualy very first log entries are modemmanager and NetworkManager trying to associate to wlan, so maybe it's really related.
+spamik
+spamik commented on Jul 10
+spamik
+on Jul 10
+
+@nicholasmaniscalco Well I think I maybe found the issue. Just weird thing is that it seems like a bug in logind which should affect every platform (not just framework laptops) but nobody else reports it. But I did small firty patch on Monday and till that time seems that every hibernation was correct.
+
+What I have found: I enabled debug logs and looks what happend. Ironically in dmidecode I have also wake-up type power button but it seems that this is not the problem. In my case the thing which cause that laptop after timer stays powered on instead of starting hibernate is this part of code:
+
+systemd/src/sleep/sleep.c
+
+Lines 448 to 452 in 8dfe176
+ r = fd_wait_for_event(tfd, POLLIN, 0); 
+ if (r < 0) 
+         return log_error_errno(r, "Error polling timerfd: %m"); 
+ /* Store fd_wait status */ 
+ woken_by_timer = FLAGS_SET(r, POLLIN); 
+
+woken_by_timer is some times set to 0 which later in code results in waking up laptop because it thinks that it was woken by user. If I understood it correctly, logind before suspend to RAM sets basic timer for time it want to be in suspend (usually HibernateDelaySec). After woken up it checks if this timer was tripped. If timer is not tripped should mean that laptop was woken earlier for some other reason and then it won't hibernate (if yes it does some other checks like APM timer and so on). But problem in my opinion is the last argument in fd_wait_for_event (that zero) which sets timeout for which this function wait for POLLIN event (timer tripping). Zero means no timeout, function return results immediately. And that I guess is the problem - I believe that in my case sometimes happend that this part of code executes earlier than kernel processes timers after wakeup, so there is no POLLIN event when this executes and laptop stays resumed.
+
+I did this quick dirty patch which waits for POLLIN event for 0.5 second (patch is for elogind, maybe it need some correction for current systemd code):
+
+--- a/src/sleep/sleep.c	2025-01-13 16:07:01.000000000 +0100
++++ b/src/sleep/sleep.c	2025-07-08 01:01:13.941946081 +0200
+@@ -676,7 +676,7 @@
+                 if (r < 0)
+                         return r;
+ 
+-                r = fd_wait_for_event(tfd, POLLIN, 0);
++                r = fd_wait_for_event(tfd, POLLIN, 500*1000);
+                 if (r < 0)
+                         return log_error_errno(r, "Error polling timerfd: %m");
+                 /* Store fd_wait status */
+
+and since that time every suspend longer than HIbernateDelaySec resuilts in hibernation. But I'm still watching it

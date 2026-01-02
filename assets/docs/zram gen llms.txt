@@ -1,0 +1,113 @@
+# zram-generator Developer Context
+
+## Core Concept
+`zram-generator` is a systemd unit generator that creates persistent or ephemeral `zram` devices during early boot. It configures them as swap partitions or formatted file systems based on declarative configuration files.
+
+## Configuration Logic
+
+### File Locations & Precedence
+The generator looks for the main configuration file in the following order (first found wins):
+1. `/run/systemd/zram-generator.conf`
+2. `/etc/systemd/zram-generator.conf`
+3. `/usr/local/lib/systemd/zram-generator.conf`
+4. `/usr/lib/systemd/zram-generator.conf`
+
+**Drop-ins:**
+* Files in `{/etc,/usr/lib}/systemd/zram-generator.conf.d/*.conf` are loaded.
+* Sorted lexicographically.
+* Drop-ins override the main configuration file.
+* A symlink to `/dev/null` in `/etc/` disables a vendor config.
+
+### Syntax
+* INI-style format.
+* **Sections**: `[zramN]` where N is a non-negative integer (e.g., `[zram0]`).
+* **Global Section**: Before any headers, supports `set!var=cmd`.
+
+### Options (per `[zramN]` section)
+**Note**: Devices with a final size of **0** are discarded (not created).
+
+* **`zram-size`**: Target size of the zram device.
+    *   *Default*: `min(ram / 2, 4096)`
+    *   *Variables*: `ram` (MemTotal in MB).
+    *   *Interpretation*: Values are in **megabytes (MB)** unless an SI suffix is used.
+    *   *Operators/Constants*: `+ - * / % ^`, `min()`, `max()`, `abs()`, `round()`, `floor()`, `ceil()`, `log()`, `int()`, `e`, `pi`, trigonometric functions.
+    *   *Suffixes*: SI suffixes supported (e.g., K, M, G).
+* **`compression-algorithm`**: Space-separated list.
+    *   *Format*: `algo(param)` or just `algo`.
+    *   *Multi-value*: First is primary (writes to `comp_algorithm`), subsequent are recompression fallbacks (writes to `recomp_algorithm`).
+    *   *Parameters*: A parenthesized list without an algorithm (e.g., `(level=3)`) sets global recompression parameters.
+    *   *Example*: `zstd(level=1) lzo-rle`
+    *   *Debug*: Check `/sys/block/zramX/comp_algorithm` for available options.
+* **`writeback-device`**: Path to a block device for incompressible pages.
+    *   *Mapping*: Writes to `/sys/block/zramX/backing_dev`.
+    *   *Recommendation*: Use stable paths (e.g., `/dev/disk/by-partuuid/...`).
+* **`host-memory-limit`**: Max host RAM (MB) to allow device creation. If host RAM > limit, device is skipped.
+    *   *Value*: Number (MB) or `none` to override previous limits.
+* **`zram-resident-limit`**: Max physical RAM the zram device can consume.
+* **`swap-priority`**: Integer (-1 to 32767). Default: 100.
+* **`mount-point`**: Directory to mount the device on. Implies filesystem creation.
+* **`fs-type`**: Filesystem format (e.g., `ext2`, `ext4`, `xfs`). Default: `swap` (unless `mount-point` is set, then `ext2`).
+* **`options`**: Mount options (if fs) or swapon options. Default: `discard`.
+
+### Global Directives
+* **`set!variable=program`**: Executes `program` via shell. Stdout is parsed as arithmetic to set `variable`.
+    *   *Usage*: `zram-size = variable * 2`
+
+### Deprecated Options
+* `memory-limit`: Alias for `host-memory-limit`.
+* `zram-fraction`: Scaling factor (float). Overrides `zram-size`.
+* `max-zram-size`: Limit for `zram-fraction`. Overrides `zram-size`.
+
+## Usage Patterns
+
+### Standard Swap
+```ini
+[zram0]
+zram-size = ram / 2
+compression-algorithm = zstd
+```
+
+### Temporary Filesystem
+```ini
+[zram1]
+mount-point = /var/compressed
+fs-type = ext4
+```
+
+### User-Writable Temporary Directory (Hack)
+To make a mount point world-writable (sticky bit), override the generated service.
+Create `systemd-zram-setup@zram1.service` drop-in:
+```ini
+[Service]
+ExecStartPost=/bin/sh -c 'd=$(mktemp -d); mount "$1" "$d"; chmod 1777 "$d"; umount "$d"; rmdir "$d"' _ /dev/%i
+```
+*Note: Newer versions support `options = X-mount.mode=1777`.*
+
+## Operational Details
+
+### Lifecycle
+1.  **Boot**: Generator runs, reads config, creates `dev-zramN.swap` (for swap) or `path-to-mount.mount` (for fs).
+2.  **Activation**: Units depend on `systemd-zram-setup@zramN.service`, which loads the module, sets algorithm/size, and formats the device.
+3.  **Stop**: Resetting the unit destroys data and frees memory.
+
+### Constraints & Runtime Behavior
+*   **Containers**: The generator *does nothing* if run inside a container (detected via `systemd-detect-virt`).
+* **Kernel Arg**: `systemd.zram=0` disables generator; `systemd.zram=1` forces `zram0` creation.
+    *   *Priority*: These kernel arguments **override** any configuration files on disk.
+*   **Reloading**:
+    *   `systemctl daemon-reload`: Re-runs generator (updates unit files).
+    *   `systemctl restart systemd-zram-setup@zramN`: Destroys and recreates the specific device (**DATA LOSS**).
+
+## Development & Testing
+
+### CLI Arguments (Manual Invocation)
+*   `zram-generator TARGET_DIR [2RGET_DIR 3RGET_DIR]`: Standard generator invocation (fills target dirs with units).
+*   `--setup-device DEVICE`: Manually triggers setup for a specific device (e.g., `zram0`).
+*   `--reset-device DEVICE`: Manually resets/removes a specific device.
+
+### Environment & Debugging
+*   **`ZRAM_GENERATOR_ROOT`**: Env var. If set:
+    *   Read config from `$ZRAM_GENERATOR_ROOT/etc/systemd/...` etc.
+    *   Read memory info from `$ZRAM_GENERATOR_ROOT/proc/meminfo`.
+    *   **Test Mode**: Skips device creation steps (container check ignored).
+*   **Module**: Tests require `zram` kernel module loaded.
