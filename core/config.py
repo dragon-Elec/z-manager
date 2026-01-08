@@ -3,7 +3,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, Any, Optional, Tuple, List
-import configparser
+from configobj import ConfigObj
 import io
 from pathlib import Path
 
@@ -37,16 +37,26 @@ def get_active_config_path() -> Optional[Path]:
             return path
     return None
 
-def read_zram_config() -> configparser.ConfigParser:
+def read_zram_config() -> ConfigObj:
     """
-    Read the active zram-generator.conf. Returns a configparser instance.
+    Read the active zram-generator.conf. Returns a ConfigObj instance.
     """
-    cfg = configparser.ConfigParser()
     path = get_active_config_path()
+    # list_values=False is CRITICAL to avoid parsing "lz4 (level=1)" as list
     if path:
-        cfg.read(str(path))
-    return cfg
+        return ConfigObj(str(path), list_values=False, encoding='utf-8')
+    return ConfigObj(list_values=False, encoding='utf-8')
 
+def read_global_config() -> Dict[str, str]:
+    """
+    Reads the global [zram-generator] section.
+    Returns a dict of key-value pairs (e.g., {'conf-file': '...'})
+    """
+    cfg = read_zram_config()
+    if "zram-generator" in cfg:
+        # Return a copy of the section as a dict
+        return dict(cfg["zram-generator"])
+    return {}
 def load_effective_config() -> str:
     """
     Load the content of the currently active configuration file.
@@ -58,11 +68,10 @@ def load_effective_config() -> str:
         except Exception:
             pass
     
-    # Fallback to configparser rendering if direct read fails
+    # Fallback to ConfigObj rendering if direct read fails
     cfg = read_zram_config()
-    s = io.StringIO()
-    cfg.write(s)
-    return s.getvalue().strip()
+    # ConfigObj.write() returns a list of lines
+    return "\n".join(cfg.write()).strip()
 
 def apply_config_with_restart(device: str, restart_mode: str = "try") -> ConfigResult:
     """
