@@ -253,6 +253,20 @@
                 </child>
 
                 <child>
+                  <object class="AdwActionRow">
+                    <property name="title">Global Defaults</property>
+                    <property name="subtitle">Configure system-wide settings ([zram-generator] section)</property>
+                    <child>
+                        <object class="GtkButton" id="global_settings_btn">
+                            <property name="label">Edit Defaults</property>
+                            <property name="valign">center</property>
+                            <style><class name="flat"/></style>
+                        </object>
+                    </child>
+                  </object>
+                </child>
+
+                <child>
                   <object class="AdwActionRow" id="raw_config_row">
                     <property name="title">Configuration File</property>
                     <property name="subtitle">/etc/systemd/zram-generator.conf</property>
@@ -303,13 +317,35 @@
               </object>
           </child>
           <child type="end">
-              <object class="GtkButton" id="apply_button">
-                  <property name="label">Apply Changes</property>
-                  <style>
-                      <class name="suggested-action"/>
-                  </style>
-                  <property name="sensitive">false</property>
-                  <property name="tooltip-text">Write configuration and restart ZRAM service</property>
+              <object class="GtkBox">
+                  <property name="orientation">horizontal</property>
+                  <property name="spacing">12</property>
+                  
+                  <child>
+                      <object class="GtkLabel">
+                          <property name="label">Apply Immediately</property>
+                          <style><class name="dim-label"/></style>
+                      </object>
+                  </child>
+
+                  <child>
+                      <object class="GtkSwitch" id="live_apply_switch">
+                          <property name="valign">center</property>
+                          <property name="active">false</property> 
+                          <property name="tooltip-text">Experimental: Restart services immediately (requires multiple password prompts)</property>
+                      </object>
+                  </child>
+
+                  <child>
+                      <object class="GtkButton" id="apply_button">
+                          <property name="label">Apply Changes</property>
+                          <style>
+                              <class name="suggested-action"/>
+                          </style>
+                          <property name="sensitive">false</property>
+                          <property name="tooltip-text">Write configuration (and optionally restart service)</property>
+                      </object>
+                  </child>
               </object>
           </child>
       </object>

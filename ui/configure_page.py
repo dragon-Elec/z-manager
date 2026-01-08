@@ -11,9 +11,12 @@ import subprocess
 
 from ui.custom_widgets import ScenarioCard
 from ui.device_picker import DevicePickerDialog
+from ui.global_config_dialog import GlobalConfigDialog
 import threading
 from core import zdevice_ctl, config as zram_config
 from dataclasses import dataclass
+from ui.configure_logic import ConfigureLogic
+from ui.confirmation_dialog import ConfirmationDialog
 
 
 def get_ui_path(file_name):
@@ -59,19 +62,24 @@ class ConfigurePage(Gtk.Box):
     open_file_btn: Gtk.Button = Gtk.Template.Child()
     open_example_btn: Gtk.Button = Gtk.Template.Child()
     
+    # Global Config
+    global_settings_btn: Gtk.Button = Gtk.Template.Child()
+    
     # Action Bar
     apply_button: Gtk.Button = Gtk.Template.Child()
     revert_button: Gtk.Button = Gtk.Template.Child()
+    live_apply_switch: Gtk.Switch = Gtk.Template.Child()
 
     def __init__(self, **kwargs):
         """Initializes the ConfigurePage widget."""
         super().__init__(**kwargs)
         
         # Internal State: Map device_name -> config_dict
-        self.device_configs = {
-            "zram0": self._get_default_config()
-        }
-        self.current_device = "zram0"
+        # Load from config file, or default to zram0 if no config exists
+        self.device_configs = {}
+        self.current_device = None
+        self._load_devices_from_config()
+
         
         # Connect Signals for Device Management
         self.device_selector_row.connect("notify::selected", self._on_device_selector_changed)
@@ -112,30 +120,52 @@ class ConfigurePage(Gtk.Box):
         self.open_folder_btn.connect("clicked", self._on_open_folder_clicked)
         self.open_file_btn.connect("clicked", self._on_open_file_clicked)
         self.open_example_btn.connect("clicked", self._on_open_example_clicked)
+        self.global_settings_btn.connect("clicked", self._on_global_settings_clicked)
 
         # Populate Profiles
         self._populate_profiles()
         
-        # Initialize Form with default device state
-        self._load_form_state("zram0")
+        # Initialize Form with the first device from config
+        if self.current_device:
+            self._load_form_state(self.current_device)
 
     def _get_default_config(self):
-        """Returns a default configuration dictionary."""
-        return {
-            "size_mode": 0, # 50%
-            "custom_size": "",
-            "algorithm": 0, # zstd
-            "custom_algorithm": "",
-            "priority": 100,
-            "host_limit_enabled": False,
-            "host_limit_mb": 2048,
-            "resident_limit": "",
-            "fs_mode": False,
-            "fs_type": 1, # ext4
-            "mount_point": "/tmp/zram_fs",
-            "writeback_dev": "None Selected",
-            "options": ""
-        }
+        """Returns the default configuration dictionary for a new device."""
+        return ConfigureLogic.get_default_config()
+
+    def _load_devices_from_config(self):
+        """
+        Load devices from the config file and populate the device selector.
+        If no config file exists, defaults to zram0.
+        """
+        # Read config from disk
+        parser = zram_config.read_zram_config()
+        
+        # Get device names (filter out global section)
+        device_names = [k for k in parser.keys() if k != 'zram-generator']
+        
+        # If no devices in config, default to zram0
+        if not device_names:
+            device_names = ["zram0"]
+        
+        # Populate internal state
+        for dev in device_names:
+            # _load_form_state will populate the actual values later
+            self.device_configs[dev] = self._get_default_config()
+        
+        # Populate the device selector dropdown
+        model = self.device_selector_row.get_model()
+        # Clear existing items (the UI template has zram0 hardcoded)
+        while model.get_n_items() > 0:
+            model.remove(0)
+        # Add devices from config
+        for dev in sorted(device_names):
+            model.append(dev)
+        
+        # Select first device
+        if device_names:
+            self.current_device = sorted(device_names)[0]
+            self.device_selector_row.set_selected(0)
 
     # --- Device Management Logic ---
 
@@ -202,11 +232,17 @@ class ConfigurePage(Gtk.Box):
         if device_name in self.device_configs:
             del self.device_configs[device_name]
             
+        # Prevent _on_device_selector_changed from saving the zombie device
+        self.current_device = None
+            
         # Remove from UI
         # AdwComboRow model is likely a GtkStringList
         model.remove(idx)
         
         # Selection automatically updates to a nearby item, triggering _on_device_selector_changed
+        
+        # Trigger change detection so Apply button becomes enabled
+        self._check_for_changes()
 
     def _update_remove_button_state(self):
         """Disable remove button if only one device remains."""
@@ -218,6 +254,9 @@ class ConfigurePage(Gtk.Box):
     def _save_current_form_state(self):
         """Reads all UI widgets and updates the self.device_configs dict."""
         dev = self.current_device
+        if not dev:
+            return
+
         if dev not in self.device_configs:
             self.device_configs[dev] = {}
             
@@ -422,109 +461,16 @@ class ConfigurePage(Gtk.Box):
 
     def _get_pending_changes(self):
         """
-        Compare UI state (self.device_configs) with LIVE System state (Sysfs).
-        Returns a list of (Action, Device, [Change Details]).
+        Calculates the differences between the current UI state and the actual
+        on-disk configuration. Returns a list of changes.
+        
+        Note: This compares against the CONFIG FILE, not the LIVE system.
+        The Status Page shows live state; Configure Page is a config file editor.
         """
-        changes = []
-        
-        # 1. Read LIVE State (Source of Truth for Existence and Physical Props)
-        live_infos = zdevice_ctl.list_devices()
-        live_devices = {d.name: d for d in live_infos}
-        
-        # 2. Read Disk Config (Source of Truth for Metadata: Priority, Options, Limits)
-        disk_parser = zram_config.read_zram_config()
-        
-        # 3. Read UI Config (Proposed)
+        # Update internal state from UI widgets first
         self._save_current_form_state()
-        ui_devices = set(self.device_configs.keys())
-        
-        # A. Deletions (In LIVE but not in UI)
-        for dev in set(live_devices.keys()) - ui_devices:
-            changes.append(("DELETE", dev, ["Remove active device"]))
-            
-        # B. Creations (In UI but not in LIVE)
-        for dev in ui_devices - set(live_devices.keys()):
-            changes.append(("CREATE", dev, ["Create new device"]))
-            
-        # C. Modifications (In Both)
-        for dev in ui_devices.intersection(set(live_devices.keys())):
-            ui_cfg = self.device_configs[dev]
-            live_info = live_devices[dev]
-            disk_sect = disk_parser[dev] if dev in disk_parser else {}
-            
-            diffs = []
-            
-            # --- Physical Props (Compare vs LIVE) ---
-            
-            # 1. Size
-            ui_size_str = ""
-            if ui_cfg["size_mode"] == 1: ui_size_str = "100% RAM"
-            elif ui_cfg["size_mode"] == 0: ui_size_str = "50% RAM"
-            else: ui_size_str = ui_cfg["custom_size"] or "(Empty)"
-            
-            live_size = live_info.disksize
-            
-            if ui_cfg["size_mode"] == 2:
-                # Custom mode comparison
-                if ui_size_str != live_size:
-                     diffs.append(f"Size: {live_size} → {ui_size_str}")
-            else:
-                # Formula mode: Always informative
-                 diffs.append(f"Size: {live_size} → {ui_size_str}")
+        return ConfigureLogic.calculate_changes(self.device_configs)
 
-            # 2. Algorithm
-            ui_algos = ["zstd", "lzo-rle", "lz4"]
-            if ui_cfg["algorithm"] == 3:
-                 ui_algo_str = ui_cfg["custom_algorithm"] or "(Empty)"
-            else:
-                 ui_algo_str = ui_algos[ui_cfg["algorithm"]]
-                 
-            live_algo = live_info.algorithm
-            
-            if ui_algo_str != live_algo:
-                diffs.append(f"Algo: {live_algo} → {ui_algo_str}")
-
-            # 3. Writeback Device
-            try:
-                wb_stat = zdevice_ctl.get_writeback_status(dev)
-                live_wb = wb_stat.backing_dev
-            except Exception:
-                live_wb = None
-
-            ui_wb = ui_cfg["writeback_dev"]
-            if ui_wb == "None Selected": ui_wb = None
-            
-            if ui_wb != live_wb:
-                diffs.append(f"Writeback: {live_wb or 'None'} → {ui_wb or 'None'}")
-
-
-            # --- Metadata Props (Compare vs DISK Config) ---
-            
-            # Priority
-            ui_prio = str(ui_cfg["priority"])
-            disk_prio = disk_sect.get("swap-priority", "100")
-            if ui_prio != disk_prio:
-                diffs.append(f"Priority: {disk_prio} → {ui_prio}")
-
-            # Resident Limit
-            ui_res = ui_cfg["resident_limit"]
-            disk_res = disk_sect.get("zram-resident-limit", "")
-            if ui_res != disk_res:
-                diffs.append(f"Res. Limit: {disk_res or 'None'} → {ui_res or 'None'}")
-                
-            # Options
-            ui_opt = ui_cfg["options"]
-            disk_opt = disk_sect.get("options", "")
-            if ui_opt != disk_opt:
-                 diffs.append(f"Options: {disk_opt or 'None'} → {ui_opt or 'None'}")
-
-            # Add to mods if any diffs found
-            if diffs:
-                changes.append(("MODIFY", dev, diffs))
-                
-        return changes
-
-        return changes
 
     def _on_revert_clicked(self, btn):
         """
@@ -546,96 +492,14 @@ class ConfigurePage(Gtk.Box):
             # Toast?
             return
 
+        # Generate Diff
+        diff_text = ConfigureLogic.get_config_diff(self.device_configs)
+
         # Show Confirmation Dialog
-        self._show_confirmation_dialog(changes)
+        self._show_confirmation_dialog(changes, diff_text)
 
-    def _show_confirmation_dialog(self, changes):
-        # Use Adw.MessageDialog for native look and proper content layout
-        dialog = Adw.MessageDialog(
-            transient_for=self.get_root(),
-            heading="Confirm Changes",
-            body="The following changes will be applied to your system:",
-        )
-
-        # Buttons
-        dialog.add_response("cancel", "Cancel")
-        dialog.add_response("apply", "Apply")
-        
-        # Style the Apply button as suggested
-        dialog.set_response_appearance("apply", Adw.ResponseAppearance.SUGGESTED)
-
-        # Create a content area for the list
-        # Using a scrolled window in case there are many changes
-        scrolled = Gtk.ScrolledWindow()
-        scrolled.set_max_content_height(300)
-        scrolled.set_propagate_natural_height(True)
-        
-        list_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        list_box.set_margin_top(12)
-        list_box.set_margin_bottom(12)
-        list_box.set_margin_start(12)
-        list_box.set_margin_end(12)
-        
-        scrolled.set_child(list_box)
-        
-        for action, dev, details in changes:
-            row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-            row.set_margin_bottom(6) # Reduced margin
-            
-            # Icon/Badge
-            if action == "DELETE":
-                icon = Gtk.Image.new_from_icon_name("user-trash-symbolic")
-                icon.add_css_class("error")
-                lbl_tag = "DELETE"
-            elif action == "CREATE":
-                icon = Gtk.Image.new_from_icon_name("list-add-symbolic")
-                icon.add_css_class("success")
-                lbl_tag = "NEW"
-            else:
-                icon = Gtk.Image.new_from_icon_name("document-edit-symbolic")
-                icon.add_css_class("accent")
-                lbl_tag = "MOD"
-            
-            # Wrapper for Icon + Tag
-            tag_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-            tag_box.set_size_request(80, -1) # Slightly tighter width
-            tag_box.set_valign(Gtk.Align.START)
-            tag_box.append(icon)
-            
-            # Small monospace-ish tag look? Or just bold caption?
-            # Let's use a small bold label
-            tag_lbl = Gtk.Label(label=lbl_tag)
-            tag_lbl.add_css_class("caption-heading") # caption-heading is usually bold small caps
-            tag_box.append(tag_lbl)
-            
-            # Details Column
-            text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2) # Tighter spacing
-            
-            # Device Header - Use markup for bold instead of "heading" class
-            lbl_dev = Gtk.Label(xalign=0)
-            lbl_dev.set_markup(f"<b>{dev}</b>")
-            text_box.append(lbl_dev)
-            
-            # Detail Rows
-            if isinstance(details, list):
-                for item in details:
-                    lbl = Gtk.Label(label=f"• {item}", xalign=0)
-                    lbl.add_css_class("caption") # Use caption for smaller text
-                    lbl.set_wrap(True)
-                    lbl.set_max_width_chars(60)
-                    text_box.append(lbl)
-            else:
-                lbl_desc = Gtk.Label(label=str(details), xalign=0)
-                lbl_desc.add_css_class("caption")
-                text_box.append(lbl_desc)
-            
-            row.append(tag_box)
-            row.append(text_box)
-            
-            list_box.append(row)
-            
-        dialog.set_extra_child(scrolled)
-        
+    def _show_confirmation_dialog(self, changes, diff_text):
+        dialog = ConfirmationDialog(self.get_root(), changes, diff_text)
         dialog.connect("response", self._on_confirm_response, changes)
         dialog.present()
 
@@ -652,6 +516,10 @@ class ConfigurePage(Gtk.Box):
         self.apply_button.set_sensitive(False)
         self.apply_button.set_label("Applying...")
         self.device_selector_row.set_sensitive(False)
+        self.live_apply_switch.set_sensitive(False)
+        
+        # Check experimental switch
+        live_apply = self.live_apply_switch.get_active()
         
         # 2. Start Thread
         # We need to pass the FULL CONFIGS because Modifications need the values
@@ -661,63 +529,19 @@ class ConfigurePage(Gtk.Box):
         
         thread = threading.Thread(
             target=self._apply_worker_batch,
-            args=(changes, data_snapshot),
+            args=(changes, data_snapshot, live_apply),
             daemon=True
         )
         thread.start()
 
-    def _apply_worker_batch(self, changes, device_configs_snapshot):
-        # ... refactored worker to handle list ...
-        # For now, simplistic iteration.
-        
-        logs = []
-        overall_success = True
-        
-        try:
-            for action, dev, desc in changes:
-                res = None
-                if action == "DELETE":
-                    res = zdevice_ctl.remove_device_config(dev)
-                    
-                else: # CREATE or MODIFY
-                    # Construct updates dict from snapshot
-                    cfg = device_configs_snapshot.get(dev)
-                    # ... reuse the update dict construction logic ...
-                    updates = {}
-                    if cfg["size_mode"] == 1: updates["zram-size"] = "ram"
-                    elif cfg["size_mode"] == 0: updates["zram-size"] = "min(ram / 2, 4096)"
-                    else: updates["zram-size"] = cfg["custom_size"]
-                    
-                    algos = ["zstd", "lzo-rle", "lz4"]
-                    if cfg["algorithm"] == 3:
-                        updates["compression-algorithm"] = cfg["custom_algorithm"]
-                    else:
-                        updates["compression-algorithm"] = algos[cfg["algorithm"]]
-                        
-                    updates["swap-priority"] = str(cfg["priority"])
-                    
-                    # New Fields Updates
-                    updates["zram-resident-limit"] = cfg["resident_limit"] if cfg["resident_limit"] else None
-                    updates["options"] = cfg["options"] if cfg["options"] else None
-
-                    wb = cfg["writeback_dev"]
-                    updates["writeback-device"] = wb if wb != "None Selected" else None
-                    
-                    # FS Mode omitted for brevity/safety unless enabled
-                    updates["fs-type"] = None
-                    updates["mount-point"] = None
-                    
-                    res = zdevice_ctl.apply_device_config(dev, updates, restart_service=False)
-                
-                logs.append(f"{dev}: {res.message}")
-                if not res.success:
-                    overall_success = False
+    def _apply_worker_batch(self, changes, device_configs_snapshot, live_apply):
+        """
+        Executes the changes in a background thread using ConfigureLogic.
+        """
+        success, logs = ConfigureLogic.apply_worker_batch(changes, device_configs_snapshot, live_apply)
             
-        except Exception as e:
-            overall_success = False
-            logs.append(str(e))
-            
-        GLib.idle_add(self._on_apply_finished, overall_success, "\n".join(logs))
+        # Post-process on main thread
+        GLib.idle_add(self._on_apply_finished, success, "\n".join(logs))
 
 
 
@@ -729,6 +553,7 @@ class ConfigurePage(Gtk.Box):
         # 1. Unlock UI
         self.apply_button.set_label("Apply Changes")
         self.device_selector_row.set_sensitive(True)
+        self.live_apply_switch.set_sensitive(True)
         # Re-check for changes to set button sensitivity correctly (should be false if success)
         # But wait, checking for changes effectively re-reads UI vs Disk.
         # If disk was updated, then there should be no changes.
@@ -798,6 +623,36 @@ class ConfigurePage(Gtk.Box):
         Attempts to highlight the file in the file manager using DBus.
         Falls back to opening the parent folder if DBus fails.
         """
+        # (omitted for brevity)
+        pass
+
+    def _on_global_settings_clicked(self, btn):
+        """Open the Global Config Dialog."""
+        current = zram_config.read_global_config()
+        dialog = GlobalConfigDialog(parent=self.get_root(), current_config=current)
+        dialog.connect("applied", self._on_global_applied)
+        dialog.present()
+        
+    def _on_global_applied(self, dialog):
+        updates = dialog.updates
+        # We process this immediately (blocking UI briefly is fine for this action) or use thread.
+        # Since it's a simple write, we can do it here and show toast.
+        
+        # We need to use zdevice_ctl to ensure safety/consistency
+        res = zdevice_ctl.apply_global_config(updates)
+        
+        if res.success:
+            self._show_toast("Global settings updated.")
+        else:
+            # Show Error
+            dlg = Adw.MessageDialog(
+                 transient_for=self.get_root(),
+                 heading="Error Updating Global Settings",
+                 body=res.message
+            )
+            dlg.add_response("ok", "OK")
+            dlg.present()
+
         if not os.path.exists(path):
              self._open_resource(os.path.dirname(path))
              return
