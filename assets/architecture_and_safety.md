@@ -69,6 +69,7 @@ z-manager/
 │   ├── main_window.py    # Main App Window and Navigation Stack.
 │   ├── status_page.py    # Dashboard: Displays device status and stats.
 │   ├── configure_page.py # Settings: Device size, algorithm, writeback.
+│   ├── configure_logic.py # Settings Logic: Diff engine & command orchestration.
 │   ├── tune_page.py      # Kernel Tuning: Swappiness, zswap disable.
 │   ├── custom_widgets.py # Custom Widgets: CompressionRing, MemoryTube.
 │   ├── device_picker.py  # Dialog: Block device selection for writeback.
@@ -255,10 +256,14 @@ Z-Manager is designed to interact with low-level kernel subsystems. Several laye
 
 ### 4.4. Atomic Configuration File Writes
 
+### 4.4. Atomic Configuration File Writes & Backup
+
 *   **Where:** `core/os_utils.atomic_write_to_file()`
-*   **What:** When writing configuration files (like `zram-generator.conf` or `sysctl.d` files), the application writes to a temporary file first, then uses `os.rename()` to atomically replace the original.
-*   **What:** When writing configuration files (like `zram-generator.conf` or `sysctl.d` files), the application writes to a temporary file first, then uses `os.rename()` to atomically replace the original.
-*   **Why:** This prevents file corruption if the application crashes or is killed mid-write.
+*   **What:**
+    1.  **Backup:** Before overwriting, the existing file is copied to `.bak` if `backup=True`.
+    2.  **Diff-Write:** The application checks if the content has *actually changed* before writing. This avoids unnecessary I/O and race conditions.
+    3.  **Atomic Move:** The new content is written to a temporary file, then `os.rename()` atomically replaces the target.
+*   **Why:** Prevents data loss during crashes and preserves the previous working state via backups.
 
 ### 4.5. "GParted-Style" Transactional Safety (Config Application)
 
@@ -267,12 +272,24 @@ Z-Manager is designed to interact with low-level kernel subsystems. Several laye
     1.  **Change Detection:** It calculates a diff between the current UI state and the actual disk configuration.
     2.  **Confirmation:** It presents a dialog listing all pending actions (`[DELETE] zram1`, `[MOD] zram0`, etc.) for user approval.
     3.  **Batched Execution:** A background thread writes the changes to `zram-generator.conf`.
-    4.  **Safe by Default:** The default behavior is now `restart_service=False`. The application saves the configuration to disk but does **not** trigger a destructive restart of the device. This ensures zero risk of data loss on the live system. Changes take effect on the next reboot (or manual service restart).
+    4.  **Safe by Default (Config-Only Mode):** The default behavior is `restart_service=False`. The application saves the configuration to disk but does **not** trigger a destructive restart of the device. This ensures zero risk of data loss on the live system. Changes take effect on the next reboot (or manual service restart).
+    5.  **Experimental Live Changes:** A toggle allows users to opt-in to immediate application (`restart_service=True`). This triggers a sequence of `pkexec` operations to stop the service, write the config, reload the daemon, and restart the service. This is powerful but carries the risk of interrupting active swap usage.
 
 ### 4.6. Configuration Order Enforcement
 
 *   **Where:** `core/zdevice_ctl._reconfigure_device_sysfs()`
 *   **What:** The kernel requires that `backing_dev` is set **before** `disksize`. The application enforces this order internally, preventing a common user error.
+
+### 4.7. Politeness & Config Preservation
+
+*   **Where:** `core/config.py`, `core/config_writer.py`
+*   **What:** The application uses `ConfigObj` instead of the standard `configparser` library.
+*   **Why:** standard `configparser` destroys comments and formatting when rewriting files. `ConfigObj` preserves:
+    *   Inline comments (`# ...`)
+    *   Section headers and ordering
+    *   Blank lines and indentation
+    *   Properties not managed by the GUI
+*   **Effect:** This makes Z-Manager a "polite guest" in the user's configuration file, allowing power users to maintain custom comments alongside GUI-managed settings.
 
 ---
 
@@ -626,14 +643,13 @@ Used to set:
 8.  **If safe:** Dialog returns the selected device path.
 9.  `ConfigurePage` stores the selection and enables the "Apply" button.
 10. User clicks "Apply".
-10. User clicks "Apply".
-11. `ConfigurePage` calculates the change, shows a Confirmation Dialog (`[MOD] zram0: Writeback -> /dev/sda3`).
-12. User confirms.
-13. `ConfigurePage` spawns a background thread `_apply_worker`.
-14. The worker calls `zdevice_ctl.apply_device_config("zram0", updates, restart_service=False)`.
-15. The configuration file is updated and systemd is reloaded, but the device is **not** restarted.
-16. The UI displays "Configuration saved. Restart required."
-13. UI is refreshed to show the new writeback status.
+11. `ConfigurePage` calculates changes and checks the "Apply Immediately" switch.
+12. **Config-Only (Switch OFF):**
+    *   `zdevice_ctl` saves the file and reloads systemd (if needed) but does **not** restart the service.
+    *   UI displays "Configuration saved. Restart required."
+13. **Live Apply (Switch ON):**
+    *   `zdevice_ctl` stops the service, saves the file, reloads systemd, and restarts the service.
+    *   UI displays "Changes applied successfully."
 
 ---
 

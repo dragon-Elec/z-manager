@@ -21,7 +21,10 @@ The generator looks for the main configuration file in the following order (firs
 ### Syntax
 * INI-style format.
 * **Sections**: `[zramN]` where N is a non-negative integer (e.g., `[zram0]`).
-* **Global Section**: Before any headers, supports `set!var=cmd`.
+* **Global Section**: `[zram-generator]`.
+    *   Found before any `[zramN]` headers.
+    *   Supports `set!var=cmd` for variables.
+    *   **Defaults**: Can set default properties for all devices (e.g., `compression-algorithm`, `zram-size`).
 
 ### Options (per `[zramN]` section)
 **Note**: Devices with a final size of **0** are discarded (not created).
