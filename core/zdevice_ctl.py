@@ -441,13 +441,13 @@ def reset_device(device_name: str, confirm: bool = False) -> UnitResult:
         return UnitResult(success=False, message=str(e))
 
 
-def apply_device_config(device_name: str, config_updates: Dict[str, Any], restart_service: bool = False) -> UnitResult:
+def apply_device_config(device_name: str, config_updates: Dict[str, Any], restart_service: bool = False, reload_daemon: bool = True) -> UnitResult:
     """
     Orchestrate the application of a zram configuration:
     1. Update the zram-generator config object
     2. Atomically write the config to disk (via os_utils)
-    3. Reload systemd daemon
-    4. Restart the specific device service
+    3. Reload systemd daemon (optional)
+    4. Restart the specific device service (optional)
     
     This function centralizes the safety/orchestration logic.
     """
@@ -455,7 +455,7 @@ def apply_device_config(device_name: str, config_updates: Dict[str, Any], restar
         # Import internally to avoid circular top-level imports if any
         # (Though checks show config_writer imports config, zdevice_ctl checks config)
         from core.config_writer import update_zram_config
-        from core.os_utils import atomic_write_to_file
+        from core.os_utils import pkexec_write, pkexec_daemon_reload
         from core.config import CONFIG_PATH
 
         # 1. Generate Config
@@ -463,13 +463,16 @@ def apply_device_config(device_name: str, config_updates: Dict[str, Any], restar
         if not ok:
             return UnitResult(success=False, message=f"Config generation failed: {err}")
 
-        # 2. Write to File
-        ok_write, err_write = atomic_write_to_file(CONFIG_PATH, rendered_config)
+        # 2. Write to File (using pkexec for privilege escalation)
+        ok_write, err_write = pkexec_write(CONFIG_PATH, rendered_config)
         if not ok_write:
             return UnitResult(success=False, message=f"Write failed: {err_write}")
 
-        # 3. Reload Daemon
-        systemd_daemon_reload()
+        # 3. Reload Daemon (using pkexec)
+        if reload_daemon:
+            ok_reload, err_reload = pkexec_daemon_reload()
+            if not ok_reload:
+                return UnitResult(success=False, message=f"Daemon reload failed: {err_reload}")
 
         # 4. Restart Service
         if restart_service:
@@ -485,36 +488,63 @@ def apply_device_config(device_name: str, config_updates: Dict[str, Any], restar
         return UnitResult(success=False, message=str(e))
 
 
-def remove_device_config(device_name: str) -> UnitResult:
+def apply_global_config(updates: Dict[str, Any]) -> UnitResult:
     """
-    Remove a device configuration and stop its service.
+    Applies global configuration updates to [zram-generator] section.
     """
     try:
-        from core.config_writer import remove_device_from_config
+        from core.config_writer import update_global_config
         from core.os_utils import atomic_write_to_file
         from core.config import CONFIG_PATH
         
-        # 1. Stop Service First (Safety)
-        # We try to stop it. If it fails, we proceed? 
-        # Ideally we loop swapoff first.
-        # But systemd stop should handle swapoff if unit is proper.
-        svc = f"systemd-zram-setup@{device_name}.service"
-        # We don't have a direct 'stop' helper, but we can reuse run or add one.
-        # Let's assume stopping the service is 'systemctl stop ...'
-        run(["systemctl", "stop", svc], check=False)
+        # 1. Generate Config
+        ok, err, rendered = update_global_config(updates)
+        if not ok:
+            return UnitResult(success=False, message=f"Config generation failed: {err}")
+            
+        # 2. Write
+        ok_w, err_w = atomic_write_to_file(CONFIG_PATH, rendered, backup=True)
+        if not ok_w:
+            return UnitResult(success=False, message=f"Write failed: {err_w}")
+            
+        # 3. Reload Daemon
+        systemd_daemon_reload()
+        
+        return UnitResult(success=True, message="Global configuration updated.")
+    except Exception as e:
+        return UnitResult(success=False, message=str(e))
+
+
+def remove_device_config(device_name: str, apply_now: bool = True) -> UnitResult:
+    """
+    Remove a device configuration and optionally stop its service.
+    """
+    try:
+        from core.config_writer import remove_device_from_config
+        from core.os_utils import pkexec_write, pkexec_daemon_reload, pkexec_systemctl
+        from core.config import CONFIG_PATH
+        
+        # 1. Stop Service First (Safety, using pkexec)
+        # Only stop if apply_now is True
+        if apply_now:
+            svc = f"systemd-zram-setup@{device_name}.service"
+            pkexec_systemctl("stop", svc)  # Best effort, don't fail on error
         
         # 2. Update Config
         ok, err, rendered = remove_device_from_config(device_name)
         if not ok:
             return UnitResult(success=False, message=f"Config update failed: {err}")
             
-        # 3. Write Config
-        ok_w, err_w = atomic_write_to_file(CONFIG_PATH, rendered)
+        # 3. Write Config (using pkexec)
+        ok_w, err_w = pkexec_write(CONFIG_PATH, rendered)
         if not ok_w:
              return UnitResult(success=False, message=f"Write failed: {err_w}")
              
-        # 4. Reload Daemon (to make systemd realize unit is gone/changed)
-        systemd_daemon_reload()
+        # 4. Reload Daemon (using pkexec)
+        if apply_now:
+            ok_reload, err_reload = pkexec_daemon_reload()
+            if not ok_reload:
+                return UnitResult(success=False, message=f"Daemon reload failed: {err_reload}")
         
         return UnitResult(success=True, message=f"Device {device_name} removed.")
         
@@ -537,7 +567,7 @@ def persist_writeback(device_name: str, writeback_device: Optional[str], apply_n
         
         # CRITICAL: zram-generator requires zram-size. If the section is new,
         # we must provide a default size to prevent the service from failing.
-        if device_name not in cfg or not cfg.has_option(device_name, 'zram-size'):
+        if device_name not in cfg or 'zram-size' not in cfg[device_name]:
             updates['zram-size'] = '1G'
 
         if writeback_device is None:
@@ -551,7 +581,7 @@ def persist_writeback(device_name: str, writeback_device: Optional[str], apply_n
         if not ok:
             raise ValidationError(err or "Failed to update zram-generator.conf")
 
-        write_ok, write_err = atomic_write_to_file(CONFIG_PATH, rendered_config)
+        write_ok, write_err = atomic_write_to_file(CONFIG_PATH, rendered_config, backup=True)
         if not write_ok:
             raise ValidationError(write_err or "Failed to write config file")
 

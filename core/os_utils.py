@@ -525,9 +525,44 @@ def is_root() -> bool:
     """Checks if the script is running with root privileges."""
     return os.geteuid() == 0
 
-def atomic_write_to_file(file_path: str, content: str) -> tuple[bool, str | None]:
-    """Safely writes content to a system file using an atomic move operation."""
+def atomic_write_to_file(file_path: str, content: str, backup: bool = False) -> tuple[bool, str | None]:
+    """
+    Safely writes content to a system file using an atomic move operation.
+    
+    Args:
+        file_path: Target file path.
+        content: String content to write.
+        backup: If True and file exists, creates a .bak copy before overwriting.
+        
+    Returns:
+        (success, error_message)
+    """
     try:
+        # 1. Diff-Based Writing: Check if content actually changed
+        if os.path.exists(file_path):
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    current_content = f.read()
+                if current_content == content:
+                    return True, None
+            except Exception:
+                # If we can't read it (e.g. permission), assume it changed and proceed to write
+                pass
+
+        # 2. Backup Mechanism
+        if backup and os.path.exists(file_path):
+            try:
+                backup_path = f"{file_path}.bak"
+                shutil.copy2(file_path, backup_path)
+            except Exception as e:
+                # We log but might choose not to fail the entire operation just for backup
+                # For now, let's treat backup failure as a warning but proceed, 
+                # OR fail if strictness is required. 
+                # Given "Safety & Resilience", failing if backup fails is safer?
+                # But permissions might allow write but not copy. 
+                # Let's return error to be safe.
+                return False, f"Backup failed: {e}"
+
         dir_name = os.path.dirname(file_path)
         os.makedirs(dir_name, exist_ok=True)
         fd, temp_path = tempfile.mkstemp(dir=dir_name, text=True)
@@ -585,3 +620,113 @@ def parse_size_to_bytes(size_str: str) -> int:
         return int(value * multipliers[unit])
         
     return 0
+
+
+# ============ pkexec helpers ============
+
+def _get_helper_path() -> str:
+    """Get the absolute path to the zman-helper.py script."""
+    # The helper is in the same directory as this module
+    return os.path.join(os.path.dirname(__file__), "zman_helper.py")
+
+
+def pkexec_write(file_path: str, content: str) -> tuple[bool, str | None]:
+    """
+    Write content to a file using pkexec for privilege escalation.
+    
+    If already running as root, falls back to direct write.
+    
+    Args:
+        file_path: Target file path.
+        content: String content to write.
+        
+    Returns:
+        (success, error_message)
+    """
+    if is_root():
+        # Already root, use direct write
+        return atomic_write_to_file(file_path, content, backup=True)
+    
+    helper_path = _get_helper_path()
+    
+    try:
+        proc = subprocess.run(
+            ["pkexec", helper_path, "write", file_path],
+            input=content,
+            text=True,
+            capture_output=True
+        )
+        
+        if proc.returncode == 0:
+            return True, None
+        else:
+            return False, proc.stderr.strip() or f"pkexec write failed (code {proc.returncode})"
+    except Exception as e:
+        return False, str(e)
+
+
+def pkexec_daemon_reload() -> tuple[bool, str | None]:
+    """
+    Run systemctl daemon-reload using pkexec.
+    
+    Returns:
+        (success, error_message)
+    """
+    if is_root():
+        try:
+            run(["systemctl", "daemon-reload"], check=True)
+            return True, None
+        except SystemCommandError as e:
+            return False, str(e)
+    
+    helper_path = _get_helper_path()
+    
+    try:
+        proc = subprocess.run(
+            ["pkexec", helper_path, "daemon-reload"],
+            capture_output=True,
+            text=True
+        )
+        
+        if proc.returncode == 0:
+            return True, None
+        else:
+            return False, proc.stderr.strip() or f"pkexec daemon-reload failed (code {proc.returncode})"
+    except Exception as e:
+        return False, str(e)
+
+
+def pkexec_systemctl(action: str, service: str) -> tuple[bool, str | None]:
+    """
+    Run systemctl action on a service using pkexec.
+    
+    Args:
+        action: One of 'restart', 'stop', 'start'
+        service: Service name
+        
+    Returns:
+        (success, error_message)
+    """
+    if is_root():
+        try:
+            run(["systemctl", action, service], check=True)
+            return True, None
+        except SystemCommandError as e:
+            return False, str(e)
+    
+    helper_path = _get_helper_path()
+    
+    try:
+        proc = subprocess.run(
+            ["pkexec", helper_path, action, service],
+            capture_output=True,
+            text=True
+        )
+        
+        if proc.returncode == 0:
+            return True, None
+        else:
+            return False, proc.stderr.strip() or f"pkexec {action} failed (code {proc.returncode})"
+    except Exception as e:
+        return False, str(e)
+
