@@ -171,20 +171,33 @@ class ConfigureLogic:
             return ""
 
     @staticmethod
-    def get_config_diff(device_configs: Dict[str, Any]) -> str:
+    def get_config_contents(device_configs: Dict[str, Any]) -> Tuple[str, str]:
         """
-        Returns a unified diff string between the current disk config and the UI state.
+        Returns the raw (Current, New) configuration strings.
+        Used by the ConfirmationDialog to generate dynamic diffs.
         """
         # 1. Get Current Disk Content
         try:
             with open(zram_config.get_active_config_path(), 'r') as f:
-                current_lines = f.readlines()
+                current_content = f.read()
         except (FileNotFoundError, TypeError):
-            current_lines = []
+            current_content = ""
             
         # 2. Get Preview Content
         new_content = ConfigureLogic.generate_preview_config(device_configs)
-        new_lines = [line + "\n" for line in new_content.splitlines()]
+        
+        return current_content, new_content
+
+    @staticmethod
+    def get_config_diff(device_configs: Dict[str, Any]) -> str:
+        """
+        Returns a unified diff string between the current disk config and the UI state.
+        DEPRECATED: Use get_config_contents and generate diff in UI.
+        """
+        current_content, new_content = ConfigureLogic.get_config_contents(device_configs)
+        
+        current_lines = current_content.splitlines(keepends=True)
+        new_lines = new_content.splitlines(keepends=True)
         
         # 3. Generate Diff
         diff = difflib.unified_diff(

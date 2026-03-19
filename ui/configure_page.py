@@ -16,7 +16,9 @@ import threading
 from core import zdevice_ctl, config as zram_config
 from dataclasses import dataclass
 from ui.configure_logic import ConfigureLogic
-from ui.confirmation_dialog import ConfirmationDialog
+from ui.configure_logic import ConfigureLogic
+from ui.confirmation_dialog import ConfirmationWindow
+from ui.live_window import LiveModeWindow
 
 
 def get_ui_path(file_name):
@@ -492,14 +494,14 @@ class ConfigurePage(Gtk.Box):
             # Toast?
             return
 
-        # Generate Diff
-        diff_text = ConfigureLogic.get_config_diff(self.device_configs)
+        # Get Raw Content for Dynamic Diff
+        old_txt, new_txt = ConfigureLogic.get_config_contents(self.device_configs)
 
         # Show Confirmation Dialog
-        self._show_confirmation_dialog(changes, diff_text)
+        self._show_confirmation_dialog(changes, old_txt, new_txt)
 
-    def _show_confirmation_dialog(self, changes, diff_text):
-        dialog = ConfirmationDialog(self.get_root(), changes, diff_text)
+    def _show_confirmation_dialog(self, changes, old_txt, new_txt):
+        dialog = ConfirmationWindow(self.get_root(), changes, old_txt, new_txt)
         dialog.connect("response", self._on_confirm_response, changes)
         dialog.present()
 
@@ -521,18 +523,37 @@ class ConfigurePage(Gtk.Box):
         # Check experimental switch
         live_apply = self.live_apply_switch.get_active()
         
-        # 2. Start Thread
-        # We need to pass the FULL CONFIGS because Modifications need the values
-        # or we just pass the list and let the worker figure it out from self.device_configs?
-        # Thread needs a copy of data to be safe.
+        # Snapshot config data
         data_snapshot = {k: v.copy() for k,v in self.device_configs.items()}
         
-        thread = threading.Thread(
-            target=self._apply_worker_batch,
-            args=(changes, data_snapshot, live_apply),
-            daemon=True
-        )
-        thread.start()
+        if live_apply:
+            # --- LIVE MODE: Use the new streaming window ---
+            win = LiveModeWindow(changes, data_snapshot, transient_for=self.get_root(), modal=True)
+            # Connect to close-request to refresh UI when done
+            win.connect("close-request", self._on_live_window_closed)
+            win.present()
+        else:
+            # --- CONFIG MODE: Use the existing background thread ---
+            thread = threading.Thread(
+                target=self._apply_worker_batch,
+                args=(changes, data_snapshot, live_apply),
+                daemon=True
+            )
+            thread.start()
+
+    def _on_live_window_closed(self, win):
+        """Called when LiveModeWindow closes. We assume it finished."""
+        # Unlock UI
+        self.apply_button.set_label("Apply Changes")
+        self.device_selector_row.set_sensitive(True)
+        self.live_apply_switch.set_sensitive(True)
+        
+        # Reload form to sync with whatever happened
+        self._load_form_state(self.current_device)
+        self._check_for_changes()
+        
+        # Return False to allow the window to close
+        return False
 
     def _apply_worker_batch(self, changes, device_configs_snapshot, live_apply):
         """
