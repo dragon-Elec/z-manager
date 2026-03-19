@@ -17,6 +17,12 @@ Usage:
     
     pkexec /path/to/zman-helper.py stop <service>
         Runs systemctl stop <service>
+
+    pkexec /path/to/zman-helper.py live-apply <device> <config_path>
+        Batched: Stop -> Write (stdin) -> Reload -> Restart
+
+    pkexec /path/to/zman-helper.py live-remove <device> <config_path>
+        Batched: Stop -> Write (stdin) -> Reload
 """
 
 import sys
@@ -111,7 +117,72 @@ def cmd_systemctl(action: str, service: str) -> int:
         return e.returncode
 
 
+
+def cmd_live_apply(device_name: str, config_path: str) -> int:
+    """
+    Batched operation: Stop -> Write -> Daemon Reload -> Restart.
+    Prints progress markers ">> Step Name" for the UI to parse.
+    """
+    service = f"systemd-zram-setup@{device_name}.service"
+    
+    if not is_path_allowed(config_path):
+        print(f"Error: Path not allowed: {config_path}", file=sys.stderr)
+        return 1
+    
+    # 1. STOP
+    print(f">> Stopping {service}...", flush=True)
+    # We ignore errors on stop (service might not be running)
+    subprocess.run(["systemctl", "stop", service], stderr=subprocess.STDOUT)
+    
+    # 2. WRITE
+    print(f">> Writing configuration...", flush=True)
+    if cmd_write(config_path) != 0:
+        return 1
+        
+    # 3. RELOAD
+    print(f">> Reloading systemd...", flush=True)
+    if cmd_daemon_reload() != 0:
+        return 1
+        
+    # 4. RESTART
+    print(f">> Restarting {service}...", flush=True)
+    if cmd_systemctl("restart", service) != 0:
+        return 1
+        
+    print(">> Done", flush=True)
+    return 0
+
+
+def cmd_live_remove(device_name: str, config_path: str) -> int:
+    """
+    Batched operation: Stop -> Write -> Daemon Reload.
+    """
+    service = f"systemd-zram-setup@{device_name}.service"
+    
+    if not is_path_allowed(config_path):
+        print(f"Error: Path not allowed: {config_path}", file=sys.stderr)
+        return 1
+
+    # 1. STOP
+    print(f">> Stopping {service}...", flush=True)
+    subprocess.run(["systemctl", "stop", service], stderr=subprocess.STDOUT)
+
+    # 2. WRITE
+    print(f">> Writing configuration...", flush=True)
+    if cmd_write(config_path) != 0:
+        return 1
+
+    # 3. RELOAD
+    print(f">> Reloading systemd...", flush=True)
+    if cmd_daemon_reload() != 0:
+        return 1
+    
+    print(">> Done", flush=True)
+    return 0
+
+
 def main():
+
     if len(sys.argv) < 2:
         print(__doc__)
         return 1
@@ -132,6 +203,18 @@ def main():
             print(f"Usage: zman-helper.py {cmd} <service>", file=sys.stderr)
             return 1
         return cmd_systemctl(cmd, sys.argv[2])
+    
+    elif cmd == "live-apply":
+        if len(sys.argv) < 4:
+            print("Usage: zman-helper.py live-apply <device> <config_path>", file=sys.stderr)
+            return 1
+        return cmd_live_apply(sys.argv[2], sys.argv[3])
+
+    elif cmd == "live-remove":
+        if len(sys.argv) < 4:
+            print("Usage: zman-helper.py live-remove <device> <config_path>", file=sys.stderr)
+            return 1
+        return cmd_live_remove(sys.argv[2], sys.argv[3])
     
     else:
         print(f"Unknown command: {cmd}", file=sys.stderr)

@@ -10,7 +10,7 @@ import tempfile
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Tuple, Dict, Any, List, Union
+from typing import Optional, Tuple, Dict, Any, List, Union, Iterator
 
 
 # ============ Domain Errors ============
@@ -50,6 +50,40 @@ def run(cmd: List[str], check: bool = False, env: Optional[Dict[str, str]] = Non
     if check and proc.returncode != 0:
         raise SystemCommandError(cmd, proc.returncode, proc.stdout, proc.stderr)
     return res
+
+
+def stream_command(cmd: List[str], env: Optional[Dict[str, str]] = None, input_text: Optional[str] = None) -> Iterator[str]:
+    """
+    Run a command and yield its stdout (and stderr merged) line by line.
+    Raises SystemCommandError on non-zero exit code.
+    """
+    stdin_arg = subprocess.PIPE if input_text else None
+    
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        stdin=stdin_arg,
+        text=True,
+        env=env,
+        bufsize=1  # Line buffered
+    )
+
+    if input_text and proc.stdin:
+        try:
+            proc.stdin.write(input_text)
+            proc.stdin.close()
+        except BrokenPipeError:
+            # Command exited early
+            pass
+
+    if proc.stdout:
+        for line in proc.stdout:
+            yield line.rstrip()
+
+    ret = proc.wait()
+    if ret != 0:
+        raise SystemCommandError(cmd, ret, "<Custom Stream Output>", "<Custom Stream Output>")
 
 
 def is_block_device(path: str) -> bool:
@@ -128,7 +162,43 @@ def check_device_safety(device_path: str) -> Tuple[bool, str]:
     fs_type = get_device_filesystem_type(device_path)
     if fs_type:
         return False, f"Device {device_path} contains a '{fs_type}' filesystem. usage would cause data loss."
+    
+    # Also check if it's active as swap or mounted (even if no blkid signature)
+    if is_device_active(device_path):
+        return False, f"Device {device_path} is currently active (mounted or swap)."
+        
     return True, ""
+
+
+def is_device_active(device_path: str) -> bool:
+    """Check if device is used as swap or mounted."""
+    # Resolve real path in case of symlinks like /dev/disk/by-uuid/...
+    try:
+        real_path = os.path.realpath(device_path)
+    except Exception:
+        real_path = device_path
+
+    # Check /proc/swaps
+    try:
+        with open("/proc/swaps", "r") as f:
+            for line in f:
+                if real_path in line or device_path in line:
+                    return True
+    except (IOError, OSError):
+        pass
+    
+    # Check /proc/mounts
+    try:
+        with open("/proc/mounts", "r") as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) >= 1:
+                     if parts[0] == real_path or parts[0] == device_path:
+                         return True
+    except (IOError, OSError):
+        pass
+        
+    return False
 
 
 # ============ Block Device Discovery ============
