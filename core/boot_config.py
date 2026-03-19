@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import tempfile
 import os
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -42,6 +43,8 @@ GRUB_ZSWAP_DISABLE_CONTENT = 'GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DE
 
 GRUB_PSI_ENABLE_PATH = Path("/etc/default/grub.d/98-z-manager-enable-psi.cfg")
 GRUB_PSI_ENABLE_CONTENT = 'GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT psi=1"'
+
+GRUB_RESUME_CONFIG_PATH = Path("/etc/default/grub.d/99-z-manager-resume.cfg")
 
 
 # --- Data Structure for Results ---
@@ -246,3 +249,76 @@ def set_psi_in_grub(enabled: bool) -> TuneResult:
             return TuneResult(success=True, changed=True, message="GRUB configuration to enable PSI was removed.", action_needed="update-grub")
         except Exception as e:
             return TuneResult(success=False, changed=False, message=f"Failed to remove GRUB PSI config: {e}")
+
+# --- Hibernation Boot Config ---
+
+def detect_bootloader() -> str:
+    """Returns 'grub', 'systemd-boot', or 'unknown'."""
+    if os.path.isdir("/boot/grub") or os.path.isdir("/boot/efi/EFI/ubuntu") or os.path.exists("/etc/default/grub"):
+        return "grub"
+    # Simplified check
+    return "unknown"
+
+def update_grub_resume(uuid: str, offset: int | None = None) -> TuneResult:
+    """
+    Add resume=UUID=... [resume_offset=...] to GRUB config.
+    """
+    params = f'resume=UUID={uuid}'
+    if offset is not None and offset > 0:
+        params += f' resume_offset={offset}'
+    
+    content = f'GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT {params}"'
+    
+    success, error = atomic_write_to_file(GRUB_RESUME_CONFIG_PATH, content + "\n")
+    if not success:
+        return TuneResult(False, False, f"Failed to write GRUB resume config: {error}")
+    
+    return TuneResult(True, True, "Resume configuration written to GRUB.", action_needed="update-grub")
+
+def detect_initramfs_system() -> str:
+    """Detects if system uses initramfs-tools, dracut, or mkinitcpio."""
+    if os.path.isdir("/etc/initramfs-tools"):
+        return "initramfs-tools" # Debian/Ubuntu
+    if shutil.which("dracut"):
+        return "dracut" # Fedora/RHEL
+    if os.path.exists("/etc/mkinitcpio.conf"):
+        return "mkinitcpio" # Arch
+    return "unknown"
+
+def configure_initramfs_resume(uuid: str, offset: int | None = None) -> TuneResult:
+    """
+    Configures initramfs (specifically for initramfs-tools on Debian/Ubuntu).
+    """
+    system = detect_initramfs_system()
+    if system != "initramfs-tools":
+        return TuneResult(True, False, f"Initramfs system '{system}' auto-configuration not fully implemented yet, but GRUB is set.", action_needed="manual-check")
+
+    # Creating /etc/initramfs-tools/conf.d/resume
+    conf_path = Path("/etc/initramfs-tools/conf.d/resume")
+    content = f"RESUME=UUID={uuid}\n"
+    if offset is not None and offset > 0:
+        content += f"RESUME_OFFSET={offset}\n"
+        
+    success, error = atomic_write_to_file(conf_path, content)
+    if not success:
+        return TuneResult(False, False, f"Failed to write initramfs resume config: {error}")
+        
+    return TuneResult(True, True, "Initramfs resume config updated.", action_needed="update-initramfs")
+
+def regenerate_initramfs() -> TuneResult:
+    system = detect_initramfs_system()
+    cmd = []
+    if system == "initramfs-tools":
+        cmd = ["update-initramfs", "-u"]
+    elif system == "dracut":
+        cmd = ["dracut", "-f", "--regenerate-all"]
+    elif system == "mkinitcpio":
+        cmd = ["mkinitcpio", "-P"]
+    else:
+        return TuneResult(False, False, "Unknown initramfs system.")
+
+    try:
+        run(cmd, check=True)
+        return TuneResult(True, True, "Initramfs regenerated successfully.")
+    except SystemCommandError as e:
+        return TuneResult(False, False, f"Failed to regenerate initramfs: {e.stderr}")

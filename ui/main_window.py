@@ -11,6 +11,7 @@ from gi.repository import Gtk, Adw, Gdk
 from .status_page import StatusPage
 from .configure_page import ConfigurePage
 from .tune_page import TunePage
+from .hibernate_page import HibernatePage
 
 class MainWindow(Gtk.ApplicationWindow):
     def __init__(self, *args, **kwargs):
@@ -59,12 +60,24 @@ class MainWindow(Gtk.ApplicationWindow):
         tune_content.append(Gtk.Label(label="Tune"))
         tune_button.set_child(tune_content)
 
+        # Hibernate Button
+        hibernate_button = Gtk.ToggleButton()
+        hibernate_button.set_name("hibernate")
+        hibernate_content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        hibernate_content.set_margin_start(15)
+        hibernate_content.set_margin_end(15)
+        hibernate_content.append(Gtk.Image.new_from_icon_name("system-suspend-hibernate-symbolic"))
+        hibernate_content.append(Gtk.Label(label="Hibernate"))
+        hibernate_button.set_child(hibernate_content)
+
         # Manage Button Grouping
         config_button.set_group(status_button)
         tune_button.set_group(status_button)
+        hibernate_button.set_group(status_button)
         status_button.set_active(True) 
 
         button_box.append(status_button)
+        button_box.append(hibernate_button)
         button_box.append(tune_button)
         button_box.append(config_button)
 
@@ -109,15 +122,18 @@ class MainWindow(Gtk.ApplicationWindow):
 
         config_page = ConfigurePage()
         tune_page = TunePage()
+        hibernate_page = HibernatePage()
         
         self.stack.add_named(config_page, "config")
         self.stack.add_named(tune_page, "tune")
+        self.stack.add_named(hibernate_page, "hibernate")
 
         self.stack.set_visible_child_name("status")
 
         status_button.connect("toggled", self.on_nav_button_toggled)
         config_button.connect("toggled", self.on_nav_button_toggled)
         tune_button.connect("toggled", self.on_nav_button_toggled)
+        hibernate_button.connect("toggled", self.on_nav_button_toggled)
 
         # Set the initial icon state correctly when the app starts
         self.on_window_state_change()
