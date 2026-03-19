@@ -25,15 +25,34 @@ In the meantime, feel free to test and make pull requests
 >
 > Please feel free to explore the code, test it on a non-critical system, and report any issues you find.
 
-<img src="./assets/status-page.png" alt="Status Page" width="430"/>
+<div align="center">
+  <h3>📊 Main Dashboard</h3>
+  <img src="./images/status_tab.png" alt="Status Dashboard" width="600"/>
+  <p><i>Monitor active ZRAM devices and system swap priority in real-time.</i></p>
+</div>
 
-| Configure | Tune |
-|---|---|
-| <img src="./assets/configure-page.png" alt="Configure Page" width="215"/> | <img src="./assets/tune-page.png" alt="Tune Page" width="215"/> |
+<hr/>
 
-| Screenshot 1 | Screenshot 2 |
-|---|---|
-| <img src="./assets/Screenshot from 2025-10-02 00-11-29.png" alt="Screenshot 1" width="215"/> | <img src="./assets/Screenshot from 2025-10-02 00-11-41.png" alt="Screenshot 2" width="215"/> |
+### 🚀 Performance & Memory
+| **Hibernate Management** | **System Tuning** |
+|:---:|:---:|
+| <img src="./images/hibernate_tab.png" alt="Hibernate" width="380"/> | <img src="./images/tune_tab.png" alt="Tune" width="380"/> |
+| *Manage persistent storage for kernel resumption.* | *Real-time tuning of kernel parameters and PSI monitoring.* |
+
+### ⚙️ Expert Configuration
+| **Presets & Profiles** | **Advanced Settings** |
+|:---:|:---:|
+| <img src="./images/configure_tab_profiles.png" alt="Profiles" width="380"/> | <img src="./images/configure_tab_settings.png" alt="Settings" width="380"/> |
+| *Fast, one-click optimization for gaming or servers.* | *Fine-grained control over the ZRAM generator parameters.* |
+
+### 🛠️ Diagnostics & Logs
+| **System Health** | **Journal Insight** |
+|:---:|:---:|
+| <img src="./images/health_report_details.png" alt="Health" width="380"/> | <img src="./images/system_logs_view.png" alt="Logs" width="380"/> |
+| *Deep-dive into your system's swap health status.* | *Integrated viewer for ZRAM-specific systemd logs.* |
+
+<br/>
+
 
 ## About The Project
 

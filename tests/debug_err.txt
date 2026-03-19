@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/home/ray/Desktop/files/wrk/z-manager/z-manager/ui/live_mode_mockup.py", line 300, in <module>
+    app.run(sys.argv)
+  File "/usr/lib/python3/dist-packages/gi/overrides/Gio.py", line 40, in run
+    with register_sigint_fallback(self.quit):
+  File "/usr/lib/python3.12/contextlib.py", line 144, in __exit__
+    next(self.gen)
+  File "/usr/lib/python3/dist-packages/gi/_ossighelper.py", line 237, in register_sigint_fallback
+    signal.default_int_handler(signal.SIGINT, None)
+KeyboardInterrupt
