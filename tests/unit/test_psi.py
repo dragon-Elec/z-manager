@@ -1,16 +1,7 @@
-
-import sys
-import unittest
-from unittest.mock import patch, MagicMock
-from pathlib import Path
-
-# Add project root to path
-project_root = Path(__file__).resolve().parent
-sys.path.insert(0, str(project_root))
-
+from tests.test_base import *
 from modules import psi
 
-class TestPsi(unittest.TestCase):
+class TestPsi(BaseTestCase):
 
     def test_get_psi_success(self):
         # Mock content for /proc/pressure/memory

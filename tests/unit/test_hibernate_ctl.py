@@ -1,16 +1,11 @@
-
-import unittest
-from unittest.mock import patch, MagicMock, mock_open
+from tests.test_base import *
 import sys
 import os
-
-# Adjust path so we can import core
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from core import hibernate_ctl
 from core.os_utils import SystemCommandError
 
-class TestHibernateCtl(unittest.TestCase):
+class TestHibernateCtl(BaseTestCase):
 
     @patch('core.hibernate_ctl.read_file')
     @patch('core.hibernate_ctl.get_memory_info')

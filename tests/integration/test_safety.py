@@ -1,10 +1,8 @@
-
+from tests.test_base import *
 import os
-import sys
-import unittest
 from core.os_utils import check_device_safety
 
-class TestDeviceSafety(unittest.TestCase):
+class TestDeviceSafety(BaseTestCase):
     def test_zram0_safety(self):
         """Active zram device should be flagged unsafe or at least checked."""
         # Note: zram devices might return True/False depending on if they are formatted/mounted.

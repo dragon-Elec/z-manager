@@ -1,25 +1,10 @@
-#!/usr/bin/env python3
-
-# test_journal.py
-"""
-Unit tests for the journal module.
-Tests log retrieval and parsing with mocked systemd journal.
-"""
-
-import sys
-import unittest
+from tests.test_base import *
 from datetime import datetime
-from pathlib import Path
-from unittest.mock import patch, MagicMock
-
-# Add project root to path
-project_root = Path(__file__).resolve().parent
-sys.path.insert(0, str(project_root))
 
 from modules import journal
 
 
-class TestJournalHelpers(unittest.TestCase):
+class TestJournalHelpers(BaseTestCase):
 
     def test_format_ts_safe_datetime(self):
         dt = datetime(2024, 1, 15, 10, 30, 0)
@@ -45,7 +30,7 @@ class TestJournalHelpers(unittest.TestCase):
         self.assertIsInstance(result, datetime)
 
 
-class TestParseIsoBestEffort(unittest.TestCase):
+class TestParseIsoBestEffort(BaseTestCase):
 
     def test_parse_iso_valid(self):
         result = journal._parse_iso_best_effort("2024-01-15T10:30:00")
@@ -63,7 +48,7 @@ class TestParseIsoBestEffort(unittest.TestCase):
         self.assertIsNone(result)
 
 
-class TestPythonJournalAvailable(unittest.TestCase):
+class TestPythonJournalAvailable(BaseTestCase):
 
     @patch('modules.journal.run')
     def test_python_journal_available_true(self, mock_run):
@@ -78,7 +63,7 @@ class TestPythonJournalAvailable(unittest.TestCase):
         self.assertFalse(result)
 
 
-class TestSystemdJournalAvailableFlag(unittest.TestCase):
+class TestSystemdJournalAvailableFlag(BaseTestCase):
 
     @patch('modules.journal.python_journal_available')
     def test_available(self, mock_pja):
@@ -95,7 +80,7 @@ class TestSystemdJournalAvailableFlag(unittest.TestCase):
         self.assertIsNotNone(reason)
 
 
-class TestListZramLogs(unittest.TestCase):
+class TestListZramLogs(BaseTestCase):
 
     @patch('modules.journal.run')
     def test_list_zram_logs_fallback(self, mock_run):
@@ -125,7 +110,7 @@ class TestListZramLogs(unittest.TestCase):
         self.assertEqual(records, [])
 
 
-class TestGetZramLogsFromApi(unittest.TestCase):
+class TestGetZramLogsFromApi(BaseTestCase):
 
     @patch('modules.journal.list_zram_logs')
     def test_returns_dicts(self, mock_list):

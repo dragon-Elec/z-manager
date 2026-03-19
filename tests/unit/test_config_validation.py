@@ -1,7 +1,7 @@
-import unittest
+from tests.test_base import *
 from core.config_writer import validate_updates, update_zram_config
 
-class TestConfigValidation(unittest.TestCase):
+class TestConfigValidation(BaseTestCase):
     def test_size_validation(self):
         # Valid
         self.assertIsNone(validate_updates({"zram-size": "512M"}))

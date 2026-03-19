@@ -1,9 +1,9 @@
-import unittest
+from tests.test_base import *
 import os
 import tempfile
 from core.config_writer import update_zram_config
 
-class TestConfigPreservation(unittest.TestCase):
+class TestConfigPreservation(BaseTestCase):
     def setUp(self):
         # Create a temp file with comments
         self.tmp = tempfile.NamedTemporaryFile(mode='w+', delete=False, encoding='utf-8')

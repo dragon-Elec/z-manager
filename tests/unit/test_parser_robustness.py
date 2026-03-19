@@ -1,17 +1,7 @@
-# Updated: Test Migration (test_parser_robustness.py)
-
-import sys
-import unittest
-from unittest.mock import patch, MagicMock
-from pathlib import Path
-
-# Add project root to path
-project_root = Path(__file__).resolve().parent
-sys.path.insert(0, str(project_root))
-
+from tests.test_base import *
 from core import os_utils
 
-class TestSysfsParser(unittest.TestCase):
+class TestSysfsParser(BaseTestCase):
 
     @patch('core.os_utils._scan_zram_devices')
     @patch('core.os_utils._read_zram_sysfs_props')

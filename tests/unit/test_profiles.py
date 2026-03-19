@@ -1,28 +1,13 @@
-#!/usr/bin/env python3
-
-# test_profiles.py
-"""
-Unit tests for the profiles module.
-Tests profile loading, saving, listing, and deletion with mocked filesystem.
-"""
-
-import sys
+from tests.test_base import *
 import os
 import json
-import unittest
 import tempfile
 import shutil
 from pathlib import Path
-from unittest.mock import patch, MagicMock
-
-# Add project root to path
-project_root = Path(__file__).resolve().parent
-sys.path.insert(0, str(project_root))
-
 from modules import profiles
 
 
-class TestProfiles(unittest.TestCase):
+class TestProfiles(BaseTestCase):
 
     def setUp(self):
         """Create a temporary directory for user profiles."""

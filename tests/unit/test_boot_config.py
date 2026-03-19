@@ -1,24 +1,8 @@
-#!/usr/bin/env python3
-
-# test_boot_config.py
-"""
-Unit tests for the boot_config module.
-All tests are fully mocked - no system calls are made.
-"""
-
-import sys
-import unittest
-from unittest.mock import patch, MagicMock
-from pathlib import Path
-
-# Add project root to path
-project_root = Path(__file__).resolve().parent
-sys.path.insert(0, str(project_root))
-
+from tests.test_base import *
 from core import boot_config
 
 
-class TestIsKernelParamActive(unittest.TestCase):
+class TestIsKernelParamActive(BaseTestCase):
 
     @patch('core.boot_config.read_file')
     def test_is_kernel_param_active_found(self, mock_read_file):
@@ -38,7 +22,7 @@ class TestIsKernelParamActive(unittest.TestCase):
         self.assertFalse(boot_config.is_kernel_param_active("quiet"))
 
 
-class TestGetSwappiness(unittest.TestCase):
+class TestGetSwappiness(BaseTestCase):
 
     @patch('core.boot_config.read_file')
     def test_get_swappiness_normal(self, mock_read):

@@ -1,15 +1,7 @@
-
-import sys
-import unittest
-from pathlib import Path
-
-# Add project root to path
-project_root = Path(__file__).resolve().parent
-sys.path.insert(0, str(project_root))
-
+from tests.test_base import *
 from core import os_utils
 
-class TestSizeParser(unittest.TestCase):
+class TestSizeParser(BaseTestCase):
 
     def test_standard_units(self):
         self.assertEqual(os_utils.parse_size_to_bytes("1K"), 1024)

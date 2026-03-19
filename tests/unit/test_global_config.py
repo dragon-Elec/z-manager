@@ -1,13 +1,9 @@
-
-import unittest
+from tests.test_base import *
 from core.config import read_global_config
 from core.config_writer import update_global_config
-
-# Mock read_zram_config to avoid reading real files
-from unittest.mock import patch, MagicMock
 from configobj import ConfigObj
 
-class TestGlobalConfig(unittest.TestCase):
+class TestGlobalConfig(BaseTestCase):
     
     @patch('core.config.read_zram_config')
     @patch('core.config_writer.read_zram_config')

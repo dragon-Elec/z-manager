@@ -1,24 +1,10 @@
-#!/usr/bin/env python3
-
-# test_runtime.py
-"""
-Unit tests for the runtime module.
-Tests CPU governor, I/O scheduler, and kernel parameter functions with mocked sysfs.
-"""
-
-import sys
-import unittest
+from tests.test_base import *
 from pathlib import Path
-from unittest.mock import patch, MagicMock
-
-# Add project root to path
-project_root = Path(__file__).resolve().parent
-sys.path.insert(0, str(project_root))
 
 from modules import runtime
 
 
-class TestCpuGovernor(unittest.TestCase):
+class TestCpuGovernor(BaseTestCase):
 
     @patch('modules.runtime.read_file')
     def test_get_available_cpu_governors(self, mock_read):
@@ -67,7 +53,7 @@ class TestCpuGovernor(unittest.TestCase):
         self.assertFalse(result)
 
 
-class TestIoScheduler(unittest.TestCase):
+class TestIoScheduler(BaseTestCase):
 
     @patch('modules.runtime.read_file')
     def test_get_available_io_schedulers(self, mock_read):
@@ -124,7 +110,7 @@ class TestIoScheduler(unittest.TestCase):
         self.assertFalse(result)
 
 
-class TestVfsCachePressure(unittest.TestCase):
+class TestVfsCachePressure(BaseTestCase):
 
     @patch('modules.runtime.read_file')
     def test_get_vfs_cache_pressure(self, mock_read):

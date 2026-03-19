@@ -1,11 +1,11 @@
-import unittest
+from tests.test_base import *
 import os
 import shutil
 import tempfile
 import time
 from core.os_utils import atomic_write_to_file
 
-class TestConfigSafety(unittest.TestCase):
+class TestConfigSafety(BaseTestCase):
     def setUp(self):
         # Create a temporary directory for tests
         self.test_dir = tempfile.mkdtemp()

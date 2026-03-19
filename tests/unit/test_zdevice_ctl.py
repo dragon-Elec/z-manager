@@ -1,24 +1,10 @@
-#!/usr/bin/env python3
-
-# test_zdevice_ctl.py
-"""
-Unit tests for the zdevice_ctl module.
-All tests are fully mocked - no system calls are made.
-"""
-
-import sys
-import unittest
-from pathlib import Path
+from tests.test_base import *
 from unittest.mock import patch, MagicMock
-
-# Add project root to path
-project_root = Path(__file__).resolve().parent
-sys.path.insert(0, str(project_root))
 
 from core import zdevice_ctl
 
 
-class TestListDevices(unittest.TestCase):
+class TestListDevices(BaseTestCase):
 
     @patch('core.zdevice_ctl.parse_zramctl_table')
     def test_list_devices_returns_device_infos(self, mock_parse):
@@ -46,7 +32,7 @@ class TestListDevices(unittest.TestCase):
         self.assertEqual(devices, [])
 
 
-class TestGetWritebackStatus(unittest.TestCase):
+class TestGetWritebackStatus(BaseTestCase):
 
     @patch('core.zdevice_ctl.read_file')
     @patch('core.zdevice_ctl.zram_sysfs_dir')
@@ -99,7 +85,7 @@ class TestGetWritebackStatus(unittest.TestCase):
         self.assertEqual(status.backing_dev, "none")
 
 
-class TestDeviceInfoDataclass(unittest.TestCase):
+class TestDeviceInfoDataclass(BaseTestCase):
 
     def test_device_info_creation(self):
         info = zdevice_ctl.DeviceInfo(
@@ -124,7 +110,7 @@ class TestDeviceInfoDataclass(unittest.TestCase):
         self.assertIsNone(info.streams)
 
 
-class TestWritebackStatusDataclass(unittest.TestCase):
+class TestWritebackStatusDataclass(BaseTestCase):
 
     def test_writeback_status_creation(self):
         status = zdevice_ctl.WritebackStatus(
@@ -141,7 +127,7 @@ class TestWritebackStatusDataclass(unittest.TestCase):
         self.assertEqual(status.backing_dev, "/dev/loop0")
 
 
-class TestUnitResultDataclass(unittest.TestCase):
+class TestUnitResultDataclass(BaseTestCase):
 
     def test_unit_result_success(self):
         result = zdevice_ctl.UnitResult(
@@ -160,7 +146,7 @@ class TestUnitResultDataclass(unittest.TestCase):
         self.assertFalse(result.success)
 
 
-class TestWritebackResultDataclass(unittest.TestCase):
+class TestWritebackResultDataclass(BaseTestCase):
 
     def test_writeback_result_creation(self):
         result = zdevice_ctl.WritebackResult(
@@ -174,7 +160,7 @@ class TestWritebackResultDataclass(unittest.TestCase):
         self.assertEqual(result.action, "set_writeback")
 
 
-class TestPersistResultDataclass(unittest.TestCase):
+class TestPersistResultDataclass(BaseTestCase):
 
     def test_persist_result_creation(self):
         result = zdevice_ctl.PersistResult(
