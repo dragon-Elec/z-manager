@@ -27,28 +27,24 @@ def python_journal_available() -> bool:
 
 def _format_ts_safe(value: Any) -> datetime:
     try:
-        dt = None
-        if isinstance(value, datetime):
-            dt = value
-        elif isinstance(value, (int, float)):
-            dt = datetime.fromtimestamp(value)
-        elif isinstance(value, str):
-            try:
-                dt = datetime.fromisoformat(value)
-            except Exception:
+        match value:
+            case datetime() as dt:
+                pass
+            case int() | float() as ts:
+                dt = datetime.fromtimestamp(ts)
+            case str() as s:
+                try:
+                    dt = datetime.fromisoformat(s)
+                except ValueError:
+                    dt = datetime.now().astimezone()
+            case _:
                 dt = datetime.now().astimezone()
-        
-        if dt is None:
-             dt = datetime.now().astimezone()
 
         # Ensure timezone awareness
-        if dt.tzinfo is None:
-            return dt.astimezone()
-        return dt
+        return dt.astimezone() if dt.tzinfo is None else dt
 
     except Exception:
-        pass
-    return datetime.now().astimezone()
+        return datetime.now().astimezone()
 
 
 def list_zram_logs(unit: str = "systemd-zram-setup@zram0.service", count: int = 25) -> List[JournalRecord]:

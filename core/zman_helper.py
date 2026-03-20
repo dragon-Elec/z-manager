@@ -59,7 +59,7 @@ def is_service_allowed(service: str) -> bool:
 
 
 def cmd_write(path: str) -> int:
-    """Write content from stdin to path atomically."""
+    """Write content from stdin to path atomically with backup."""
     if not is_path_allowed(path):
         print(f"Error: Path not allowed: {path}", file=sys.stderr)
         return 1
@@ -68,7 +68,16 @@ def cmd_write(path: str) -> int:
         # Read content from stdin
         content = sys.stdin.read()
         
-        # Atomic write: write to temp file, then move
+        # 1. Backup: Create a .bak copy if file exists
+        if os.path.exists(path):
+            try:
+                shutil.copy2(path, f"{path}.bak")
+            except Exception as e:
+                print(f"Warning: Backup failed: {e}", file=sys.stderr)
+                # We proceed even if backup fails to ensure we can still fix configs,
+                # but we notify the caller.
+
+        # 2. Atomic write: write to temp file, then move
         dir_name = os.path.dirname(path)
         os.makedirs(dir_name, exist_ok=True)
         
@@ -182,43 +191,30 @@ def cmd_live_remove(device_name: str, config_path: str) -> int:
 
 
 def main():
-
     if len(sys.argv) < 2:
         print(__doc__)
         return 1
-    
-    cmd = sys.argv[1]
-    
-    if cmd == "write":
-        if len(sys.argv) < 3:
-            print("Usage: zman-helper.py write <path>", file=sys.stderr)
-            return 1
-        return cmd_write(sys.argv[2])
-    
-    elif cmd == "daemon-reload":
-        return cmd_daemon_reload()
-    
-    elif cmd in ("restart", "stop", "start"):
-        if len(sys.argv) < 3:
-            print(f"Usage: zman-helper.py {cmd} <service>", file=sys.stderr)
-            return 1
-        return cmd_systemctl(cmd, sys.argv[2])
-    
-    elif cmd == "live-apply":
-        if len(sys.argv) < 4:
-            print("Usage: zman-helper.py live-apply <device> <config_path>", file=sys.stderr)
-            return 1
-        return cmd_live_apply(sys.argv[2], sys.argv[3])
 
-    elif cmd == "live-remove":
-        if len(sys.argv) < 4:
-            print("Usage: zman-helper.py live-remove <device> <config_path>", file=sys.stderr)
+    match sys.argv[1:]:
+        case ["write", path]:
+            return cmd_write(path)
+
+        case ["daemon-reload"]:
+            return cmd_daemon_reload()
+
+        case [("restart" | "stop" | "start") as action, service]:
+            return cmd_systemctl(action, service)
+
+        case ["live-apply", device, config_path]:
+            return cmd_live_apply(device, config_path)
+
+        case ["live-remove", device, config_path]:
+            return cmd_live_remove(device, config_path)
+
+        case _:
+            print(f"Unknown command or arguments: {' '.join(sys.argv[1:])}", file=sys.stderr)
             return 1
-        return cmd_live_remove(sys.argv[2], sys.argv[3])
-    
-    else:
-        print(f"Unknown command: {cmd}", file=sys.stderr)
-        return 1
+
 
 
 if __name__ == "__main__":

@@ -67,10 +67,8 @@ def _load_user_profiles() -> Dict[str, Dict[str, Any]]:
 
 def get_all_profiles() -> Dict[str, Dict[str, Any]]:
     """Returns a merged dictionary of built-in and user-defined profiles."""
-    all_profiles = _BUILTIN_PROFILES.copy()
     # User profiles can override built-in ones if they have the same name
-    all_profiles.update(_load_user_profiles())
-    return all_profiles
+    return _BUILTIN_PROFILES | _load_user_profiles()
 
 
 def list_profile_names() -> List[str]:

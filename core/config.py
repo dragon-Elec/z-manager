@@ -32,10 +32,7 @@ def get_active_config_path() -> Optional[Path]:
     """
     Returns the Path to the first existing zram-generator.conf found in the hierarchy.
     """
-    for path in SEARCH_PATHS:
-        if path.exists():
-            return path
-    return None
+    return next((p for p in SEARCH_PATHS if p.exists()), None)
 
 def read_zram_config() -> ConfigObj:
     """

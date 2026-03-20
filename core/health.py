@@ -161,36 +161,14 @@ def get_all_swaps() -> List[SwapDevice]:
     """
     Parses /proc/swaps to get a list of all active swap devices on the system.
     """
-    swap_devices: List[SwapDevice] = []
     try:
         with open("/proc/swaps", "r", encoding="utf-8") as f:
             lines = f.readlines()
     except FileNotFoundError:
-        return [] # No /proc/swaps means no swaps active
+        return []
 
-    # Skip the header line (lines[0])
-    for line in lines[1:]:
-        parts = line.strip().split()
-        if len(parts) < 5:
-            continue # Skip malformed lines
-
-        try:
-            # Typical format: /dev/dm-1 partition 8388604 0 -2
-            name = parts[0]
-            swap_type = parts[1]
-            size_kb = int(parts[2])
-            used_kb = int(parts[3])
-            priority = int(parts[4])
-
-            swap_devices.append(SwapDevice(
-                name=name,
-                type=swap_type,
-                size_kb=size_kb,
-                used_kb=used_kb,
-                priority=priority
-            ))
-        except (ValueError, IndexError):
-            # Gracefully skip any line that can't be parsed
-            continue
-
-    return swap_devices
+    return [
+        SwapDevice(p[0], p[1], int(p[2]), int(p[3]), int(p[4]))
+        for line in lines[1:]
+        if (p := line.strip().split()) and len(p) >= 5 and p[2].isdigit()
+    ]

@@ -469,23 +469,16 @@ def _read_zram_sysfs_props(device_name: str) -> Dict[str, Any]:
 
 
 def _bytes_to_human(size_bytes: int) -> str:
-    """Convert bytes to human-readable format matching zramctl output (B, K, M, G, T, P)."""
-    if size_bytes == 0:
+    """Convert bytes to human-readable format matching zramctl output using O(1) math."""
+    if size_bytes <= 0:
         return "0B"
     
-    units = ['B', 'K', 'M', 'G', 'T', 'P']
-    unit_idx = 0
-    size = float(size_bytes)
+    import math
+    units = ("B", "K", "M", "G", "T", "P")
+    i = min(int(math.log(size_bytes, 1024)), len(units) - 1)
+    size = size_bytes / pow(1024, i)
     
-    while size >= 1024 and unit_idx < len(units) - 1:
-        size /= 1024
-        unit_idx += 1
-    
-    # Format: if it's a whole number, no decimal; otherwise 1 decimal place
-    if size == int(size):
-        return f"{int(size)}{units[unit_idx]}"
-    else:
-        return f"{size:.1f}{units[unit_idx]}"
+    return f"{int(size) if size.is_integer() else round(size, 1)}{units[i]}"
 
 
 def _get_zram_mountpoint(device_name: str) -> str:
