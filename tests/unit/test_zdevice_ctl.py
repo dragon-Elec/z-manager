@@ -6,7 +6,7 @@ from core import zdevice_ctl
 
 class TestListDevices(BaseTestCase):
 
-    @patch('core.zdevice_ctl.parse_zramctl_table')
+    @patch('core.device_management.prober.parse_zramctl_table')
     def test_list_devices_returns_device_infos(self, mock_parse):
         mock_parse.return_value = [
             {'name': 'zram0', 'disksize': '4G', 'data-size': '1M', 'compr-size': '500K',
@@ -23,7 +23,7 @@ class TestListDevices(BaseTestCase):
         self.assertEqual(devices[0].disksize, '4G')
         self.assertEqual(devices[1].name, 'zram1')
 
-    @patch('core.zdevice_ctl.parse_zramctl_table')
+    @patch('core.device_management.prober.parse_zramctl_table')
     def test_list_devices_empty(self, mock_parse):
         mock_parse.return_value = []
 
@@ -34,9 +34,9 @@ class TestListDevices(BaseTestCase):
 
 class TestGetWritebackStatus(BaseTestCase):
 
-    @patch('core.zdevice_ctl.read_file')
-    @patch('core.zdevice_ctl.zram_sysfs_dir')
-    @patch('core.zdevice_ctl.is_block_device')
+    @patch('core.device_management.prober.read_file')
+    @patch('core.device_management.prober.zram_sysfs_dir')
+    @patch('core.device_management.prober.is_block_device')
     def test_get_writeback_status_with_backing(self, mock_is_block_dev, mock_sysfs_dir, mock_read):
         mock_is_block_dev.return_value = True
         mock_sysfs_dir.return_value = "/sys/block/zram0"
@@ -60,9 +60,9 @@ class TestGetWritebackStatus(BaseTestCase):
         self.assertEqual(status.device, "zram0")
         self.assertEqual(status.backing_dev, "/dev/loop0")
 
-    @patch('core.zdevice_ctl.read_file')
-    @patch('core.zdevice_ctl.zram_sysfs_dir')
-    @patch('core.zdevice_ctl.is_block_device')
+    @patch('core.device_management.prober.read_file')
+    @patch('core.device_management.prober.zram_sysfs_dir')
+    @patch('core.device_management.prober.is_block_device')
     def test_get_writeback_status_no_backing(self, mock_is_block_dev, mock_sysfs_dir, mock_read):
         mock_is_block_dev.return_value = True
         mock_sysfs_dir.return_value = "/sys/block/zram0"
