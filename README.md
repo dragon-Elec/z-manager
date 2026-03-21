@@ -1,29 +1,12 @@
 # Z-Manager
+
 ## A Modern GTK4 / Libadwaita GUI for Managing ZRAM on Linux.
 
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
 
-## 🕐 Development Status ⏳
-
-> **Project progression is temporarily halted.**
+> **⚠️ Alpha Software**
 >
-> I have decided to halt full development for Ubuntu 22.04 LTS (Jammy) due to technical compatibility issues. I can only enable features for 22.04 LTS that are fully compatible with its environment.
->
-> A final, non-standard package will be released for this version that will disable problematic features, such as writeback.
->
-> Proceeding with development under this limitation would require implementing a non-standard, brittle workaround that violates the project's goal of being a robust and reliable system utility that integrates cleanly with standard OS components
-
-In the meantime, feel free to test and make pull requests
-
-
-
-## 🚧 Project Status: Under Heavy Development 🚧
-
-> **This application is currently in an early development (alpha) stage.**
->
-> It is not yet ready for production use. You may encounter bugs, incomplete features, or unexpected behavior. The backend logic and UI are actively being developed and are subject to change.
->
-> Please feel free to explore the code, test it on a non-critical system, and report any issues you find.
+> This application is in early development. You may encounter bugs, incomplete features, or unexpected behavior. Please test on a non-critical system and [report any issues](https://github.com/dragon-Elec/z-manager/issues) you find.
 
 <div align="center">
   <h3>📊 Main Dashboard</h3>
@@ -53,10 +36,9 @@ In the meantime, feel free to test and make pull requests
 
 <br/>
 
-
 ## About The Project
 
-Z-Manager is a user-friendly desktop application designed to simplify the configuration and monitoring of ZRAM on modern Linux systems. It acts as a graphical frontend for `zram-generator` and the[...]
+Z-Manager is a user-friendly desktop application designed to simplify the configuration and monitoring of ZRAM on modern Linux systems. It acts as a graphical frontend for `zram-generator` and the underlying kernel subsystem, providing a clean interface for tasks that traditionally require the command line.
 
 This tool is for desktop users and system tweakers who want to harness the performance benefits of ZRAM without the command-line hassle.
 
@@ -70,9 +52,45 @@ This tool is for desktop users and system tweakers who want to harness the perfo
 * **System Tuning:** Adjust related kernel parameters like CPU governors and I/O schedulers to further optimize performance.
 * **Log Viewer:** Easily view ZRAM-related logs from the systemd journal to troubleshoot issues.
 
-## Bugs
+## Requirements
 
-* **Bug 2:** Description of bug 2.
+* Python 3.11+
+* GTK 4
+* libadwaita 1.x
+* `systemd` with `zram-generator`
+* `psutil`
+
+## Project Structure
+
+```
+z-manager/
+├── core/                    # Backend logic
+│   ├── device_management/   # Modular device orchestration
+│   │   ├── prober.py        #   Device discovery & status queries
+│   │   ├── configurator.py  #   Apply/remove device & global config
+│   │   ├── provisioner.py   #   Device creation & sysfs management
+│   │   └── types.py         #   Shared dataclasses (DeviceInfo, etc.)
+│   ├── boot_config.py       # GRUB / bootloader kernel param management
+│   ├── config.py            # zram-generator INI config reader
+│   ├── config_writer.py     # zram-generator INI config writer
+│   ├── health.py            # System health diagnostics
+│   ├── hibernate_ctl.py     # Hibernation / resume management
+│   └── os_utils.py          # Low-level sysfs & subprocess helpers
+├── modules/                 # Auxiliary services
+│   ├── monitoring.py        # Real-time polling engine
+│   └── journal.py           # Systemd journal log reader
+├── ui/                      # GTK4 / Libadwaita frontend
+│   ├── status_page.py       # Main dashboard
+│   ├── configure_page.py    # Configuration UI
+│   ├── configure_logic.py   # Configuration business logic
+│   ├── live_orchestrator.py # Live-apply orchestration
+│   ├── log_viewer.py        # Log viewer dialog
+│   └── custom_widgets/      # Reusable widgets (CircularWidget, etc.)
+└── tests/                   # Test suite
+    ├── test_base.py          # Shared base class & assertions
+    ├── unit/                 # Unit tests
+    └── integration/          # Integration tests
+```
 
 ## Installation
 
