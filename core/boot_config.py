@@ -12,9 +12,9 @@ import logging
 import tempfile
 import os
 import shutil
+import contextlib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 from .os_utils import run, SystemCommandError, atomic_write_to_file, read_file
 
@@ -54,7 +54,7 @@ class TuneResult:
     success: bool
     changed: bool
     message: str
-    action_needed: Optional[str] = None  # e.g., "reboot", "update-grub"
+    action_needed: str | None = None  # e.g., "reboot", "update-grub"
 
 
 # --- Helper Functions ---
@@ -62,8 +62,7 @@ class TuneResult:
 def is_kernel_param_active(param: str) -> bool:
     """Checks the live kernel command line for a given parameter."""
     try:
-        cmdline = read_file("/proc/cmdline")
-        if not cmdline:
+        if not (cmdline := read_file("/proc/cmdline")):
             return False
         return param in cmdline.split()
     except Exception as e:
@@ -73,29 +72,32 @@ def is_kernel_param_active(param: str) -> bool:
 
 def get_swappiness() -> int | None:
     """Reads the current system swappiness value."""
-    content = read_file("/proc/sys/vm/swappiness")
-    if content:
-        try:
-            return int(content.strip())
-        except (ValueError, TypeError):
-            return None
-    return None
+    if not (content := read_file("/proc/sys/vm/swappiness")):
+        return None
+    try:
+        return int(content.strip())
+    except (ValueError, TypeError):
+        return None
 
 
 def _revert_sysctl_to_defaults() -> bool:
     """Writes the default sysctl settings to a temporary file and applies them."""
+    temp_f_name = None
     try:
-        # Use a temporary file to apply the default settings
         with tempfile.NamedTemporaryFile(mode='w+', delete=False) as temp_f:
+            temp_f_name = temp_f.name
             temp_f.write(DEFAULT_SYSCTL_SETTINGS)
             temp_f.flush()
-            run(["sysctl", "--load", temp_f.name], check=True)
-        os.unlink(temp_f.name)
+            run(["sysctl", "--load", temp_f_name], check=True)
         _LOGGER.info("Successfully reverted sysctl settings to defaults.")
         return True
     except (SystemCommandError, OSError) as e:
         _LOGGER.error(f"Failed to revert sysctl settings to defaults: {e}")
         return False
+    finally:
+        if temp_f_name:
+            with contextlib.suppress(OSError):
+                os.unlink(temp_f_name)
 
 
 # --- Core Tuning Functions ---
@@ -108,8 +110,6 @@ def apply_sysctl_profile(enable: bool) -> TuneResult:
         current_content = read_file(SYSCTL_CONFIG_PATH)
         if current_content and current_content.strip() == GAMING_PROFILE_CONTENT:
             _LOGGER.info("Sysctl profile file is already correctly configured.")
-            # You might still want to apply it if live settings are different,
-            # but for simplicity, we assume file presence means it's configured.
             return TuneResult(success=True, changed=False, message="Sysctl performance profile is already configured.")
 
         _LOGGER.info("Writing sysctl performance profile configuration.")
@@ -130,14 +130,14 @@ def apply_sysctl_profile(enable: bool) -> TuneResult:
 
         try:
             SYSCTL_CONFIG_PATH.unlink()
-            if not _revert_sysctl_to_defaults():
-                # If reverting fails, the config file is already deleted, which is not ideal.
-                # However, the user can re-enable and then disable again to retry.
-                return TuneResult(success=False, changed=True, message="Profile disabled, but failed to revert live settings.")
-            return TuneResult(success=True, changed=True, message="Sysctl performance profile was disabled and settings reverted.")
-        except Exception as e:
+        except OSError as e:
             _LOGGER.error(f"Failed to remove sysctl config file: {e}")
             return TuneResult(success=False, changed=False, message=f"Failed to disable performance profile: {e}")
+
+        if not _revert_sysctl_to_defaults():
+            return TuneResult(success=False, changed=True, message="Profile config removed, but failed to revert live settings.")
+        
+        return TuneResult(success=True, changed=True, message="Sysctl performance profile was disabled and settings reverted.")
 
 
 def apply_sysctl_values(settings: dict[str, str]) -> TuneResult:
@@ -148,45 +148,29 @@ def apply_sysctl_values(settings: dict[str, str]) -> TuneResult:
     if not settings:
         return TuneResult(success=True, changed=False, message="No settings provided.")
 
-    # 1. Read existing file content (or start fresh)
-    existing_lines = []
-    current_content = read_file(SYSCTL_CONFIG_PATH)
-    if current_content:
-        existing_lines = current_content.splitlines()
-
-    # 2. Parse existing content into a dict to allow merging
+    # 1. Read existing file content and parse into a dict
     final_config = {}
-    
-    # helper to parse line "key = value"
-    for line in existing_lines:
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if "=" in line:
-            parts = line.split("=", 1)
-            k = parts[0].strip()
-            v = parts[1].strip()
-            final_config[k] = v
+    if current_content := read_file(SYSCTL_CONFIG_PATH):
+        for line in current_content.splitlines():
+            if (line := line.strip()) and not line.startswith("#") and "=" in line:
+                k, v = (p.strip() for p in line.split("=", 1))
+                final_config[k] = v
 
-    # 3. Update with new values
-    changed = False
-    for k, v in settings.items():
-        if final_config.get(k) != str(v):
-            final_config[k] = str(v)
-            changed = True
+    # 2. Update with new values
+    changed = any(final_config.get(k) != str(v) for k, v in settings.items())
     
     if not changed and SYSCTL_CONFIG_PATH.exists():
          return TuneResult(success=True, changed=False, message="Settings are already applied in config.")
 
-    # 4. Serialize back to string
-    # We add a header
+    for k, v in settings.items():
+        final_config[k] = str(v)
+
+    # 3. Serialize back to string
     new_lines = ["# Custom Z-Manager Tuning Configuration"]
-    for k, v in sorted(final_config.items()):
-        new_lines.append(f"{k} = {v}")
-    
+    new_lines.extend(f"{k} = {v}" for k, v in sorted(final_config.items()))
     new_content = "\n".join(new_lines) + "\n"
 
-    # 5. Write and Apply
+    # 4. Write and Apply
     success, error = atomic_write_to_file(SYSCTL_CONFIG_PATH, new_content)
     if not success:
         return TuneResult(success=False, changed=False, message=f"Failed to write config: {error}")
@@ -254,10 +238,12 @@ def set_psi_in_grub(enabled: bool) -> TuneResult:
 
 def detect_bootloader() -> str:
     """Returns 'grub', 'systemd-boot', or 'unknown'."""
-    if os.path.isdir("/boot/grub") or os.path.isdir("/boot/efi/EFI/ubuntu") or os.path.exists("/etc/default/grub"):
+    if shutil.which("update-grub") or shutil.which("grub-mkconfig") or os.path.exists("/etc/default/grub") or os.path.isdir("/boot/grub"):
         return "grub"
-    # Simplified check
+    if os.path.isdir("/boot/efi/loader") or os.path.exists("/usr/bin/bootctl") or os.path.isdir("/boot/efi/EFI/systemd"):
+        return "systemd-boot"
     return "unknown"
+
 
 def update_grub_resume(uuid: str, offset: int | None = None) -> TuneResult:
     """
@@ -275,15 +261,17 @@ def update_grub_resume(uuid: str, offset: int | None = None) -> TuneResult:
     
     return TuneResult(True, True, "Resume configuration written to GRUB.", action_needed="update-grub")
 
+
 def detect_initramfs_system() -> str:
     """Detects if system uses initramfs-tools, dracut, or mkinitcpio."""
-    if os.path.isdir("/etc/initramfs-tools"):
-        return "initramfs-tools" # Debian/Ubuntu
+    if os.path.isdir("/etc/initramfs-tools") or shutil.which("update-initramfs"):
+        return "initramfs-tools"
     if shutil.which("dracut"):
-        return "dracut" # Fedora/RHEL
-    if os.path.exists("/etc/mkinitcpio.conf"):
-        return "mkinitcpio" # Arch
+        return "dracut"
+    if os.path.exists("/etc/mkinitcpio.conf") or shutil.which("mkinitcpio"):
+        return "mkinitcpio"
     return "unknown"
+
 
 def configure_initramfs_resume(uuid: str, offset: int | None = None) -> TuneResult:
     """
@@ -305,20 +293,20 @@ def configure_initramfs_resume(uuid: str, offset: int | None = None) -> TuneResu
         
     return TuneResult(True, True, "Initramfs resume config updated.", action_needed="update-initramfs")
 
+
 def regenerate_initramfs() -> TuneResult:
-    system = detect_initramfs_system()
-    cmd = []
-    if system == "initramfs-tools":
-        cmd = ["update-initramfs", "-u"]
-    elif system == "dracut":
-        cmd = ["dracut", "-f", "--regenerate-all"]
-    elif system == "mkinitcpio":
-        cmd = ["mkinitcpio", "-P"]
-    else:
-        return TuneResult(False, False, "Unknown initramfs system.")
+    match system := detect_initramfs_system():
+        case "initramfs-tools":
+            cmd = ["update-initramfs", "-u"]
+        case "dracut":
+            cmd = ["dracut", "-f", "--regenerate-all"]
+        case "mkinitcpio":
+            cmd = ["mkinitcpio", "-P"]
+        case _:
+            return TuneResult(False, False, f"Unknown or unsupported initramfs system: {system}")
 
     try:
         run(cmd, check=True)
-        return TuneResult(True, True, "Initramfs regenerated successfully.")
+        return TuneResult(True, True, f"Initramfs regenerated successfully ({system}).")
     except SystemCommandError as e:
         return TuneResult(False, False, f"Failed to regenerate initramfs: {e.stderr}")
