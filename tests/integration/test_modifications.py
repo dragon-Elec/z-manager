@@ -4,12 +4,16 @@
 
 import sys
 import os
-from core.zdevice_ctl import (
+from core.device_management.configurator import (
     set_writeback,
-    clear_writeback,
-    reset_device,
+    clear_writeback
+)
+from core.device_management.provisioner import reset_device
+from core.device_management.prober import (
     get_writeback_status,
-    is_device_active,
+    is_device_active
+)
+from core.os_utils import (
     ValidationError,
     NotBlockDeviceError
 )

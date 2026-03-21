@@ -3,7 +3,8 @@ import logging
 from dataclasses import dataclass
 from typing import Generator, List, Any, Dict, Optional
 
-from core import os_utils, zdevice_ctl, config_writer
+from core import os_utils, config_writer
+from core.device_management import configurator
 from core.config import CONFIG_PATH
 
 @dataclass

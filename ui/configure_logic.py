@@ -6,8 +6,9 @@ from gi.repository import GLib
 import io
 import difflib
 from core import config as zram_config
-from core import zdevice_ctl, config_writer
-from core.zdevice_ctl import UnitResult
+from core import config_writer
+from core.device_management import configurator
+from core.device_management.types import UnitResult
 
 class ConfigureLogic:
     """
@@ -223,7 +224,7 @@ class ConfigureLogic:
                 res = None
                 if action == "DELETE":
                     # Pass apply_now=live_apply
-                    res = zdevice_ctl.remove_device_config(dev, apply_now=live_apply)
+                    res = configurator.remove_device_config(dev, apply_now=live_apply)
                     
                 else: # CREATE or MODIFY
                     # Construct updates dict from snapshot
@@ -237,7 +238,7 @@ class ConfigureLogic:
                     
                     # Pass reload_daemon=live_apply
                     # If live_apply is True, we reload daemon and restart service
-                    res = zdevice_ctl.apply_device_config(
+                    res = configurator.apply_device_config(
                         dev, 
                         updates, 
                         restart_service=live_apply, 

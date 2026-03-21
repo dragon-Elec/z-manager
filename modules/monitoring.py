@@ -11,7 +11,7 @@ from typing import Iterator, NamedTuple
 
 import psutil
 
-from core.zdevice_ctl import get_writeback_status
+from core.device_management.prober import get_writeback_status
 
 _LOGGER = logging.getLogger(__name__)
 

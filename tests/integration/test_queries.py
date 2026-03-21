@@ -3,13 +3,12 @@
 # test_queries.py
 
 import sys
-# Corrected version
-from core.zdevice_ctl import (
+from core.device_management.prober import (
     list_devices,
     get_writeback_status,
-    is_device_active,
-    NotBlockDeviceError
+    is_device_active
 )
+from core.os_utils import NotBlockDeviceError
 
 def run_tests(device_name="zram0"):
     """Run all query tests and print the results."""

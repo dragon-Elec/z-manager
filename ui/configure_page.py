@@ -13,7 +13,8 @@ from ui.custom_widgets import ScenarioCard
 from ui.device_picker import DevicePickerDialog
 from ui.global_config_dialog import GlobalConfigDialog
 import threading
-from core import zdevice_ctl, config as zram_config
+from core import config as zram_config
+from core.device_management import configurator
 from dataclasses import dataclass
 from ui.configure_logic import ConfigureLogic
 from ui.configure_logic import ConfigureLogic
@@ -659,8 +660,8 @@ class ConfigurePage(Gtk.Box):
         # We process this immediately (blocking UI briefly is fine for this action) or use thread.
         # Since it's a simple write, we can do it here and show toast.
         
-        # We need to use zdevice_ctl to ensure safety/consistency
-        res = zdevice_ctl.apply_global_config(updates)
+        # We need to use configurator to ensure safety/consistency
+        res = configurator.apply_global_config(updates)
         
         if res.success:
             self._show_toast("Global settings updated.")

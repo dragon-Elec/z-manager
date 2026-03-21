@@ -35,8 +35,7 @@ class BaseTestCase(unittest.TestCase):
         self.addCleanup(cleanup)
 
     # Custom Assertions
-    def assertDeviceActive(self, device_name):
-        from core.zdevice_ctl import is_device_active
+        from core.device_management.prober import is_device_active
         self.assertTrue(is_device_active(device_name), f"Expected zram device '{device_name}' to be active/swapon.")
 
     def assertValidSize(self, size_str):

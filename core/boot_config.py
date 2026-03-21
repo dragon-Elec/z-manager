@@ -186,6 +186,14 @@ def set_zswap_in_grub(enabled: bool) -> TuneResult:
     Manages the kernel parameter to disable zswap permanently via GRUB.
     This function only writes the file; it does not run update-grub.
     """
+    if detect_bootloader() != "grub":
+        return TuneResult(
+            success=False, 
+            changed=False, 
+            message="Feature unavailable: Automatic configuration requires GRUB bootloader.",
+            action_needed="Manual entry: Add 'zswap.enabled=0' to your bootloader's kernel parameters."
+        )
+
     # We are setting `zswap.enabled=0`, so `enabled=False` means create the file.
     if not enabled:
         if is_kernel_param_active("zswap.enabled=0"):
@@ -215,6 +223,14 @@ def set_psi_in_grub(enabled: bool) -> TuneResult:
     Note: This enables or disables the entire PSI subsystem globally. Individual
     resources (CPU, memory, I/O) cannot be controlled separately at boot time.
     """
+    if detect_bootloader() != "grub":
+        return TuneResult(
+            success=False, 
+            changed=False, 
+            message="Feature unavailable: Automatic configuration requires GRUB bootloader.",
+            action_needed="Manual entry: Add 'psi=1' to your bootloader's kernel parameters."
+        )
+
     if enabled:
         if is_kernel_param_active("psi=1"):
             return TuneResult(success=True, changed=False, message="PSI is already enabled in the current boot session.")
@@ -249,6 +265,14 @@ def update_grub_resume(uuid: str, offset: int | None = None) -> TuneResult:
     """
     Add resume=UUID=... [resume_offset=...] to GRUB config.
     """
+    if detect_bootloader() != "grub":
+        return TuneResult(
+            success=False, 
+            changed=False, 
+            message="Feature unavailable: Automatic resume configuration requires GRUB.",
+            action_needed=f"Manual entry: Add 'resume=UUID={uuid}' to your bootloader config."
+        )
+
     params = f'resume=UUID={uuid}'
     if offset is not None and offset > 0:
         params += f' resume_offset={offset}'

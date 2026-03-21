@@ -8,7 +8,8 @@ from gi.repository import Gtk, Adw, GObject, GLib
 
 # --- Backend imports are kept for future use, but functions are not called ---
 from core import health
-from core import zdevice_ctl
+from core.device_management import prober
+from core.device_management import types as dm_types
 from core.os_utils import parse_size_to_bytes
 import psutil # Added for RAM calculation
 from ui.custom_widgets import CircularWidget, MemoryTube
@@ -122,7 +123,7 @@ class StatusPage(Adw.Bin):
             
         return True
 
-    def _create_device_row(self, device: zdevice_ctl.DeviceInfo, ram_total: int) -> Gtk.Widget:
+    def _create_device_row(self, device: dm_types.DeviceInfo, ram_total: int) -> Gtk.Widget:
         """Creates a 'CircularWidget' card for a single ZRAM device."""
         
         # Parse Sizes safely
@@ -138,7 +139,7 @@ class StatusPage(Adw.Bin):
         bd_used = 0
         bd_limit = 0
         try:
-            wb_status = zdevice_ctl.get_writeback_status(device.name)
+            wb_status = prober.get_writeback_status(device.name)
             if wb_status and wb_status.backing_dev and wb_status.backing_dev != "none":
                 backing_dev = wb_status.backing_dev
                 # Placeholder for BD limits if needed in future
@@ -172,7 +173,7 @@ class StatusPage(Adw.Bin):
         """Populates the list of active ZRAM devices with real-time stats."""
         
         # Get current devices
-        devices: List[zdevice_ctl.DeviceInfo] = zdevice_ctl.list_devices()
+        devices: List[dm_types.DeviceInfo] = prober.list_devices()
         current_names = set()
 
         if not devices:

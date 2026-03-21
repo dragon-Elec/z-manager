@@ -7,7 +7,7 @@ gi.require_version('Adw', '1')
 from gi.repository import Gtk, Adw, Pango, Gdk
 
 from modules import journal
-from core import zdevice_ctl
+from core.device_management import prober
 
 class LogViewerDialog(Adw.Window):
     """
@@ -83,7 +83,7 @@ class LogViewerDialog(Adw.Window):
         self.buffer.set_text("")
         
         # Fetch logs for all ZRAM devices
-        devices = zdevice_ctl.list_devices()
+        devices = prober.list_devices()
         all_logs = []
         
         # If no devices, try fetching generic setup logs

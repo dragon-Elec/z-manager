@@ -9,12 +9,12 @@ import os
 import time
 import configparser
 import traceback
-from core.zdevice_ctl import (
+from core.device_management.configurator import (
     persist_writeback,
-    ensure_writeback_state,
-    get_writeback_status,
-    NotBlockDeviceError
+    ensure_writeback_state
 )
+from core.device_management.prober import get_writeback_status
+from core.os_utils import NotBlockDeviceError
 from core.config import CONFIG_PATH
 from core.os_utils import sysfs_reset_device
 

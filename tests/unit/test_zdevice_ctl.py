@@ -1,7 +1,7 @@
 from tests.test_base import *
 from unittest.mock import patch, MagicMock
 
-from core import zdevice_ctl
+from core.device_management import prober, types as dm_types
 
 
 class TestListDevices(BaseTestCase):
@@ -15,10 +15,10 @@ class TestListDevices(BaseTestCase):
              'algorithm': 'zstd', 'streams': 2, 'mountpoint': '', 'ratio': None},
         ]
 
-        devices = zdevice_ctl.list_devices()
+        devices = prober.list_devices()
 
         self.assertEqual(len(devices), 2)
-        self.assertIsInstance(devices[0], zdevice_ctl.DeviceInfo)
+        self.assertIsInstance(devices[0], dm_types.DeviceInfo)
         self.assertEqual(devices[0].name, 'zram0')
         self.assertEqual(devices[0].disksize, '4G')
         self.assertEqual(devices[1].name, 'zram1')
@@ -27,7 +27,7 @@ class TestListDevices(BaseTestCase):
     def test_list_devices_empty(self, mock_parse):
         mock_parse.return_value = []
 
-        devices = zdevice_ctl.list_devices()
+        devices = prober.list_devices()
 
         self.assertEqual(devices, [])
 
@@ -54,9 +54,9 @@ class TestGetWritebackStatus(BaseTestCase):
         
         mock_read.side_effect = read_side_effect
 
-        status = zdevice_ctl.get_writeback_status("zram0")
+        status = prober.get_writeback_status("zram0")
 
-        self.assertIsInstance(status, zdevice_ctl.WritebackStatus)
+        self.assertIsInstance(status, dm_types.WritebackStatus)
         self.assertEqual(status.device, "zram0")
         self.assertEqual(status.backing_dev, "/dev/loop0")
 
@@ -80,7 +80,7 @@ class TestGetWritebackStatus(BaseTestCase):
         
         mock_read.side_effect = read_side_effect
 
-        status = zdevice_ctl.get_writeback_status("zram0")
+        status = prober.get_writeback_status("zram0")
 
         self.assertEqual(status.backing_dev, "none")
 
@@ -88,7 +88,7 @@ class TestGetWritebackStatus(BaseTestCase):
 class TestDeviceInfoDataclass(BaseTestCase):
 
     def test_device_info_creation(self):
-        info = zdevice_ctl.DeviceInfo(
+        info = dm_types.DeviceInfo(
             name="zram0",
             disksize="4G",
             data_size="1M",
@@ -103,7 +103,7 @@ class TestDeviceInfoDataclass(BaseTestCase):
         self.assertEqual(info.streams, 4)
 
     def test_device_info_defaults(self):
-        info = zdevice_ctl.DeviceInfo(name="zram1")
+        info = dm_types.DeviceInfo(name="zram1")
 
         self.assertIsNone(info.disksize)
         self.assertIsNone(info.algorithm)
@@ -113,7 +113,7 @@ class TestDeviceInfoDataclass(BaseTestCase):
 class TestWritebackStatusDataclass(BaseTestCase):
 
     def test_writeback_status_creation(self):
-        status = zdevice_ctl.WritebackStatus(
+        status = dm_types.WritebackStatus(
             device="zram0",
             backing_dev="/dev/loop0",
             mem_used_total="1M",
@@ -130,7 +130,7 @@ class TestWritebackStatusDataclass(BaseTestCase):
 class TestUnitResultDataclass(BaseTestCase):
 
     def test_unit_result_success(self):
-        result = zdevice_ctl.UnitResult(
+        result = dm_types.UnitResult(
             success=True,
             message="Service restarted",
             service="systemd-zram-setup@zram0.service"
@@ -139,7 +139,7 @@ class TestUnitResultDataclass(BaseTestCase):
         self.assertEqual(result.service, "systemd-zram-setup@zram0.service")
 
     def test_unit_result_failure(self):
-        result = zdevice_ctl.UnitResult(
+        result = dm_types.UnitResult(
             success=False,
             message="Unit not found"
         )
@@ -149,7 +149,7 @@ class TestUnitResultDataclass(BaseTestCase):
 class TestWritebackResultDataclass(BaseTestCase):
 
     def test_writeback_result_creation(self):
-        result = zdevice_ctl.WritebackResult(
+        result = dm_types.WritebackResult(
             success=True,
             device="zram0",
             action="set_writeback",
@@ -163,7 +163,7 @@ class TestWritebackResultDataclass(BaseTestCase):
 class TestPersistResultDataclass(BaseTestCase):
 
     def test_persist_result_creation(self):
-        result = zdevice_ctl.PersistResult(
+        result = dm_types.PersistResult(
             success=True,
             device="zram0",
             applied=True,
