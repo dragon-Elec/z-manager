@@ -11,15 +11,19 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Tuple, Dict, Any, List
 
-from core.os_utils import (
+from core.utils.common import (
     run,
     SystemCommandError,
-    atomic_write_to_file,
     read_file,
-    check_device_safety,
-    is_block_device,
+)
+from core.utils.io import (
+    atomic_write_to_file,
     pkexec_write,
     is_root,
+)
+from core.utils.block import (
+    check_device_safety,
+    is_block_device,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -63,40 +67,43 @@ def get_memory_info() -> Tuple[int, int]:
 
 def check_hibernation_readiness() -> HibernateCheckResult:
     """
-    Checks basic system readiness for hibernation.
+    Checks system readiness by delegating to systemd-logind with a fallback to sysfs parsing.
     """
-    # 1. Check Secure Boot
-    secure_boot_mode = "disabled"
+    secure_boot_mode = "queried-via-logind"
     try:
-        # Check kernel lockdown mode
-        lockdown = read_file("/sys/kernel/security/lockdown")
-        if lockdown:
-            # Format: [none] integrity confidentiality
-            if "[integrity]" in lockdown:
-                secure_boot_mode = "integrity"
-            elif "[confidentiality]" in lockdown:
-                secure_boot_mode = "confidentiality"
-            elif "integrity" in lockdown: # active but not bracketed in some formats?
-                 # Double check with efivars if possible, but sysfs is source of truth for kernel restrictions
-                 pass
-    except Exception:
-        pass
+        res = run(["busctl", "call", "org.freedesktop.login1", "/org/freedesktop/login1", 
+                   "org.freedesktop.login1.Manager", "CanHibernate"], check=True)
+        
+        # Robust parsing: Look for the variant value in the busctl output string
+        out = res.out.lower()
+        if '"yes"' in out:
+            ready, msg = True, "System is fully ready for hibernation."
+        elif '"no"' in out:
+            ready, msg = False, "Hibernation is disabled (likely Secure Boot or Driver policy)."
+        elif '"na"' in out:
+            ready, msg = False, "Hibernation is not supported by this hardware or kernel."
+        elif '"challenge"' in out:
+            ready, msg = True, "Hibernation available (requires authentication)."
+        else:
+            ready, msg = False, f"Unexpected response from logind: {res.out.strip()}"
 
-    # 2. Check Memory Fitness
+    except (SystemCommandError, Exception):
+        # Fallback to sysfs if systemd-logind is unavailable or output is unparseable
+        ready, msg = True, "Logind unavailable. Fallback: System appears ready."
+        secure_boot_mode = "disabled"
+        try:
+            lockdown = read_file("/sys/kernel/security/lockdown")
+            if lockdown:
+                if "[integrity]" in lockdown:
+                    secure_boot_mode = "integrity"
+                elif "[confidentiality]" in lockdown:
+                    secure_boot_mode = "confidentiality"
+                    ready, msg = False, "Secure Boot confidentiality active. Hibernation blocked."
+        except Exception:
+            pass
+
     mem_total, swap_total = get_memory_info()
     
-    # Heuristic: We need at least 1/2 RAM in swap (compressed) or full RAM ideally.
-    # For safe hibernation, Swap should ideally be >= RAM * 0.6 (assuming compression)
-    # But strictly speaking, if Swap < RAM usage, it fails.
-    # We'll just report the values for the UI to warn.
-    
-    ready = True
-    msg = "System appears ready."
-    
-    if secure_boot_mode == "confidentiality":
-        ready = False
-        msg = "Secure Boot 'confidentiality' mode is active. Hibernation is blocked by kernel."
-
     return HibernateCheckResult(
         ready=ready,
         secure_boot=secure_boot_mode,
@@ -127,46 +134,31 @@ def _get_fs_type(path: str) -> Optional[str]:
 def get_resume_offset(path: str) -> Optional[int]:
     """
     Calculate the physical offset of the swapfile for the kernel resume parameter.
+    Uses filesystem-specific tools for high-fidelity offset discovery.
     """
     if is_block_device(path):
         return 0 # Offsets are 0 for partitions
 
-    fs_type = _get_fs_type(path)
-    
-    if fs_type == "btrfs":
-        # Btrfs requires specific tool
-        try:
-            # btrfs inspect-internal map-swapfile -r /path/to/swapfile
-            res = run(["btrfs", "inspect-internal", "map-swapfile", "-r", path], check=False)
-            if res.code == 0:
+    match _get_fs_type(path):
+        case "btrfs":
+            # Btrfs requires specific tool: btrfs inspect-internal map-swapfile -r /path/to/swapfile
+            try:
+                res = run(["btrfs", "inspect-internal", "map-swapfile", "-r", path], check=True)
                 return int(res.out.strip())
-        except (ValueError, SystemCommandError):
-            pass
-        return None
+            except (ValueError, SystemCommandError):
+                pass
         
-    else:
-        # Standard Ext4/XFS use filefrag
-        try:
-            # filefrag -v /swapfile
-            # output format:
-            # Filesystem type is: ef53
-            # File size of /swapfile is ...
-            # ext:     logical_offset:        physical_offset: length:   expected: flags:
-            #   0:        0..       0:      34816..     34816:      1:
-            res = run(["filefrag", "-v", path], check=False)
-            if res.code == 0:
-                # We need the first physical offset value from line with "0:"
+        case _:
+            # Universal fallback for standard allocating filesystems
+            try:
+                res = run(["filefrag", "-v", path], check=True)
                 for line in res.out.splitlines():
                     if line.strip().startswith("0:"):
-                        # Parts might look like: "0:", "0..", "0:", "34816..", "34816:", "1:"
-                        # We want the 4th column roughly (physical_offset range start)
                         parts = line.split()
                         if len(parts) >= 4:
-                            phys_range = parts[3] # e.g. "34816..34816" or "34816"
-                            val = phys_range.split("..")[0]
-                            return int(val)
-        except (ValueError, SystemCommandError, IndexError):
-            pass
+                            return int(parts[3].split("..")[0])
+            except (ValueError, SystemCommandError, IndexError):
+                pass
             
     return None
 
@@ -250,9 +242,69 @@ def enable_swapon(path: str, priority: int = 0) -> bool:
     except SystemCommandError:
         return False
 
+def escape_unit_name(path: str) -> str:
+    """
+    Escapes a filesystem path for use as a systemd unit name.
+    Standardizes via systemd-escape to natively handle hyphens.
+    """
+    try:
+        res = run(["systemd-escape", "-p", "--suffix=swap", path], check=True)
+        return res.out.strip()
+    except SystemCommandError:
+        escaped = path.lstrip("/").replace("/", "-")
+        return f"{escaped}.swap"
+
+def generate_swap_unit(path: str, priority: int = 0) -> str:
+    """
+    Generates the content for a systemd .swap unit file.
+    """
+    return f"""[Unit]
+Description=Z-Manager Hibernation Swapfile
+Documentation=https://github.com/ray/z-manager
+
+[Swap]
+What={path}
+Priority={priority}
+Options=nofail
+
+[Install]
+WantedBy=multi-user.target
+"""
+
+def persist_swap_unit(path: str, priority: int = 0) -> Tuple[bool, str]:
+    """
+    Saves the .swap unit to /etc/systemd/system and enables it.
+    This is the modern replacement for update_fstab.
+    """
+    unit_name = escape_unit_name(path)
+    unit_path = f"/etc/systemd/system/{unit_name}"
+    content = generate_swap_unit(path, priority)
+
+    from core.utils.io import pkexec_write
+    from core.utils.privilege import pkexec_daemon_reload, pkexec_systemctl
+
+    # 1. Write the unit file (requires root)
+    ok, err = pkexec_write(unit_path, content)
+    if not ok:
+        return False, f"Failed to write unit file: {err}"
+
+    # 2. Orchestrate systemd
+    # Reload to see the new unit
+    ok, err = pkexec_daemon_reload()
+    if not ok:
+        return False, f"Systemd daemon-reload failed: {err}"
+        
+    # Enable and start it immediately
+    ok, err = pkexec_systemctl("enable", unit_name)
+    if not ok:
+        return False, f"Failed to enable swap unit: {err}"
+        
+    return True, "Swap unit persisted and activated."
+
 def update_fstab(device_path: str, uuid: str) -> bool:
     """
-    Adds a swap entry to /etc/fstab with 'nofail' and priority 0.
+    [DEPRECATED] Adds a swap entry to /etc/fstab.
+    Use persist_swap_unit() instead for better safety and isolation.
     """
     fstab_path = "/etc/fstab"
     
