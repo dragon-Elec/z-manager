@@ -13,10 +13,12 @@ import tempfile
 import os
 import shutil
 import contextlib
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from .os_utils import run, SystemCommandError, atomic_write_to_file, read_file
+from core.utils.common import run, SystemCommandError, read_file
+from core.utils.io import atomic_write_to_file, is_root
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -106,6 +108,7 @@ def apply_sysctl_profile(enable: bool) -> TuneResult:
     """
     Idempotently enables or disables the optimal sysctl performance profile.
     """
+    from core.utils.io import pkexec_write, pkexec_sysctl_system
     if enable:
         current_content = read_file(SYSCTL_CONFIG_PATH)
         if current_content and current_content.strip() == GAMING_PROFILE_CONTENT:
@@ -113,29 +116,33 @@ def apply_sysctl_profile(enable: bool) -> TuneResult:
             return TuneResult(success=True, changed=False, message="Sysctl performance profile is already configured.")
 
         _LOGGER.info("Writing sysctl performance profile configuration.")
-        success, error = atomic_write_to_file(SYSCTL_CONFIG_PATH, GAMING_PROFILE_CONTENT + "\n")
+        success, error = pkexec_write(str(SYSCTL_CONFIG_PATH), GAMING_PROFILE_CONTENT + "\n")
         if not success:
             return TuneResult(success=False, changed=False, message=f"Failed to write sysctl config: {error}")
 
-        try:
-            run(["sysctl", "--system"], check=True)
-            _LOGGER.info("Successfully applied live sysctl settings.")
-            return TuneResult(success=True, changed=True, message="System performance profile was successfully applied.")
-        except SystemCommandError as e:
-            _LOGGER.error(f"Failed to apply live sysctl settings: {e}")
-            return TuneResult(success=False, changed=True, message=f"Config file written, but failed to apply live settings: {e.stderr}")
+        ok, err = pkexec_sysctl_system()
+        if not ok:
+            _LOGGER.error(f"Failed to apply live sysctl settings: {err}")
+            return TuneResult(success=False, changed=True, message=f"Config file written, but failed to apply live settings: {err}")
+        
+        _LOGGER.info("Successfully applied live sysctl settings.")
+        return TuneResult(success=True, changed=True, message="System performance profile was successfully applied.")
     else: # Disabling
         if not SYSCTL_CONFIG_PATH.exists():
             return TuneResult(success=True, changed=False, message="Sysctl performance profile is already disabled.")
 
-        try:
-            SYSCTL_CONFIG_PATH.unlink()
-        except OSError as e:
-            _LOGGER.error(f"Failed to remove sysctl config file: {e}")
-            return TuneResult(success=False, changed=False, message=f"Failed to disable performance profile: {e}")
+        # Removing a file also requires privilege if in /etc/
+        # For now, zman-helper write command doesn't support 'delete', 
+        # but we can write an empty file or a default one. 
+        # Better: let's write DEFAULT_SYSCTL_SETTINGS to the path instead of unlinking
+        # to stay within the 'write' whitelist.
+        success, error = pkexec_write(str(SYSCTL_CONFIG_PATH), DEFAULT_SYSCTL_SETTINGS + "\n")
+        if not success:
+            return TuneResult(success=False, changed=False, message=f"Failed to reset sysctl config: {error}")
 
-        if not _revert_sysctl_to_defaults():
-            return TuneResult(success=False, changed=True, message="Profile config removed, but failed to revert live settings.")
+        ok, err = pkexec_sysctl_system()
+        if not ok:
+            return TuneResult(success=False, changed=True, message="Profile config reset, but failed to apply live settings.")
         
         return TuneResult(success=True, changed=True, message="Sysctl performance profile was disabled and settings reverted.")
 
@@ -148,6 +155,7 @@ def apply_sysctl_values(settings: dict[str, str]) -> TuneResult:
     if not settings:
         return TuneResult(success=True, changed=False, message="No settings provided.")
 
+    from core.utils.io import pkexec_write, pkexec_sysctl_system
     # 1. Read existing file content and parse into a dict
     final_config = {}
     if current_content := read_file(SYSCTL_CONFIG_PATH):
@@ -171,15 +179,15 @@ def apply_sysctl_values(settings: dict[str, str]) -> TuneResult:
     new_content = "\n".join(new_lines) + "\n"
 
     # 4. Write and Apply
-    success, error = atomic_write_to_file(SYSCTL_CONFIG_PATH, new_content)
+    success, error = pkexec_write(str(SYSCTL_CONFIG_PATH), new_content)
     if not success:
         return TuneResult(success=False, changed=False, message=f"Failed to write config: {error}")
 
-    try:
-        run(["sysctl", "--system"], check=True)
-        return TuneResult(success=True, changed=True, message="Successfully applied custom sysctl settings.")
-    except SystemCommandError as e:
-        return TuneResult(success=False, changed=True, message=f"Config saved, but sysctl failed: {e.stderr}")
+    ok, err = pkexec_sysctl_system()
+    if not ok:
+        return TuneResult(success=False, changed=True, message=f"Config saved, but sysctl failed: {err}")
+    
+    return TuneResult(success=True, changed=True, message="Successfully applied custom sysctl settings.")
 
 def set_zswap_in_grub(enabled: bool) -> TuneResult:
     """
@@ -194,34 +202,36 @@ def set_zswap_in_grub(enabled: bool) -> TuneResult:
             action_needed="Manual entry: Add 'zswap.enabled=0' to your bootloader's kernel parameters."
         )
 
-    # We are setting `zswap.enabled=0`, so `enabled=False` means create the file.
+    from core.utils.io import pkexec_write
+    # We are setting `zswap.enabled=0`, so `enabled=False` means we want the config present.
     if not enabled:
         if is_kernel_param_active("zswap.enabled=0"):
             return TuneResult(success=True, changed=False, message="ZSwap is already disabled in the current boot session.")
-        if GRUB_ZSWAP_DISABLE_PATH.exists():
+        
+        current = read_file(GRUB_ZSWAP_DISABLE_PATH)
+        if current and GRUB_ZSWAP_DISABLE_CONTENT in current:
             return TuneResult(success=True, changed=False, message="GRUB configuration to disable zswap already exists.", action_needed="update-grub")
 
-        success, error = atomic_write_to_file(GRUB_ZSWAP_DISABLE_PATH, GRUB_ZSWAP_DISABLE_CONTENT + "\n")
+        success, error = pkexec_write(str(GRUB_ZSWAP_DISABLE_PATH), GRUB_ZSWAP_DISABLE_CONTENT + "\n")
         if not success:
             return TuneResult(success=False, changed=False, message=f"Failed to write GRUB config file: {error}")
         return TuneResult(success=True, changed=True, message="GRUB configuration to disable zswap was written.", action_needed="update-grub")
     else: # Re-enabling zswap
-        if not GRUB_ZSWAP_DISABLE_PATH.exists():
-            return TuneResult(success=True, changed=False, message="ZSwap is already enabled (config file absent).")
-        try:
-            GRUB_ZSWAP_DISABLE_PATH.unlink()
-            return TuneResult(success=True, changed=True, message="GRUB configuration to disable zswap was removed.", action_needed="update-grub")
-        except Exception as e:
-            return TuneResult(success=False, changed=False, message=f"Failed to remove GRUB config: {e}")
+        current = read_file(GRUB_ZSWAP_DISABLE_PATH)
+        if not current or GRUB_ZSWAP_DISABLE_CONTENT not in current:
+            return TuneResult(success=True, changed=False, message="ZSwap is already enabled (config file absent or cleared).")
+        
+        # Instead of unlink, write an empty file or a comment to "disable" the drop-in
+        success, error = pkexec_write(str(GRUB_ZSWAP_DISABLE_PATH), "# ZSwap disabling removed by Z-Manager\n")
+        if not success:
+             return TuneResult(success=False, changed=False, message=f"Failed to remove GRUB config: {error}")
+        return TuneResult(success=True, changed=True, message="GRUB configuration to disable zswap was cleared.", action_needed="update-grub")
 
 
 def set_psi_in_grub(enabled: bool) -> TuneResult:
     """
     Manages the kernel parameter to enable/disable PSI permanently via GRUB.
     This function only writes the file; it does not run update-grub.
-
-    Note: This enables or disables the entire PSI subsystem globally. Individual
-    resources (CPU, memory, I/O) cannot be controlled separately at boot time.
     """
     if detect_bootloader() != "grub":
         return TuneResult(
@@ -231,24 +241,28 @@ def set_psi_in_grub(enabled: bool) -> TuneResult:
             action_needed="Manual entry: Add 'psi=1' to your bootloader's kernel parameters."
         )
 
+    from core.utils.io import pkexec_write
     if enabled:
         if is_kernel_param_active("psi=1"):
             return TuneResult(success=True, changed=False, message="PSI is already enabled in the current boot session.")
-        if GRUB_PSI_ENABLE_PATH.exists():
+            
+        current = read_file(GRUB_PSI_ENABLE_PATH)
+        if current and GRUB_PSI_ENABLE_CONTENT in current:
             return TuneResult(success=True, changed=False, message="GRUB configuration to enable PSI already exists.", action_needed="update-grub")
 
-        success, error = atomic_write_to_file(GRUB_PSI_ENABLE_PATH, GRUB_PSI_ENABLE_CONTENT + "\n")
+        success, error = pkexec_write(str(GRUB_PSI_ENABLE_PATH), GRUB_PSI_ENABLE_CONTENT + "\n")
         if not success:
             return TuneResult(success=False, changed=False, message=f"Failed to write GRUB config file for PSI: {error}")
         return TuneResult(success=True, changed=True, message="GRUB configuration to enable PSI was written.", action_needed="update-grub")
     else: # Disabling PSI
-        if not GRUB_PSI_ENABLE_PATH.exists():
-            return TuneResult(success=True, changed=False, message="PSI is already disabled (config file absent).")
-        try:
-            GRUB_PSI_ENABLE_PATH.unlink()
-            return TuneResult(success=True, changed=True, message="GRUB configuration to enable PSI was removed.", action_needed="update-grub")
-        except Exception as e:
-            return TuneResult(success=False, changed=False, message=f"Failed to remove GRUB PSI config: {e}")
+        current = read_file(GRUB_PSI_ENABLE_PATH)
+        if not current or GRUB_PSI_ENABLE_CONTENT not in current:
+            return TuneResult(success=True, changed=False, message="PSI is already disabled (config file absent or cleared).")
+        
+        success, error = pkexec_write(str(GRUB_PSI_ENABLE_PATH), "# PSI enabling removed by Z-Manager\n")
+        if not success:
+            return TuneResult(success=False, changed=False, message=f"Failed to remove GRUB PSI config: {error}")
+        return TuneResult(success=True, changed=True, message="GRUB configuration to enable PSI was cleared.", action_needed="update-grub")
 
 # --- Hibernation Boot Config ---
 
@@ -261,9 +275,42 @@ def detect_bootloader() -> str:
     return "unknown"
 
 
+def pkexec_update_grub() -> TuneResult:
+    """Runs update-grub via pkexec."""
+    if is_root():
+        try:
+            # Try update-grub first
+            if shutil.which("update-grub"):
+                run(["update-grub"], check=True)
+            elif shutil.which("grub-mkconfig"):
+                # Fallback to grub-mkconfig with common paths
+                for p in ["/boot/grub/grub.cfg", "/boot/efi/EFI/fedora/grub.cfg", "/boot/grub2/grub.cfg"]:
+                    if os.path.exists(p):
+                        run(["grub-mkconfig", "-o", p], check=True)
+                        break
+                else:
+                    return TuneResult(False, False, "Could not find grub.cfg to update.")
+            else:
+                return TuneResult(False, False, "Neither update-grub nor grub-mkconfig found.")
+            return TuneResult(True, True, "GRUB configuration updated successfully.")
+        except SystemCommandError as e:
+            return TuneResult(False, False, f"Failed to update GRUB: {e.stderr}")
+    
+    helper_path = os.path.join(os.path.dirname(__file__), "zman_helper.py")
+    try:
+        proc = subprocess.run(["pkexec", helper_path, "update-grub"], capture_output=True, text=True)
+        if proc.returncode == 0:
+            return TuneResult(True, True, "GRUB configuration updated successfully via pkexec.")
+        else:
+            return TuneResult(False, False, f"pkexec update-grub failed: {proc.stderr.strip()}")
+    except Exception as e:
+        return TuneResult(False, False, str(e))
+
+
 def update_grub_resume(uuid: str, offset: int | None = None) -> TuneResult:
     """
     Add resume=UUID=... [resume_offset=...] to GRUB config.
+    Uses pkexec for writing to /etc/default/grub.d/
     """
     if detect_bootloader() != "grub":
         return TuneResult(
@@ -279,11 +326,12 @@ def update_grub_resume(uuid: str, offset: int | None = None) -> TuneResult:
     
     content = f'GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT {params}"'
     
-    success, error = atomic_write_to_file(GRUB_RESUME_CONFIG_PATH, content + "\n")
+    from core.utils.io import pkexec_write
+    success, error = pkexec_write(str(GRUB_RESUME_CONFIG_PATH), content + "\n")
     if not success:
         return TuneResult(False, False, f"Failed to write GRUB resume config: {error}")
     
-    return TuneResult(True, True, "Resume configuration written to GRUB.", action_needed="update-grub")
+    return TuneResult(True, True, "Resume configuration written to GRUB drop-in.", action_needed="update-grub")
 
 
 def detect_initramfs_system() -> str:
@@ -295,6 +343,22 @@ def detect_initramfs_system() -> str:
     if os.path.exists("/etc/mkinitcpio.conf") or shutil.which("mkinitcpio"):
         return "mkinitcpio"
     return "unknown"
+
+
+def pkexec_update_initramfs() -> TuneResult:
+    """Regenerates initramfs via pkexec."""
+    if is_root():
+        return regenerate_initramfs()
+        
+    helper_path = os.path.join(os.path.dirname(__file__), "zman_helper.py")
+    try:
+        proc = subprocess.run(["pkexec", helper_path, "update-initramfs"], capture_output=True, text=True)
+        if proc.returncode == 0:
+            return TuneResult(True, True, "Initramfs regenerated successfully via pkexec.")
+        else:
+            return TuneResult(False, False, f"pkexec update-initramfs failed: {proc.stderr.strip()}")
+    except Exception as e:
+        return TuneResult(False, False, str(e))
 
 
 def configure_initramfs_resume(uuid: str, offset: int | None = None) -> TuneResult:
@@ -311,7 +375,8 @@ def configure_initramfs_resume(uuid: str, offset: int | None = None) -> TuneResu
     if offset is not None and offset > 0:
         content += f"RESUME_OFFSET={offset}\n"
         
-    success, error = atomic_write_to_file(conf_path, content)
+    from core.utils.io import pkexec_write
+    success, error = pkexec_write(str(conf_path), content)
     if not success:
         return TuneResult(False, False, f"Failed to write initramfs resume config: {error}")
         
@@ -334,3 +399,38 @@ def regenerate_initramfs() -> TuneResult:
         return TuneResult(True, True, f"Initramfs regenerated successfully ({system}).")
     except SystemCommandError as e:
         return TuneResult(False, False, f"Failed to regenerate initramfs: {e.stderr}")
+
+
+def apply_hibernation_boot_config(uuid: str, offset: int | None = None) -> TuneResult:
+    """
+    High-level orchestrator for the 'Bootloader Handshake'.
+    1. Writes GRUB resume parameters.
+    2. Writes Initramfs resume parameters.
+    3. Runs update-grub.
+    4. Runs update-initramfs.
+    """
+    _LOGGER.info(f"Starting hibernation boot configuration (UUID={uuid}, Offset={offset})")
+    
+    # 1. Update GRUB config
+    grub_res = update_grub_resume(uuid, offset)
+    if not grub_res.success:
+        return grub_res
+    
+    # 2. Update Initramfs config
+    init_res = configure_initramfs_resume(uuid, offset)
+    if not init_res.success:
+        return init_res
+    
+    # 3. Run update-grub
+    _LOGGER.info("Running update-grub...")
+    update_grub_res = pkexec_update_grub()
+    if not update_grub_res.success:
+        return update_grub_res
+        
+    # 4. Run update-initramfs
+    _LOGGER.info("Regenerating initramfs...")
+    update_init_res = pkexec_update_initramfs()
+    if not update_init_res.success:
+        return update_init_res
+        
+    return TuneResult(True, True, "Hibernation boot configuration applied successfully. A reboot is required.")

@@ -37,6 +37,8 @@ ALLOWED_WRITE_PATHS = [
     "/etc/sysctl.d/99-z-manager.conf",
     "/etc/default/grub.d/99-z-manager-disable-zswap.cfg",
     "/etc/default/grub.d/98-z-manager-enable-psi.cfg",
+    "/etc/default/grub.d/99-z-manager-resume.cfg",
+    "/etc/initramfs-tools/conf.d/resume",
 ]
 
 # Allowed service patterns for systemctl operations
@@ -110,21 +112,94 @@ def cmd_daemon_reload() -> int:
 
 def cmd_systemctl(action: str, service: str) -> int:
     """Run systemctl action on a service."""
-    if action not in ("restart", "stop", "start"):
+    if action not in ("restart", "stop", "start", "enable", "disable"):
         print(f"Error: Invalid action: {action}", file=sys.stderr)
         return 1
     
-    if not is_service_allowed(service):
+    # Allow zman services and any .swap units (created by zman)
+    if not is_service_allowed(service) and not service.endswith(".swap"):
         print(f"Error: Service not allowed: {service}", file=sys.stderr)
         return 1
     
     try:
-        subprocess.run(["systemctl", action, service], check=True)
+        cmd = ["systemctl", action]
+        if action in ("enable", "disable"):
+            cmd.append("--now")
+        cmd.append(service)
+        
+        subprocess.run(cmd, check=True)
         return 0
     except subprocess.CalledProcessError as e:
-        print(f"Error: systemctl {action} {service} failed: {e}", file=sys.stderr)
+        print(f"Error: systemctl {' '.join(cmd[1:])} failed: {e}", file=sys.stderr)
         return e.returncode
 
+
+def cmd_update_grub() -> int:
+    """Run update-grub or equivalent."""
+    if shutil.which("update-grub"):
+        cmd = ["update-grub"]
+    else:
+        # Try variants of mkconfig
+        mkconfig = shutil.which("grub-mkconfig") or shutil.which("grub2-mkconfig")
+        if not mkconfig:
+            print("Error: update-grub or grub-mkconfig not found", file=sys.stderr)
+            return 1
+            
+        # We need to find the config path. Common paths:
+        config_paths = [
+            "/boot/grub/grub.cfg", 
+            "/boot/grub2/grub.cfg",
+            "/boot/efi/EFI/fedora/grub.cfg", 
+            "/boot/efi/EFI/redhat/grub.cfg",
+            "/boot/efi/EFI/ubuntu/grub.cfg",
+            "/boot/efi/EFI/debian/grub.cfg"
+        ]
+        found_path = None
+        for p in config_paths:
+            if os.path.exists(p):
+                found_path = p
+                break
+        if not found_path:
+            print("Error: Could not find grub.cfg", file=sys.stderr)
+            return 1
+        cmd = [mkconfig, "-o", found_path]
+
+    try:
+        subprocess.run(cmd, check=True)
+        return 0
+    except subprocess.CalledProcessError as e:
+        print(f"Error: GRUB update failed: {e}", file=sys.stderr)
+        return e.returncode
+
+
+def cmd_update_initramfs() -> int:
+    """Run update-initramfs or equivalent."""
+    if shutil.which("update-initramfs"):
+        cmd = ["update-initramfs", "-u"]
+    elif shutil.which("dracut"):
+        cmd = ["dracut", "-f", "--regenerate-all"]
+    elif shutil.which("mkinitcpio"):
+        cmd = ["mkinitcpio", "-P"]
+    else:
+        print("Error: No supported initramfs tool found", file=sys.stderr)
+        return 1
+
+    try:
+        subprocess.run(cmd, check=True)
+        return 0
+    except subprocess.CalledProcessError as e:
+        print(f"Error: Initramfs update failed: {e}", file=sys.stderr)
+        return e.returncode
+
+
+def cmd_sysctl_system() -> int:
+    """Run sysctl --system."""
+    try:
+        subprocess.run(["sysctl", "--system"], check=True)
+        return 0
+    except subprocess.CalledProcessError as e:
+        print(f"Error: sysctl --system failed: {e}", file=sys.stderr)
+        return e.returncode
 
 
 def cmd_live_apply(device_name: str, config_path: str) -> int:
@@ -202,7 +277,16 @@ def main():
         case ["daemon-reload"]:
             return cmd_daemon_reload()
 
-        case [("restart" | "stop" | "start") as action, service]:
+        case ["update-grub"]:
+            return cmd_update_grub()
+
+        case ["update-initramfs"]:
+            return cmd_update_initramfs()
+
+        case ["sysctl-system"]:
+            return cmd_sysctl_system()
+
+        case [("restart" | "stop" | "start" | "enable" | "disable") as action, service]:
             return cmd_systemctl(action, service)
 
         case ["live-apply", device, config_path]:
