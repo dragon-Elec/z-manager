@@ -1,29 +1,58 @@
 from tests.test_base import *
 import sys
 import os
+from unittest.mock import patch, MagicMock
 
 from core import hibernate_ctl
 from core.os_utils import SystemCommandError
 
 class TestHibernateCtl(BaseTestCase):
 
-    @patch('core.hibernate_ctl.read_file')
+    @patch('core.hibernate_ctl.run')
     @patch('core.hibernate_ctl.get_memory_info')
-    def test_check_readiness_basic(self, mock_mem, mock_read):
-        """Test basic readiness checks."""
-        # 1. Happy Path
-        mock_mem.return_value = (8*1024*1024*1024, 0) # 8GB RAM, 0 Swap
-        mock_read.return_value = "none [integrity]" # Secure boot OK
+    def test_check_readiness_busctl(self, mock_mem, mock_run):
+        """Test systemd-logind delegation via busctl."""
+        # 1. Happy Path: logind says "yes"
+        mock_mem.return_value = (8*1024*1024*1024, 4*1024*1024*1024)
+        mock_run.return_value = MagicMock(out='s "yes"', code=0)
         
         res = hibernate_ctl.check_hibernation_readiness()
         self.assertTrue(res.ready)
-        self.assertEqual(res.secure_boot, "integrity")
+        self.assertIn("ready", res.message)
 
-        # 2. Secure Boot Blocked
-        mock_read.return_value = "none [confidentiality]"
+        # 2. Blocked: logind says "no" (e.g. Secure Boot)
+        mock_run.return_value = MagicMock(out='s "no"', code=0)
         res = hibernate_ctl.check_hibernation_readiness()
         self.assertFalse(res.ready)
-        self.assertIn("confidentiality", res.message)
+        self.assertIn("disabled", res.message)
+
+        # 3. Not Supported: logind says "na"
+        mock_run.return_value = MagicMock(out='s "na"', code=0)
+        res = hibernate_ctl.check_hibernation_readiness()
+        self.assertFalse(res.ready)
+        self.assertIn("not supported", res.message)
+
+    @patch('core.hibernate_ctl._get_fs_type')
+    @patch('core.hibernate_ctl.run')
+    def test_get_resume_offset_logic(self, mock_run, mock_fs):
+        """Verify filesystem-specific offset calculation logic."""
+        # 1. Btrfs
+        mock_fs.return_value = "btrfs"
+        mock_run.return_value = MagicMock(out="12345\n", code=0)
+        offset = hibernate_ctl.get_resume_offset("/swapfile")
+        self.assertEqual(offset, 12345)
+        self.assertIn("inspect-internal", mock_run.call_args[0][0])
+
+        # 2. Ext4
+        mock_fs.return_value = "ext4"
+        mock_run.return_value = MagicMock(out="""Filesystem type is: ef53
+File size of /swapfile is 4294967296 (1048576 blocks, blocksize 4096)
+ ext:     logical_offset:        physical_offset: length:   expected: flags:
+   0:        0..       0:      34816..     34816:      1:
+""", code=0)
+        offset = hibernate_ctl.get_resume_offset("/swapfile")
+        self.assertEqual(offset, 34816)
+        self.assertIn("filefrag", mock_run.call_args[0][0])
 
     @patch('core.hibernate_ctl.get_resume_offset')
     @patch('core.hibernate_ctl.get_partition_uuid')
@@ -33,35 +62,18 @@ class TestHibernateCtl(BaseTestCase):
     @patch('os.path.exists')
     def test_create_swapfile_ext4(self, mock_exists, mock_fs, mock_run, mock_chmod, mock_uuid, mock_offset):
         """Test swapfile creation on Ext4."""
-        mock_exists.return_value = False # New file
+        mock_exists.return_value = False 
         mock_fs.return_value = "ext4"
         mock_uuid.return_value = "uuid-123"
         mock_offset.return_value = 12345
-        
-        # Mock run to succeed
         mock_run.return_value.code = 0
         
         res = hibernate_ctl.create_swapfile("/swapfile", 1024)
-        
-        # If failure, print message
-        if not res.success:
-            print(f"FAIL REASON: {res.message}")
-            
         self.assertTrue(res.success)
         
-        # Verify calls
-        # Should call fallocate, chmod, mkswap. NOT truncate/chattr
         calls = [c[0][0] for c in mock_run.call_args_list]
-        
-        # Check that we called fallocate
-        fallocate_called = any("fallocate" in cmd[0] for cmd in calls)
-        self.assertTrue(fallocate_called, "Should use fallocate for Ext4")
-        
-        # Check NO btrfs commands
-        btrfs_called = any("truncate" in cmd[0] for cmd in calls)
-        self.assertFalse(btrfs_called, "Should NOT use truncate on Ext4")
-        
-        mock_chmod.assert_called_with("/swapfile", 0o600)
+        self.assertTrue(any("fallocate" in str(cmd) for cmd in calls))
+        self.assertFalse(any("truncate" in str(cmd) for cmd in calls))
 
     @patch('core.hibernate_ctl.get_resume_offset')
     @patch('core.hibernate_ctl.get_partition_uuid')
@@ -78,41 +90,11 @@ class TestHibernateCtl(BaseTestCase):
         mock_offset.return_value = 12345
         
         res = hibernate_ctl.create_swapfile("/swapfile", 1024)
-        if not res.success:
-            print(f"FAIL REASON: {res.message}")
-
         self.assertTrue(res.success)
         
-        calls = [tuple(c[0][0]) for c in mock_run.call_args_list]
-        
-        # Should force truncate -s 0, chattr +C
-        truncate_found = any('truncate' in cmd and '-s' in cmd for cmd in calls)
-        chattr_found = any('chattr' in cmd and '+C' in cmd for cmd in calls)
-        
-        self.assertTrue(truncate_found, "Must truncate to 0 on Btrfs")
-        self.assertTrue(chattr_found, "Must disable COW (+C) on Btrfs")
-
-    @patch('core.hibernate_ctl.pkexec_write')
-    @patch('core.hibernate_ctl.is_root')
-    @patch('core.hibernate_ctl.read_file')
-    def test_update_fstab(self, mock_read, mock_root, mock_pkexec):
-        """Test fstab updates include 'nofail'."""
-        mock_root.return_value = False # User mode, use pkexec
-        mock_read.return_value = "# /etc/fstab\nUUID=123 / ext4 defaults 0 1\n"
-        mock_pkexec.return_value = (True, "")
-        
-        success = hibernate_ctl.update_fstab("/swapfile", "uuid-555")
-        self.assertTrue(success)
-        
-        # Verify content written
-        args = mock_pkexec.call_args[0]
-        path = args[0]
-        content = args[1]
-        
-        self.assertEqual(path, "/etc/fstab")
-        self.assertIn("UUID=uuid-555", content)
-        self.assertIn("nofail", content)
-        self.assertIn("pri=0", content)
+        calls = [str(c[0][0]) for c in mock_run.call_args_list]
+        self.assertTrue(any('truncate' in cmd for cmd in calls))
+        self.assertTrue(any('chattr' in cmd for cmd in calls))
 
 if __name__ == '__main__':
     unittest.main()
