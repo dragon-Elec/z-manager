@@ -7,8 +7,14 @@ from configobj import ConfigObj
 import io
 import re
 
-from core.config import read_zram_config
+from core.config import CONFIG_PATH
+from pathlib import Path
 
+def _read_local_config() -> ConfigObj:
+    """Reads the specific target configuration file for editing to preserve structure and comments."""
+    if Path(CONFIG_PATH).exists():
+        return ConfigObj(CONFIG_PATH, list_values=False, encoding='utf-8')
+    return ConfigObj(list_values=False, encoding='utf-8')
 def generate_config_string(size_formula: str, algorithm: str, priority: int, device: str = "zram0", writeback_device: Optional[str] = None) -> str:
     """
     Create a zram-generator.conf configuration as a string using ConfigObj.
@@ -27,27 +33,45 @@ def generate_config_string(size_formula: str, algorithm: str, priority: int, dev
 
 def validate_updates(updates: Dict[str, Any]) -> Optional[str]:
     """
-    Validates configuration updates before applying them.
+    Strictly validates configuration updates to prevent injection and corruption.
     Returns None if valid, or an error string if invalid.
     """
-    # 1. Validate zram-size
-    size = updates.get("zram-size")
-    if size:
-        size = str(size)
-        # Check standard sizes (e.g., 512M) or formulas (min(...), ram / 2)
-        # Simple regex for safety: allow alphanumeric, operators, parenthesis, comma
-        if not re.match(r'^[\w\s\+\-\*\/\%\(\)\.\,]+$', size):
-            return f"Invalid zram-size format: '{size}'"
+    forbidden_chars = ("\n", "\r")
+
+    for key, value in updates.items():
+        # 1. Validate Keys
+        key_str = str(key)
+        if any(c in key_str for c in forbidden_chars):
+            return f"Invalid characters in key: {key_str!r}"
         
-    # 2. Validate compression-algorithm
-    algo = updates.get("compression-algorithm")
-    if algo:
-        algo = str(algo)
-        # Allow alphanumeric and parens (e.g. zstd(level=1))
-        # Simple check: must start with a letter
-        if not re.match(r'^[a-zA-Z0-9\-\(\)\=\s]+$', algo):
-            return f"Invalid compression-algorithm format: '{algo}'"
+        if value is None:
+            continue
+
+        # 2. Validate Values
+        val_str = str(value)
+        if any(c in val_str for c in forbidden_chars):
+            return f"Injection attempt detected in value: {val_str!r}"
+        
+        # Prevent value from starting with '[' to avoid section injection
+        if val_str.startswith("["):
+             return f"Invalid value starting with '[': {val_str!r}"
+
+        # 3. Specialized Field Validation
+        match key:
+            case "zram-size":
+                # Allow alphanumeric, operators, parenthesis, comma, dot, and space
+                if not re.match(r'^[\w\s\+\-\*\/\%\(\)\.\,]+$', val_str):
+                    return f"Invalid zram-size format: {val_str!r}"
             
+            case "compression-algorithm":
+                # Allow alphanumeric and parens/equals (e.g. zstd(level=1))
+                if not re.match(r'^[a-zA-Z0-9\-\(\)\=\s]+$', val_str):
+                    return f"Invalid compression-algorithm format: {val_str!r}"
+            
+            case "swap-priority":
+                if not val_str.lstrip("-").isdigit():
+                    return f"Invalid swap-priority (must be integer): {val_str!r}"
+
     return None
 
 def update_zram_config(device: str, updates: Dict[str, Any]) -> Tuple[bool, Optional[str], str]:
@@ -65,7 +89,7 @@ def update_zram_config(device: str, updates: Dict[str, Any]) -> Tuple[bool, Opti
     if err:
         return False, err, ""
 
-    cfg = read_zram_config()
+    cfg = _read_local_config()
     if device not in cfg:
         cfg[device] = {}
     
@@ -147,7 +171,7 @@ def remove_device_from_config(device: str) -> Tuple[bool, Optional[str], str]:
     Remove an entire device section from the configuration.
     Returns (ok, error, rendered_config_string).
     """
-    cfg = read_zram_config()
+    cfg = _read_local_config()
     if device in cfg:
         del cfg[device]
     
@@ -170,7 +194,7 @@ def update_global_config(updates: Dict[str, Any]) -> Tuple[bool, Optional[str], 
     # We can reuse validate_updates if keys match, or do custom validation
     # For now, simplistic validation
     
-    cfg = read_zram_config()
+    cfg = _read_local_config()
     section = "zram-generator"
     
     if section not in cfg:

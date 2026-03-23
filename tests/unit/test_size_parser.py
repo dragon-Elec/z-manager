@@ -10,7 +10,7 @@ class TestSizeParser(BaseTestCase):
         self.assertEqual(os_utils.parse_size_to_bytes("4G"), 4 * 1024**3)
 
     def test_iec_units(self):
-        # These are currently expected to fail or return 0 with the old parser
+        """Verify modern IEC units (KiB, MiB, GiB) are handled via normalization."""
         self.assertEqual(os_utils.parse_size_to_bytes("1KiB"), 1024)
         self.assertEqual(os_utils.parse_size_to_bytes("1MiB"), 1024**2)
         self.assertEqual(os_utils.parse_size_to_bytes("1GiB"), 1024**3)
@@ -21,7 +21,7 @@ class TestSizeParser(BaseTestCase):
 
     def test_whitespace(self):
         self.assertEqual(os_utils.parse_size_to_bytes(" 1G "), 1024**3)
-        self.assertEqual(os_utils.parse_size_to_bytes("1 G"), 1024**3) # Should ideally handle this
+        self.assertEqual(os_utils.parse_size_to_bytes("1 G"), 1024**3)
 
     def test_no_units(self):
         self.assertEqual(os_utils.parse_size_to_bytes("1024"), 1024)
