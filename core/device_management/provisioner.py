@@ -9,12 +9,14 @@ import os
 import logging
 from typing import Optional
 
-from core.os_utils import (
+from core.utils.common import (
     run,
     SystemCommandError,
     ValidationError,
     read_file,
-    sysfs_write,
+)
+from core.utils.io import sysfs_write
+from core.utils.zram_stats import (
     zram_sysfs_dir,
     sysfs_reset_device,
 )
@@ -119,7 +121,7 @@ def reset_device(device_name: str, confirm: bool = False) -> UnitResult:
     confirm parameter exists for CLI UX compatibility.
     """
     dev_path = f"/dev/{device_name}"
-    from core.os_utils import is_block_device
+    from core.utils.block import is_block_device
     if not is_block_device(dev_path):
         return UnitResult(success=False, message=f"Device {device_name} does not exist")
 

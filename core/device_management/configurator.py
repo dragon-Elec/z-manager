@@ -8,20 +8,26 @@ from __future__ import annotations
 import logging
 from typing import Dict, Any, Optional, List, Tuple
 
-from core.os_utils import (
+from core.utils.common import (
     run,
     SystemCommandError,
     ValidationError,
     NotBlockDeviceError,
+)
+from core.utils.block import (
     is_block_device,
+    check_device_safety,
+)
+from core.utils.io import (
     pkexec_write,
+    atomic_write_to_file,
+)
+from core.utils.privilege import (
     pkexec_daemon_reload,
     pkexec_systemctl,
-    atomic_write_to_file,
     systemd_daemon_reload,
     systemd_try_restart,
     systemd_restart,
-    check_device_safety,
 )
 from core.config import CONFIG_PATH, read_zram_config
 from core.config_writer import (

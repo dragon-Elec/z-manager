@@ -7,14 +7,13 @@ No destructive operations or system changes are performed here.
 from __future__ import annotations
 from typing import List, Optional
 
-from core.os_utils import (
+from core.utils.common import (
     run,
     SystemCommandError,
-    is_block_device,
     read_file,
-    zram_sysfs_dir,
-    parse_zramctl_table,
 )
+from core.utils.block import is_block_device
+from core.utils.zram_stats import zram_sysfs_dir, parse_zramctl_table
 from .types import DeviceInfo, WritebackStatus
 
 
@@ -45,7 +44,7 @@ def get_writeback_status(device_name: str) -> WritebackStatus:
     """Reads current writeback stats for a specific device."""
     dev_path = f"/dev/{device_name}"
     if not is_block_device(dev_path):
-        from core.os_utils import NotBlockDeviceError
+        from core.utils.common import NotBlockDeviceError
         raise NotBlockDeviceError(f"zram device {device_name} does not exist")
 
     return WritebackStatus(

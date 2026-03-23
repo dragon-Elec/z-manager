@@ -13,57 +13,19 @@ The engine room of Z-Manager. Handles low-level OS interactions (sysfs, systemd,
 # Index
 __init__.py: Currently empty; placeholder for future core re-exports.
 device_management: Lifecycle orchestration for ZRAM devices (see device_management_dir_context.md).
+utils: Low-level system utilities (see utils_dir_context.md).
+os_utils.py: [DEPRECATED] Legacy monolithic shim. No longer the source of truth; see `utils/` instead.
 
 # Audits
-
-### [FILE: os_utils.py]
-Role: Low-level system utilities and execution wrappers.
-
-/DNA/: [run() -> subprocess.run()] + [pkexec_write() -> subprocess.run(pkexec, zman-helper)]
-
-- SrcDeps: None
-- SysDeps:
-  - subprocess
-  - os
-  - shutil
-  - tempfile
-  - re
-  - dataclasses
-  - pathlib
-  - logging
-  - typing
-
-API:
-  - run(cmd, check=False) -> CmdResult: Standard command runner capturing stdout/err.
-  - stream_command(cmd, env, input_text) -> Iterator[str]: Generator for real-time command output.
-  - is_block_device(path) -> bool: Determine if path refers to a block device.
-  - read_file(path) -> Optional[str]: Safely reads a sysfs file.
-  - sysfs_write(path, value): Safely writes to a sysfs file.
-  - zram_sysfs_dir(device_name) -> str: Resolves /sys/block/zramN path.
-  - pkexec_write(path, content) -> Tuple[bool, str]: Privileged atomic write via helper.
-  - pkexec_daemon_reload() -> Tuple[bool, str]: Privileged systemd reload.
-  - pkexec_systemctl(action, service) -> Tuple[bool, str]: Privileged unit control.
-  - check_device_safety(path) -> Tuple[bool, str]: Validates dev has no FS and is not active swap/mount.
-  - is_device_active(device_path) -> bool: Check if device is used as swap or mounted.
-  - list_block_devices() -> List[Dict]: Flat list of all selectable nodes using lsblk.
-  - get_device_scheduler(device_name) -> Tuple[str, List[str]]: Reads IO scheduler state.
-  - set_device_scheduler(device_name, scheduler) -> bool: Sets IO scheduler state.
-  - get_device_filesystem_type(device_path) -> Optional[str]: Detects FS signature via blkid.
-  - sysfs_reset_device(device_path): Resets zram device via sysfs to avoid node deletion.
-  - systemd_try_restart(service) -> Tuple[bool, str]: Safe service restart with error capture.
-  - parse_zramctl_table() -> List[Dict]: Modern sysfs-based device prober.
-  - parse_size_to_bytes(size_str) -> int: Normalized size parsing (G, M, K).
-  - is_root() -> bool: Checks for root privileges.
-  - atomic_write_to_file(path, content, backup) -> Tuple[bool, str]: Safe file overwrite with diff-check.
-
 
 ### [FILE: boot_config.py]
 Role: Persistent system tuning (sysctl, GRUB, initramfs).
 
-/DNA/: [apply_sysctl_profile() -> atomic_write() -> sysctl --system] + [update_grub_resume() -> atomic_write(/etc/default/grub.d/)]
+/DNA/: [apply_sysctl_profile() -> pkexec_write() -> pkexec_sysctl_system()] + [apply_hibernation_boot_config() -> "Bootloader Handshake" pipeline]
 
 - SrcDeps:
-  - .os_utils (run, SystemCommandError, atomic_write_to_file, read_file)
+  - .utils.common (run, SystemCommandError, read_file)
+  - .utils.io (atomic_write_to_file, is_root, pkexec_write)
 - SysDeps:
   - logging
   - tempfile
@@ -115,10 +77,11 @@ API:
 ### [FILE: config.py]
 Role: Configuration path resolution and reading.
 
-/DNA/: [read_zram_config() -> hierarchy search -> ConfigObj(path)]
+/DNA/: [load_effective_config_state() -> run(systemd-analyze cat-config) -> _parse_systemd_cat_config() => EffectiveConfig(cfg, provenance)]
 
 - SrcDeps:
-  - .os_utils (run, systemd_daemon_reload, systemd_try_restart, SystemCommandError)
+  - .utils.common (run, SystemCommandError)
+  - .utils.privilege (systemd_daemon_reload, systemd_try_restart)
 - SysDeps:
   - configobj
   - pathlib
@@ -141,7 +104,7 @@ Role: System health monitoring and diagnostic reports.
 /DNA/: [check_system_health() -> probe commands/sysfs/swaps -> build HealthReport model]
 
 - SrcDeps:
-  - .os_utils (run)
+  - .utils.common (run)
 - SysDeps:
   - os
   - platform
@@ -160,7 +123,10 @@ Role: Swapfile/partition management for hibernation.
 /DNA/: [create_swapfile() -> truncate+chattr+C (btrfs) -> fallocate -> mkswap -> UUID/offset]
 
 - SrcDeps:
-  - .os_utils (run, SystemCommandError, atomic_write_to_file, read_file, check_device_safety, is_block_device, pkexec_write, is_root)
+  - .utils.common (run, SystemCommandError, read_file)
+  - .utils.io (atomic_write_to_file, pkexec_write, is_root)
+  - .utils.block (check_device_safety, is_block_device)
+  - .utils.privilege (pkexec_daemon_reload, pkexec_systemctl, systemd_try_restart)
 - SysDeps:
   - logging
   - os

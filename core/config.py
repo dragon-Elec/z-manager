@@ -8,7 +8,8 @@ import io
 import subprocess
 from pathlib import Path
 
-from core.os_utils import run, systemd_daemon_reload, systemd_try_restart, SystemCommandError
+from core.utils.common import run, SystemCommandError
+from core.utils.privilege import systemd_daemon_reload, systemd_try_restart
 
 # Standard systemd lookup paths (Legacy/Fallback)
 SEARCH_PATHS = [

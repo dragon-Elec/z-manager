@@ -39,7 +39,9 @@ Role: Read-only detection and sysfs probing.
 
 - SrcDeps:
   - .types
-  - core.os_utils (run, SystemCommandError, is_block_device, zram_sysfs_dir, parse_zramctl_table, read_file, NotBlockDeviceError)
+  - core.utils.common (run, SystemCommandError, read_file)
+  - core.utils.block (is_block_device)
+  - core.utils.zram_stats (zram_sysfs_dir, parse_zramctl_table)
 - SysDeps:
   - typing
 
@@ -57,7 +59,10 @@ Role: Destructive kernel node management and resets.
 
 - SrcDeps:
   - .types
-  - core.os_utils (run, SystemCommandError, sysfs_write, zram_sysfs_dir, sysfs_reset_device, read_file, ValidationError, is_block_device)
+  - core.utils.common (run, SystemCommandError, ValidationError, read_file)
+  - core.utils.io (sysfs_write)
+  - core.utils.zram_stats (zram_sysfs_dir, sysfs_reset_device)
+  - core.utils.block (is_block_device)
 - SysDeps:
   - os
   - logging
@@ -76,9 +81,12 @@ Role: High-level orchestration, persistence, and service management.
 
 - SrcDeps:
   - .types
-  - .prober
-  - .provisioner
-  - core.os_utils (run, SystemCommandError, ValidationError, NotBlockDeviceError, is_block_device, pkexec_write, pkexec_daemon_reload, pkexec_systemctl, atomic_write_to_file, systemd_daemon_reload, systemd_try_restart, systemd_restart, check_device_safety)
+  - .prober (is_device_active, read_params_best_effort, _get_sysfs)
+  - .provisioner (reconfigure_device_sysfs)
+  - core.utils.common (run, SystemCommandError, ValidationError, NotBlockDeviceError)
+  - core.utils.block (is_block_device, check_device_safety)
+  - core.utils.io (pkexec_write, atomic_write_to_file)
+  - core.utils.privilege (pkexec_daemon_reload, pkexec_systemctl, systemd_daemon_reload, systemd_try_restart, systemd_restart)
   - core.config (CONFIG_PATH, read_zram_config)
   - core.config_writer (update_zram_config, update_global_config, remove_device_from_config)
 - SysDeps:
