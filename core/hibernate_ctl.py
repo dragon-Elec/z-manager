@@ -70,6 +70,9 @@ def check_hibernation_readiness() -> HibernateCheckResult:
     Checks system readiness by delegating to systemd-logind with a fallback to sysfs parsing.
     """
     secure_boot_mode = "queried-via-logind"
+    ready = False
+    msg = ""
+
     try:
         res = run(["busctl", "call", "org.freedesktop.login1", "/org/freedesktop/login1", 
                    "org.freedesktop.login1.Manager", "CanHibernate"], check=True)
@@ -78,29 +81,35 @@ def check_hibernation_readiness() -> HibernateCheckResult:
         out = res.out.lower()
         if '"yes"' in out:
             ready, msg = True, "System is fully ready for hibernation."
-        elif '"no"' in out:
-            ready, msg = False, "Hibernation is disabled (likely Secure Boot or Driver policy)."
-        elif '"na"' in out:
-            ready, msg = False, "Hibernation is not supported by this hardware or kernel."
         elif '"challenge"' in out:
             ready, msg = True, "Hibernation available (requires authentication)."
         else:
-            ready, msg = False, f"Unexpected response from logind: {res.out.strip()}"
+            # logind returned 'na' or 'no'. 
+            # This often happens simply because no adequate swap space exists YET.
+            # We must trigger the fallback to check if the hardware/kernel actually supports it.
+            raise ValueError(f"Logind returned {out.strip()}, triggering manual hardware check.")
 
-    except (SystemCommandError, Exception):
-        # Fallback to sysfs if systemd-logind is unavailable or output is unparseable
-        ready, msg = True, "Logind unavailable. Fallback: System appears ready."
-        secure_boot_mode = "disabled"
-        try:
-            lockdown = read_file("/sys/kernel/security/lockdown")
-            if lockdown:
-                if "[integrity]" in lockdown:
-                    secure_boot_mode = "integrity"
-                elif "[confidentiality]" in lockdown:
-                    secure_boot_mode = "confidentiality"
-                    ready, msg = False, "Secure Boot confidentiality active. Hibernation blocked."
-        except Exception:
-            pass
+    except (SystemCommandError, Exception) as e:
+        # Fallback: Manual check of sysfs
+        power_state = read_file("/sys/power/state") or ""
+        if "disk" not in power_state:
+            ready, msg = False, "Hardware/Kernel does not support hibernation ('disk' missing from /sys/power/state)."
+            secure_boot_mode = "disabled"
+        else:
+            ready, msg = True, "Hardware supports hibernation (Swap configuration required)."
+            secure_boot_mode = "disabled"
+            
+            # Check Secure Boot Lockdown
+            try:
+                lockdown = read_file("/sys/kernel/security/lockdown")
+                if lockdown:
+                    if "[integrity]" in lockdown:
+                        secure_boot_mode = "integrity"
+                    elif "[confidentiality]" in lockdown:
+                        secure_boot_mode = "confidentiality"
+                        ready, msg = False, "Secure Boot confidentiality is active. Hibernation is blocked."
+            except Exception:
+                pass
 
     mem_total, swap_total = get_memory_info()
     
