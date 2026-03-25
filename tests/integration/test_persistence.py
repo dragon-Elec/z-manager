@@ -14,9 +14,9 @@ from core.device_management.configurator import (
     ensure_writeback_state
 )
 from core.device_management.prober import get_writeback_status
-from core.os_utils import NotBlockDeviceError
+from core.utils.common import NotBlockDeviceError
 from core.config import CONFIG_PATH
-from core.os_utils import sysfs_reset_device
+from core.utils.zram_stats import sysfs_reset_device
 
 def cleanup_system(zram_dev, wb_dev):
     """Ensure a clean state before and after tests."""

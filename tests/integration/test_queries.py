@@ -8,7 +8,7 @@ from core.device_management.prober import (
     get_writeback_status,
     is_device_active
 )
-from core.os_utils import NotBlockDeviceError
+from core.utils.common import NotBlockDeviceError
 
 def run_tests(device_name="zram0"):
     """Run all query tests and print the results."""

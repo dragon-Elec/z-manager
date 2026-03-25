@@ -34,7 +34,7 @@ Role: Validation of hibernation swap orchestration.
 
 /DNA/: [hibernate_ctl.create_swapfile() -> mock_fs_type() -> if(btrfs) -> (truncate+chattr) -> else -> fallocate]
 
-- SrcDeps: core.hibernate_ctl, core.os_utils.SystemCommandError
+- SrcDeps: core.hibernate_ctl, core.utils.common.SystemCommandError
 - SysDeps: os, sys, unittest.mock.patch
 
 API:
@@ -101,7 +101,7 @@ Role: Validation of atomic and idempotent file operations.
 
 /DNA/: [atomic_write_to_file() -> if(content_match) -> skip_write -> else -> tempfile+move]
 
-- SrcDeps: core.os_utils.atomic_write_to_file
+- SrcDeps: core.utils.io.atomic_write_to_file
 - SysDeps: os, shutil, tempfile, time
 
 API:
@@ -111,9 +111,9 @@ API:
 ### [FILE: test_size_parser.py] [WIP]
 Role: Validation of human-readable size parsing.
 
-/DNA/: [os_utils.parse_size_to_bytes() -> regex -> math unit multiplier]
+/DNA/: [units.parse_size_to_bytes() -> regex -> math unit multiplier]
 
-- SrcDeps: core.os_utils
+- SrcDeps: core.utils.units
 - SysDeps: None
 
 API:
@@ -171,9 +171,9 @@ API:
 ### [FILE: test_parser_robustness.py] [WIP]
 Role: Resilience testing for sysfs property parsing.
 
-/DNA/: [os_utils.parse_zramctl_table() -> loop sysfs -> if(IOError) -> skip -> return list]
+/DNA/: [zram_stats.parse_zramctl_table() -> loop sysfs -> if(IOError) -> skip -> return list]
 
-- SrcDeps: core.os_utils
+- SrcDeps: core.utils.zram_stats
 - SysDeps: unittest.mock.patch
 
 API:

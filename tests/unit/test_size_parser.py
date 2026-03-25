@@ -1,5 +1,5 @@
 from tests.test_base import *
-from core import os_utils
+from core.utils import units as os_utils
 
 class TestSizeParser(BaseTestCase):
 

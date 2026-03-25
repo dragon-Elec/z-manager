@@ -1,6 +1,7 @@
 from tests.test_base import *
 import os
 import tempfile
+from pathlib import Path
 from core.config_writer import update_zram_config
 
 class TestConfigPreservation(BaseTestCase):
@@ -21,15 +22,15 @@ conf-file = /etc/zram-generator.conf
         self.tmp.write(content.strip())
         self.tmp.close()
         
-        # Patch core.config.get_active_config_path to return matching path
-        from core import config
-        self.original_get_path = config.get_active_config_path
-        config.get_active_config_path = lambda: self.tmp.name
+        # Patch core.config_writer.get_active_config_path to return matching path
+        import core.config_writer as config_writer
+        self.original_get_path = config_writer.get_active_config_path
+        config_writer.get_active_config_path = lambda: Path(self.tmp.name)
 
     def tearDown(self):
         os.unlink(self.tmp.name)
-        from core import config
-        config.get_active_config_path = self.original_get_path
+        import core.config_writer as config_writer
+        config_writer.get_active_config_path = self.original_get_path
 
     def test_comment_preservation(self):
         """Verify that comments are preserved after an update."""

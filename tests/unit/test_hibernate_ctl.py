@@ -4,13 +4,14 @@ import os
 from unittest.mock import patch, MagicMock
 
 from core import hibernate_ctl
-from core.os_utils import SystemCommandError
+from core.utils.common import SystemCommandError
 
 class TestHibernateCtl(BaseTestCase):
 
+    @patch('core.hibernate_ctl.read_file')
     @patch('core.hibernate_ctl.run')
     @patch('core.hibernate_ctl.get_memory_info')
-    def test_check_readiness_busctl(self, mock_mem, mock_run):
+    def test_check_readiness_busctl(self, mock_mem, mock_run, mock_read):
         """Test systemd-logind delegation via busctl."""
         # 1. Happy Path: logind says "yes"
         mock_mem.return_value = (8*1024*1024*1024, 4*1024*1024*1024)
@@ -20,17 +21,20 @@ class TestHibernateCtl(BaseTestCase):
         self.assertTrue(res.ready)
         self.assertIn("ready", res.message)
 
-        # 2. Blocked: logind says "no" (e.g. Secure Boot)
+        # 2. Blocked: logind says "no" -> Fallback to sysfs check
+        # Let's say sysfs says no "disk"
         mock_run.return_value = MagicMock(out='s "no"', code=0)
+        mock_read.return_value = "freeze mem" 
         res = hibernate_ctl.check_hibernation_readiness()
         self.assertFalse(res.ready)
-        self.assertIn("disabled", res.message)
+        self.assertIn("not support", res.message)
 
-        # 3. Not Supported: logind says "na"
+        # 3. Fallback Success: logind says "na" but sysfs has "disk"
         mock_run.return_value = MagicMock(out='s "na"', code=0)
+        mock_read.return_value = "freeze mem disk"
         res = hibernate_ctl.check_hibernation_readiness()
-        self.assertFalse(res.ready)
-        self.assertIn("not supported", res.message)
+        self.assertTrue(res.ready)
+        self.assertIn("Hardware supports hibernation", res.message)
 
     @patch('core.hibernate_ctl._get_fs_type')
     @patch('core.hibernate_ctl.run')

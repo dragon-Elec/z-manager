@@ -32,12 +32,16 @@ class TestHibernateSystemd(BaseTestCase):
         self.assertEqual(hibernate_ctl.escape_unit_name("/swapfile"), "swapfile.swap")
         self.assertEqual(hibernate_ctl.escape_unit_name("/mnt/data/swap"), "mnt-data-swap.swap")
 
-    @patch("core.hibernate_ctl.pkexec_write")
+    @patch("core.utils.privilege.pkexec_systemctl")
+    @patch("core.utils.privilege.pkexec_daemon_reload")
+    @patch("core.utils.io.pkexec_write")
     @patch("core.hibernate_ctl.run")
-    def test_persist_swap_unit_calls(self, mock_run, mock_pkexec):
+    def test_persist_swap_unit_calls(self, mock_run, mock_pkexec, mock_reload, mock_systemctl):
         """Verify the orchestration sequence: Write -> Reload -> Enable."""
         mock_pkexec.return_value = (True, "")
-        mock_run.return_value = MagicMock(code=0)
+        mock_reload.return_value = (True, "")
+        mock_systemctl.return_value = (True, "")
+        mock_run.return_value = MagicMock(code=0, out="var-swapfile.swap")
         
         # This function doesn't exist yet.
         success, msg = hibernate_ctl.persist_swap_unit("/var/swapfile")
@@ -49,11 +53,14 @@ class TestHibernateSystemd(BaseTestCase):
         args, kwargs = mock_pkexec.call_args
         self.assertEqual(args[0], "/etc/systemd/system/var-swapfile.swap")
         
-        # 2. Verify systemd commands
-        # Should call daemon-reload and enable --now
-        calls = [call[0][0] for call in mock_run.call_args_list]
-        self.assertTrue(any("daemon-reload" in str(c) for c in calls))
-        self.assertTrue(any("enable" in str(c) and "now" in str(c) for c in calls))
+        # 2. Verify systemd orchestration via wrappers
+        # Should call pkexec_daemon_reload and pkexec_systemctl
+        self.assertTrue(mock_reload.called)
+        self.assertTrue(mock_systemctl.called)
+        
+        systemctl_args, _ = mock_systemctl.call_args
+        self.assertEqual(systemctl_args[0], "enable")
+        self.assertEqual(systemctl_args[1], "var-swapfile.swap")
 
 if __name__ == "__main__":
     unittest.main()

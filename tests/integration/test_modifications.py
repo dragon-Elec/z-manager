@@ -13,7 +13,7 @@ from core.device_management.prober import (
     get_writeback_status,
     is_device_active
 )
-from core.os_utils import (
+from core.utils.common import (
     ValidationError,
     NotBlockDeviceError
 )

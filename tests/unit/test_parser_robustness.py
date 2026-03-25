@@ -1,10 +1,10 @@
 from tests.test_base import *
-from core import os_utils
+from core.utils import zram_stats as os_utils
 
 class TestSysfsParser(BaseTestCase):
 
-    @patch('core.os_utils._scan_zram_devices')
-    @patch('core.os_utils._read_zram_sysfs_props')
+    @patch('core.utils.zram_stats.scan_zram_devices')
+    @patch('core.utils.zram_stats.get_zram_props')
     def test_parse_standard_device(self, mock_read, mock_scan):
         # Setup mocks
         mock_scan.return_value = ['zram0']
@@ -32,8 +32,8 @@ class TestSysfsParser(BaseTestCase):
         self.assertEqual(d['mountpoint'], '[SWAP]')
         self.assertEqual(d['streams'], 4)
 
-    @patch('core.os_utils._scan_zram_devices')
-    @patch('core.os_utils._read_zram_sysfs_props')
+    @patch('core.utils.zram_stats.scan_zram_devices')
+    @patch('core.utils.zram_stats.get_zram_props')
     def test_parse_multiple_devices(self, mock_read, mock_scan):
         mock_scan.return_value = ['zram0', 'zram1']
         
@@ -54,15 +54,15 @@ class TestSysfsParser(BaseTestCase):
         self.assertEqual(devices[1]['name'], 'zram1')
         self.assertEqual(devices[1]['algorithm'], 'zstd')
 
-    @patch('core.os_utils._scan_zram_devices')
-    @patch('core.os_utils._read_zram_sysfs_props')
+    @patch('core.utils.zram_stats.scan_zram_devices')
+    @patch('core.utils.zram_stats.get_zram_props')
     def test_parse_no_devices(self, mock_read, mock_scan):
         mock_scan.return_value = []
         devices = os_utils.parse_zramctl_table()
         self.assertEqual(len(devices), 0)
 
-    @patch('core.os_utils._scan_zram_devices')
-    @patch('core.os_utils._read_zram_sysfs_props')
+    @patch('core.utils.zram_stats.scan_zram_devices')
+    @patch('core.utils.zram_stats.get_zram_props')
     def test_handle_read_error(self, mock_read, mock_scan):
         mock_scan.return_value = ['zram0']
         # Simulate an error reading props (e.g. device disappeared)
@@ -73,8 +73,8 @@ class TestSysfsParser(BaseTestCase):
         # Should gracefully skip the bad device
         self.assertEqual(len(devices), 0)
 
-    @patch('core.os_utils._scan_zram_devices')
-    @patch('core.os_utils._read_zram_sysfs_props')
+    @patch('core.utils.zram_stats.scan_zram_devices')
+    @patch('core.utils.zram_stats.get_zram_props')
     def test_skip_unconfigured_devices(self, mock_read, mock_scan):
         mock_scan.return_value = ['zram0']
         # Device exists but has no disksize set (unconfigured)

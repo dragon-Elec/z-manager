@@ -1,6 +1,6 @@
 from tests.test_base import *
 import os
-from core.os_utils import check_device_safety
+from core.utils.block import check_device_safety
 
 class TestDeviceSafety(BaseTestCase):
     def test_zram0_safety(self):
@@ -15,7 +15,7 @@ class TestDeviceSafety(BaseTestCase):
     def test_root_safety(self):
         """Root partition should be unsafe."""
         # We need to find the root device.
-        from core.os_utils import run
+        from core.utils.common import run
         mounts = run(["findmnt", "/", "-o", "SOURCE", "-n"]).out.strip()
         if mounts:
              # Strip subvolume info e.g. /dev/sda2[/@] -> /dev/sda2

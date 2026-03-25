@@ -6,7 +6,7 @@ from configobj import ConfigObj
 class TestGlobalConfig(BaseTestCase):
     
     @patch('core.config.read_zram_config')
-    @patch('core.config_writer.read_zram_config')
+    @patch('core.config_writer._read_local_config')
     def test_global_config_read_write(self, mock_read_writer, mock_read_reader):
         # Setup Mock Config
         mock_cfg = ConfigObj()

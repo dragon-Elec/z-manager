@@ -19,7 +19,7 @@ Role: End-to-end testing of live writeback attachment and device resets.
 
 /DNA/: [set_writeback(zram, wb) -> verify_status -> clear_writeback() -> verify_reset_device()]
 
-- SrcDeps: core.device_management{configurator, provisioner, prober}, core.os_utils{ValidationError, NotBlockDeviceError}
+- SrcDeps: core.device_management{configurator, provisioner, prober}, core.utils.common{ValidationError, NotBlockDeviceError}
 - SysDeps: os, sys, sudo, mkswap, swapon, swapoff
 
 API:
@@ -31,7 +31,7 @@ Role: Validation of `zram-generator.conf` persistence and service recreation.
 
 /DNA/: [persist_writeback(apply_now=True) -> verify_config_written -> restart_service -> verify_live_restore]
 
-- SrcDeps: core.device_management.configurator{persist_writeback, ensure_writeback_state}, core.device_management.prober.get_writeback_status, core.os_utils.sysfs_reset_device, core.config.CONFIG_PATH
+- SrcDeps: core.device_management.configurator{persist_writeback, ensure_writeback_state}, core.device_management.prober.get_writeback_status, core.utils.zram_stats.sysfs_reset_device, core.config.CONFIG_PATH
 - SysDeps: configparser, losetup, systemctl, swapoff
 
 API:
@@ -43,7 +43,7 @@ Role: CLI tool for manual verification of probe logic.
 
 /DNA/: [list_devices() -> print] + [get_writeback_status() -> print]
 
-- SrcDeps: core.device_management.prober{list_devices, get_writeback_status, is_device_active}, core.os_utils.NotBlockDeviceError
+- SrcDeps: core.device_management.prober{list_devices, get_writeback_status, is_device_active}, core.utils.common.NotBlockDeviceError
 - SysDeps: None
 
 API:
@@ -55,7 +55,7 @@ Role: Validation of block device safety guardrails.
 
 /DNA/: [check_device_safety(/dev/root) -> expect(False)] + [check_device_safety(/tmp/file) -> expect(True)]
 
-- SrcDeps: core.os_utils{check_device_safety, run}
+- SrcDeps: core.utils.block.check_device_safety, core.utils.common.run
 - SysDeps: findmnt, os
 
 API:
