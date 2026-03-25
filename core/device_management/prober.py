@@ -4,6 +4,7 @@ The Safe Zone.
 Handles device detection, state reading, and sysfs probing.
 No destructive operations or system changes are performed here.
 """
+
 from __future__ import annotations
 from typing import List, Optional
 
@@ -13,6 +14,7 @@ from core.utils.common import (
     read_file,
 )
 from core.utils.block import is_block_device
+from core.utils.swap import is_device_in_swaps
 from core.utils.zram_stats import zram_sysfs_dir, parse_zramctl_table
 from .types import DeviceInfo, WritebackStatus
 
@@ -45,6 +47,7 @@ def get_writeback_status(device_name: str) -> WritebackStatus:
     dev_path = f"/dev/{device_name}"
     if not is_block_device(dev_path):
         from core.utils.common import NotBlockDeviceError
+
         raise NotBlockDeviceError(f"zram device {device_name} does not exist")
 
     return WritebackStatus(
@@ -60,22 +63,15 @@ def get_writeback_status(device_name: str) -> WritebackStatus:
 
 def is_device_active(device_name: str) -> bool:
     """Checks if a device is currently used as swap or mounted."""
-    # Check swaps:
-    try:
-        swaps = run(["cat", "/proc/swaps"]).out
-        if f"/dev/{device_name}" in swaps:
-            return True
-    except (SystemCommandError, OSError):
-        pass
-    
-    # Mount check:
+    device_path = f"/dev/{device_name}"
+    if is_device_in_swaps(device_name):
+        return True
     try:
         mounts = run(["mount"]).out
-        if f"/dev/{device_name}" in mounts:
+        if device_path in mounts:
             return True
     except (SystemCommandError, OSError):
         pass
-    
     return False
 
 
