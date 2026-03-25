@@ -1,11 +1,10 @@
-# zman/modules/runtime.py
+# z-manager/modules/runtime.py
 """
 Manages live, volatile system settings.
 
-This module is responsible for making instantaneous changes to the running
-system by writing to the /sys/ and /proc/sys/ filesystems. These changes
-are generally not persistent and will be lost on reboot unless saved
-by a mechanism in the 'persist' module.
+This module acts as a high-level manager for volatile system settings.
+It provides simple interfaces for getting current states and orchestrating
+changes via the core system tuning module.
 """
 from __future__ import annotations
 
@@ -13,7 +12,8 @@ import logging
 from pathlib import Path
 from typing import List, Optional
 
-from core.os_utils import read_file, sysfs_write
+from core.utils.common import read_file
+from core import system_tuning
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -32,28 +32,9 @@ def get_current_cpu_governor() -> str:
     return read_file(path) or "unknown"
 
 def set_cpu_governor(governor: str) -> bool:
-    """Sets the CPU governor for all online CPU cores."""
-    if governor not in get_available_cpu_governors():
-        _LOGGER.error(f"Governor '{governor}' is not available.")
-        return False
-
-    all_success = True
-    found_any_governor_files = False
-
-    cpu_glob_path = Path("/sys/devices/system/cpu/")
-    for gov_path in cpu_glob_path.glob("cpu*/cpufreq/scaling_governor"):
-        found_any_governor_files = True
-        try:
-            sysfs_write(gov_path, governor)
-        except (IOError, OSError) as e:
-            all_success = False
-            _LOGGER.warning(f"Failed to set governor for {gov_path.parent.parent.name}: {e}")
-
-    if not found_any_governor_files:
-        _LOGGER.error("Could not find any CPU governor files in /sys. Is cpufreq enabled?")
-        return False
-
-    return all_success
+    """Orchestrates setting the CPU governor for all online CPU cores."""
+    available = get_available_cpu_governors()
+    return system_tuning.set_cpu_governor(governor, available)
 
 
 # --- I/O Scheduler ---
@@ -77,22 +58,9 @@ def get_current_io_scheduler(device_name: str) -> str:
     return "unknown"
 
 def set_io_scheduler(device_name: str, scheduler: str) -> bool:
-    """Sets the I/O scheduler for a given block device."""
-    if not device_name or not device_name.strip():
-        _LOGGER.error("set_io_scheduler called with an invalid or empty device_name.")
-        return False
-
-    if scheduler not in get_available_io_schedulers(device_name):
-        _LOGGER.error(f"I/O Scheduler '{scheduler}' not available for device '{device_name}'.")
-        return False
-
-    path = Path(f"/sys/block/{device_name}/queue/scheduler")
-    try:
-        sysfs_write(path, scheduler)
-        return True
-    except (IOError, OSError) as e:
-        _LOGGER.error(f"Failed to set I/O scheduler for {device_name}: {e}")
-        return False
+    """Orchestrates setting the I/O scheduler for a given block device."""
+    available = get_available_io_schedulers(device_name)
+    return system_tuning.set_io_scheduler(device_name, scheduler, available)
 
 
 # --- Live Kernel Parameters ---
@@ -104,14 +72,5 @@ def get_vfs_cache_pressure() -> int:
     return int(val) if val and val.isdigit() else 100
 
 def set_vfs_cache_pressure(value: int) -> bool:
-    """Sets the live vm.vfs_cache_pressure value."""
-    if not 0 <= value <= 500:  # Sanity check
-        _LOGGER.error(f"Invalid vfs_cache_pressure value: {value}. Must be 0-500.")
-        return False
-    path = Path("/proc/sys/vm/vfs_cache_pressure")
-    try:
-        sysfs_write(path, str(value))
-        return True
-    except (IOError, OSError) as e:
-        _LOGGER.error(f"Failed to set vfs_cache_pressure: {e}")
-        return False
+    """Orchestrates setting the live vm.vfs_cache_pressure value."""
+    return system_tuning.set_vfs_cache_pressure(value)
