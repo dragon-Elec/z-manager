@@ -6,7 +6,7 @@ Primary test suite for Z-Manager. Provides infrastructure for isolated unit test
 !Rule: [Inherit BaseTestCase] - Reason: Ensures consistent access to system-level mocking utilities and prevents accidental real system mutation.
 
 # Atomic Notes
-!Pattern: [Mocked System I/O] - Reason: `BaseTestCase.mock_system_calls` centralizes logic for patching `os_utils` to prevent environment leakage and side effects.
+!Pattern: [Mocked System I/O] - Reason: `BaseTestCase.mock_system_calls` centralizes logic for patching `core.utils.common` to prevent environment leakage and side effects.
 !Decision: [Direct Sysfs Cleanup] - Reason: `cleanup_zram.sh` resets zram devices via sysfs to ensure tests start from a clean state without needing `zramctl`.
 
 # Index
@@ -19,9 +19,9 @@ unit: Granular tests for individual core and device_management modules (see unit
 ### [FILE: test_base.py] [WIP]
 Role: Testing infrastructure and common mocking primitives.
 
-/DNA/: [BaseTestCase.mock_system_calls() -> patch(core.os_utils.{read_file, run}) -> addCleanup()]
+/DNA/: [BaseTestCase.mock_system_calls() -> patch(core.utils.common.{read_file, run}) -> addCleanup()]
 
-- SrcDeps: core.os_utils{read_file, run, parse_size_to_bytes}, core.device_management.prober.is_device_active
+- SrcDeps: core.utils.common{read_file, run}, core.utils.units.parse_size_to_bytes, core.device_management.prober.is_device_active
 - SysDeps: unittest, unittest.mock{patch, MagicMock, mock_open}
 
 API:
