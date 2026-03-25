@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator, Optional
 
-from core.os_utils import read_file
+from core.utils.common import read_file
 
 _LOGGER = logging.getLogger(__name__)
 PROC_PSI_PATH = Path("/proc/pressure")

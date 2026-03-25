@@ -7,13 +7,14 @@ from configobj import ConfigObj
 import io
 import re
 
-from core.config import CONFIG_PATH
+from core.config import CONFIG_PATH, get_active_config_path
 from pathlib import Path
 
 def _read_local_config() -> ConfigObj:
     """Reads the specific target configuration file for editing to preserve structure and comments."""
-    if Path(CONFIG_PATH).exists():
-        return ConfigObj(CONFIG_PATH, list_values=False, encoding='utf-8')
+    path = get_active_config_path()
+    if path and path.exists():
+        return ConfigObj(str(path), list_values=False, encoding='utf-8')
     return ConfigObj(list_values=False, encoding='utf-8')
 def generate_config_string(size_formula: str, algorithm: str, priority: int, device: str = "zram0", writeback_device: Optional[str] = None) -> str:
     """

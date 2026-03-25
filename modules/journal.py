@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Optional, Dict, Any, Tuple
 
-from core.os_utils import run
+from core.utils.common import run
 
 
 @dataclass(frozen=True)

@@ -108,7 +108,8 @@ def apply_sysctl_profile(enable: bool) -> TuneResult:
     """
     Idempotently enables or disables the optimal sysctl performance profile.
     """
-    from core.utils.io import pkexec_write, pkexec_sysctl_system
+    from core.utils.io import pkexec_write
+    from core.utils.privilege import pkexec_sysctl_system
     if enable:
         current_content = read_file(SYSCTL_CONFIG_PATH)
         if current_content and current_content.strip() == GAMING_PROFILE_CONTENT:
@@ -155,7 +156,8 @@ def apply_sysctl_values(settings: dict[str, str]) -> TuneResult:
     if not settings:
         return TuneResult(success=True, changed=False, message="No settings provided.")
 
-    from core.utils.io import pkexec_write, pkexec_sysctl_system
+    from core.utils.io import pkexec_write
+    from core.utils.privilege import pkexec_sysctl_system
     # 1. Read existing file content and parse into a dict
     final_config = {}
     if current_content := read_file(SYSCTL_CONFIG_PATH):

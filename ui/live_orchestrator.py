@@ -3,7 +3,9 @@ import logging
 from dataclasses import dataclass
 from typing import Generator, List, Any, Dict, Optional
 
-from core import os_utils, config_writer
+from core import config_writer
+from core.utils.io import _get_helper_path
+from core.utils.common import stream_command, SystemCommandError
 from core.device_management import configurator
 from core.config import CONFIG_PATH
 
@@ -54,7 +56,7 @@ def _remove_device_generator(device_name: str) -> Generator[StepUpdate, None, No
     
     try:
         # Get helper path
-        helper = os_utils._get_helper_path()
+        helper = _get_helper_path()
         
         # Build batched command: pkexec zman-helper.py live-remove <device> <config_path>
         cmd = ["pkexec", helper, "live-remove", device_name, CONFIG_PATH]
@@ -106,7 +108,7 @@ def _apply_device_generator(device_name: str, ui_cfg: Dict[str, Any]) -> Generat
             return
             
         # 2. Run Batched Command
-        helper = os_utils._get_helper_path()
+        helper = _get_helper_path()
         cmd = ["pkexec", helper, "live-apply", device_name, CONFIG_PATH]
         
         yield from _stream_subprocess(cmd, input_text=rendered)
@@ -122,7 +124,7 @@ def _apply_device_generator(device_name: str, ui_cfg: Dict[str, Any]) -> Generat
         yield StepUpdate("log_line", "Attempting to restore previous configuration...")
         
         try:
-            helper = os_utils._get_helper_path()
+            helper = _get_helper_path()
             # Reuse live-apply to restore the original content
             cmd_rollback = ["pkexec", helper, "live-apply", device_name, CONFIG_PATH]
             yield from _stream_subprocess(cmd_rollback, input_text=original_config_content)
@@ -136,10 +138,10 @@ def _apply_device_generator(device_name: str, ui_cfg: Dict[str, Any]) -> Generat
             yield StepUpdate("step_done", (False, "Rollback Failed"))
 
 def _stream_subprocess(cmd: List[str], check: bool = True, input_text: Optional[str] = None) -> Generator[StepUpdate, None, None]:
-    """Helper to bridge os_utils.stream_command to StepUpdate events."""
+    """Helper to bridge stream_command to StepUpdate events."""
     try:
         # Parse the output stream
-        for line in os_utils.stream_command(cmd, input_text=input_text):
+        for line in stream_command(cmd, input_text=input_text):
             if line.startswith(">> "):
                 # Start new step
                 step_name = line[3:].strip() # Remove ">> "
@@ -151,7 +153,7 @@ def _stream_subprocess(cmd: List[str], check: bool = True, input_text: Optional[
             else:
                 yield StepUpdate("log_line", line)
                 
-    except os_utils.SystemCommandError as e:
+    except SystemCommandError as e:
         yield StepUpdate("log_line", f"Command failed: code {e.returncode}")
         if check:
             raise e

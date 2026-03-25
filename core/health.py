@@ -5,9 +5,10 @@ from __future__ import annotations
 import os
 import platform
 from dataclasses import dataclass
-from typing import Optional, List
+from typing import Optional, List, Dict
 
-from core.utils.common import run
+from core.utils.common import run, read_file
+from modules.journal import python_journal_available
 
 
 @dataclass(frozen=True)
@@ -60,21 +61,16 @@ def _check_cmd_available(cmd: str) -> bool:
     return available
 
 
-def _read_file(path: str) -> Optional[str]:
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return f.read().strip()
-    except Exception:
-        return None
-
-
 def get_zswap_status() -> ZswapStatus:
     enabled_path = "/sys/module/zswap/parameters/enabled"
     if not os.path.exists(enabled_path):
         return ZswapStatus(available=False, enabled=None, detail="zswap sysfs not present")
-    val = _read_file(enabled_path)
+    
+    val = read_file(enabled_path)
     if val is None:
         return ZswapStatus(available=True, enabled=None, detail="unable to read zswap enabled")
+    
+    val = val.strip()
     enabled = True if val.upper() == "Y" else False
     return ZswapStatus(available=True, enabled=enabled, detail=f"value={val}")
 
@@ -87,17 +83,20 @@ def _devices_summary() -> str:
     """Count zram devices using sysfs instead of zramctl."""
     try:
         count = 0
+        if not os.path.exists("/sys/block"):
+            return "unable to read /sys/block"
+            
         for entry in os.listdir("/sys/block"):
             if entry.startswith("zram"):
                 # Check if device is configured (disksize > 0)
                 disksize_path = f"/sys/block/{entry}/disksize"
-                try:
-                    with open(disksize_path, "r") as f:
-                        size = f.read().strip()
-                        if size and int(size) > 0:
+                size_str = read_file(disksize_path)
+                if size_str:
+                    try:
+                        if int(size_str.strip()) > 0:
                             count += 1
-                except (IOError, ValueError):
-                    pass
+                    except ValueError:
+                        pass
         
         if count == 0:
             return "no active devices"
@@ -106,13 +105,15 @@ def _devices_summary() -> str:
         return "unable to read /sys/block"
 
 
-
 def check_system_health() -> HealthReport:
     zramctl_ok = _check_cmd_available("zramctl")
     systemd_ok = _check_cmd_available("systemctl")
     sysfs_ok = _check_sysfs_root()
     zswap = get_zswap_status()
-    journal_ok = _journal_available()
+    
+    # Check journal availability (Python module or journalctl command)
+    journal_ok = python_journal_available() or _check_cmd_available("journalctl")
+    
     kernel_version = platform.release()
 
     notes: List[str] = []
@@ -138,37 +139,31 @@ def check_system_health() -> HealthReport:
         notes=notes,
     )
 
-    
-# Global cache for journal availability
-_JOURNAL_AVAILABLE_CACHE: Optional[bool] = None
-
-def _journal_available() -> bool:
-    global _JOURNAL_AVAILABLE_CACHE
-    if _JOURNAL_AVAILABLE_CACHE is not None:
-        return _JOURNAL_AVAILABLE_CACHE
-
-    # Detect python3-systemd and journalctl command availability
-    py = run(["/bin/sh", "-lc", "python3 -c 'import systemd.journal'"], check=False)
-    if py.code == 0:
-        _JOURNAL_AVAILABLE_CACHE = True
-        return True
-    
-    jc = _check_cmd_available("journalctl")
-    _JOURNAL_AVAILABLE_CACHE = jc
-    return jc
 
 def get_all_swaps() -> List[SwapDevice]:
     """
     Parses /proc/swaps to get a list of all active swap devices on the system.
     """
-    try:
-        with open("/proc/swaps", "r", encoding="utf-8") as f:
-            lines = f.readlines()
-    except FileNotFoundError:
+    content = read_file("/proc/swaps")
+    if not content:
         return []
 
-    return [
-        SwapDevice(p[0], p[1], int(p[2]), int(p[3]), int(p[4]))
-        for line in lines[1:]
-        if (p := line.strip().split()) and len(p) >= 5 and p[2].isdigit()
-    ]
+    lines = content.strip().splitlines()
+    if len(lines) <= 1:
+        return []
+
+    swaps = []
+    for line in lines[1:]:
+        parts = line.split()
+        if len(parts) >= 5 and parts[2].isdigit():
+            try:
+                swaps.append(SwapDevice(
+                    name=parts[0],
+                    type=parts[1],
+                    size_kb=int(parts[2]),
+                    used_kb=int(parts[3]),
+                    priority=int(parts[4])
+                ))
+            except (ValueError, IndexError):
+                continue
+    return swaps

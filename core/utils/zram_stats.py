@@ -119,4 +119,13 @@ def get_zram_props(device_name: str) -> dict[str, Any]:
 
 def parse_zramctl_table() -> list[dict[str, Any]]:
     """Backward compatibility wrapper for zram device list."""
-    return [get_zram_props(dev) for dev in scan_zram_devices() if get_zram_props(dev).get("disksize") != "-"]
+    results = []
+    for dev in scan_zram_devices():
+        try:
+            props = get_zram_props(dev)
+            if props.get("disksize") != "-":
+                results.append(props)
+        except (IOError, OSError):
+            _LOGGER.debug(f"Skipping device {dev} due to probe error (likely disappeared)")
+            continue
+    return results

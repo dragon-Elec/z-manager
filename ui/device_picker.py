@@ -2,7 +2,7 @@ import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
 from gi.repository import Gtk, Adw, GObject, Pango
-from core import os_utils
+from core.utils.block import list_block_devices
 
 class DevicePickerDialog(Adw.Window):
     """
@@ -48,7 +48,7 @@ class DevicePickerDialog(Adw.Window):
         self._populate_list()
 
     def _populate_list(self):
-        devices = os_utils.list_block_devices()
+        devices = list_block_devices()
         
         if not devices:
             # Empty state

@@ -6,7 +6,9 @@ gi.require_version('Adw', '1')
 from gi.repository import Gtk, Adw, GObject, GLib
 
 import threading
-from core import hibernate_ctl, boot_config, os_utils
+from core import hibernate_ctl, boot_config
+from core.utils.common import read_file, run
+from core.utils.block import is_block_device, check_device_safety
 from ui.device_picker import DevicePickerDialog
 
 class HibernatePage(Adw.PreferencesPage):
@@ -111,7 +113,7 @@ class HibernatePage(Adw.PreferencesPage):
              # Filename Type Size Used Priority
              # /dev/zram0 partition ... 100
              # /swapfile file ... -2
-             content = os_utils.read_file("/proc/swaps")
+             content = read_file("/proc/swaps")
              if content:
                  for line in content.splitlines()[1:]:
                      parts = line.split()
@@ -139,7 +141,7 @@ class HibernatePage(Adw.PreferencesPage):
         # If directory/mount -> Create /swapfile inside it
         
         target_path = path
-        is_dev = os_utils.is_block_device(path)
+        is_dev = is_block_device(path)
         
         if not is_dev:
             # Assume it's a mount point, append /swapfile
@@ -182,7 +184,7 @@ class HibernatePage(Adw.PreferencesPage):
             
             # 2. Create (if file) or Format (if dev)
             # hibernate_ctl handles this distinction internally mostly, but let's check
-            if not os_utils.is_block_device(path):
+            if not is_block_device(path):
                 # Swapfile
                 res = hibernate_ctl.create_swapfile(path, size_mb)
                 if not res.success:
@@ -191,12 +193,12 @@ class HibernatePage(Adw.PreferencesPage):
             else:
                 # Partition
                 # Safety check
-                safe, msg = os_utils.check_device_safety(path)
+                safe, msg = check_device_safety(path)
                 if not safe:
                      # Force fallback override? No, fail safe.
                      raise Exception(f"Device safety check failed: {msg}")
                 
-                os_utils.run(["mkswap", path], check=True)
+                run(["mkswap", path], check=True)
                 logs.append(f"Formatted partition {path}")
 
             # 3. Enable Swapon

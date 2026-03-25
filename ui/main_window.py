@@ -84,7 +84,7 @@ class MainWindow(Gtk.ApplicationWindow):
         header.pack_start(button_box)
 
         # --- 2. NEW: Create custom window controls ---
-        controls_box = Gtk.Box(spacing=5, orientation=Gtk.Orientation.HORIZONTAL)
+        controls_box = Gtk.Box(spacing=0, orientation=Gtk.Orientation.HORIZONTAL)
         controls_box.add_css_class("linked") # Optional, but can look nice
 
         # Minimize Button

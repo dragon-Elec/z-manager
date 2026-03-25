@@ -10,7 +10,7 @@ from gi.repository import Gtk, Adw, GObject, GLib
 from core import health
 from core.device_management import prober
 from core.device_management import types as dm_types
-from core.os_utils import parse_size_to_bytes
+from core.utils.units import parse_size_to_bytes
 import psutil # Added for RAM calculation
 from ui.custom_widgets import CircularWidget, MemoryTube
 from ui.health_button import HealthStatusButton, HealthState
