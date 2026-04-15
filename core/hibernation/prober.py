@@ -10,6 +10,7 @@ from __future__ import annotations
 from core.utils.common import run, SystemCommandError, read_file
 from core.utils.block import is_block_device
 from core.utils.swap import detect_resume_swap
+from core.utils.zram_stats import scan_zram_devices, get_zram_props
 from .types import HibernateCheckResult
 
 
@@ -30,6 +31,31 @@ def get_memory_info() -> tuple[int, int]:
             if len(parts) >= 2:
                 swap_total = int(parts[1]) * 1024
     return mem_total, swap_total
+
+
+def get_recommended_swap_size() -> int:
+    """
+    Calculates the recommended swap size for safe hibernation, 
+    accounting for the 'ZRAM-Hibernation Paradox'.
+    Formula: Total RAM + Total ZRAM Virtual Size + 128MB Buffer.
+    """
+    mem_total, _ = get_memory_info()
+    zram_total = 0
+    
+    # Sum the virtual size of all active ZRAM devices
+    for dev in scan_zram_devices():
+        try:
+            props = get_zram_props(dev)
+            ds = props.get("disksize", "-")
+            if ds != "-":
+                from core.utils.units import parse_size_to_bytes
+                zram_total += parse_size_to_bytes(ds)
+        except Exception:
+            continue
+
+    # Buffer for kernel structures and safety
+    buffer = 128 * 1024 * 1024
+    return mem_total + zram_total + buffer
 
 
 def check_hibernation_readiness() -> HibernateCheckResult:
@@ -93,11 +119,12 @@ def check_hibernation_readiness() -> HibernateCheckResult:
         secure_boot=secure_boot_mode,  # type: ignore[arg-type]
         swap_total=swap_total,
         ram_total=mem_total,
+        recommended_swap_bytes=get_recommended_swap_size(),
         message=msg,
     )
 
 
-def _get_fs_type(path: str) -> str | None:
+def get_fs_type(path: str) -> str | None:
     """Detect filesystem type of the directory containing the path."""
     directory = path.rsplit("/", 1)[0] or "/"
     try:
@@ -121,7 +148,7 @@ def get_resume_offset(path: str) -> int | None:
     if is_block_device(path):
         return 0
 
-    match _get_fs_type(path):
+    match get_fs_type(path):
         case "btrfs":
             try:
                 res = run(

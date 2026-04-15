@@ -4,25 +4,6 @@ zman-helper.py - Privileged helper for Z-Manager
 
 This script is designed to be called via pkexec to perform
 operations that require root privileges.
-
-Usage:
-    pkexec /path/to/zman-helper.py write <path>
-        Reads content from stdin and writes to <path>
-    
-    pkexec /path/to/zman-helper.py daemon-reload
-        Runs systemctl daemon-reload
-    
-    pkexec /path/to/zman-helper.py restart <service>
-        Runs systemctl restart <service>
-    
-    pkexec /path/to/zman-helper.py stop <service>
-        Runs systemctl stop <service>
-
-    pkexec /path/to/zman-helper.py live-apply <device> <config_path>
-        Batched: Stop -> Write (stdin) -> Reload -> Restart
-
-    pkexec /path/to/zman-helper.py live-remove <device> <config_path>
-        Batched: Stop -> Write (stdin) -> Reload
 """
 
 import sys
@@ -30,6 +11,7 @@ import os
 import subprocess
 import shutil
 import tempfile
+import json
 
 # Allowed paths for write operations (security whitelist)
 ALLOWED_WRITE_PATHS = [
@@ -39,6 +21,8 @@ ALLOWED_WRITE_PATHS = [
     "/etc/default/grub.d/98-z-manager-enable-psi.cfg",
     "/etc/default/grub.d/99-z-manager-resume.cfg",
     "/etc/initramfs-tools/conf.d/resume",
+    "/etc/tmpfiles.d/99-z-manager-hibernation.conf",
+    "/swapfile",
 ]
 
 # Allowed service patterns for systemctl operations
@@ -48,42 +32,36 @@ ALLOWED_SERVICE_PATTERNS = [
 
 
 def is_path_allowed(path: str) -> bool:
-    """Check if the path is in the whitelist."""
-    return path in ALLOWED_WRITE_PATHS
-
-
-def is_service_allowed(service: str) -> bool:
-    """Check if the service matches allowed patterns."""
-    for pattern in ALLOWED_SERVICE_PATTERNS:
-        if service.startswith(pattern):
-            return True
+    """Check if the path is in the whitelist or a common swap location."""
+    if path in ALLOWED_WRITE_PATHS:
+        return True
+    if path.endswith(".swap") and path.startswith("/etc/systemd/system/"):
+        return True
     return False
 
 
-def cmd_write(path: str) -> int:
-    """Write content from stdin to path atomically with backup."""
+def is_service_allowed(service: str) -> bool:
+    """Check if the service matches allowed patterns or is a swap unit."""
+    for pattern in ALLOWED_SERVICE_PATTERNS:
+        if service.startswith(pattern):
+            return True
+    if service.endswith(".swap"):
+        return True
+    return False
+
+
+def _atomic_write(path: str, content: str) -> bool:
+    """Internal helper for atomic writes with backup."""
     if not is_path_allowed(path):
         print(f"Error: Path not allowed: {path}", file=sys.stderr)
-        return 1
-    
+        return False
     try:
-        # Read content from stdin
-        content = sys.stdin.read()
-        
-        # 1. Backup: Create a .bak copy if file exists
-        if os.path.exists(path):
-            try:
-                shutil.copy2(path, f"{path}.bak")
-            except Exception as e:
-                print(f"Warning: Backup failed: {e}", file=sys.stderr)
-                # We proceed even if backup fails to ensure we can still fix configs,
-                # but we notify the caller.
-
-        # 2. Atomic write: write to temp file, then move
         dir_name = os.path.dirname(path)
-        os.makedirs(dir_name, exist_ok=True)
-        
-        fd, temp_path = tempfile.mkstemp(dir=dir_name, text=True)
+        if dir_name:
+            os.makedirs(dir_name, exist_ok=True)
+        if os.path.exists(path):
+            shutil.copy2(path, f"{path}.bak")
+        fd, temp_path = tempfile.mkstemp(dir=dir_name or ".", text=True)
         try:
             with os.fdopen(fd, 'w') as f:
                 f.write(content)
@@ -93,213 +71,150 @@ def cmd_write(path: str) -> int:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
             raise
-        
-        return 0
+        return True
     except Exception as e:
         print(f"Error writing to {path}: {e}", file=sys.stderr)
-        return 1
+        return False
 
 
-def cmd_daemon_reload() -> int:
-    """Run systemctl daemon-reload."""
+def cmd_write(path: str) -> int:
+    """Write content from stdin to path atomically."""
+    content = sys.stdin.read()
+    return 0 if _atomic_write(path, content) else 1
+
+
+def _get_resume_offset(path: str) -> str:
+    """Internal helper to calculate physical offset for resume."""
+    if path.startswith("/dev/"): return "0"
     try:
+        # Try filefrag (standard)
+        res = subprocess.run(["filefrag", "-v", path], capture_output=True, text=True, check=True)
+        for line in res.stdout.splitlines():
+            if line.strip().startswith("0:"):
+                return line.split()[3].split("..")[0]
+    except Exception:
+        pass
+    return "0"
+
+
+def cmd_hibernate_setup() -> int:
+    """
+    Master Transaction for Hibernation Setup.
+    Reads a JSON plan from stdin and executes all steps with transparency.
+    """
+    try:
+        plan = json.load(sys.stdin)
+        
+        # 1. Swap Provisioning
+        path = plan['swap_path']
+        print(f">> STEP: Provisioning Storage ({path})", flush=True)
+        is_block = path.startswith("/dev/")
+        
+        if not is_block:
+            if plan.get('fs_type') == "btrfs":
+                print("   Executing: btrfs NoCOW setup...", flush=True)
+                subprocess.run(["truncate", "-s", "0", path], check=True)
+                subprocess.run(["chattr", "+C", path], check=True)
+            
+            print(f"   Executing: Allocating {plan['size_mb']}MB...", flush=True)
+            try:
+                subprocess.run(["fallocate", "-l", f"{plan['size_mb']}M", path], check=True)
+            except subprocess.CalledProcessError:
+                subprocess.run(["dd", "if=/dev/zero", f"of={path}", "bs=1M", f"count={plan['size_mb']}", "status=none"], check=True)
+        
+        os.chmod(path, 0o600)
+        print("   Executing: mkswap...", flush=True)
+        subprocess.run(["mkswap", path], check=True)
+        
+        print(f"   Executing: swapon (Priority {plan['priority']})...", flush=True)
+        subprocess.run(["swapon", "-p", str(plan['priority']), path], check=True)
+
+        # 2. Persistence
+        unit_path = plan['unit_path']
+        print(f">> STEP: Persisting Systemd Unit ({os.path.basename(unit_path)})", flush=True)
+        if not _atomic_write(unit_path, plan['unit_content']): return 1
         subprocess.run(["systemctl", "daemon-reload"], check=True)
+        subprocess.run(["systemctl", "enable", "--now", os.path.basename(unit_path)], check=True)
+
+        # 3. Boot Config (With Offset Auto-Correction)
+        print(">> STEP: Updating Kernel Parameters", flush=True)
+        offset = _get_resume_offset(path)
+        grub_content = plan.get('grub_content', '')
+        initramfs_content = plan.get('initramfs_content', '')
+        
+        if not is_block and offset != "0":
+            print(f"   Auto-correcting resume_offset to: {offset}", flush=True)
+            # Inject into GRUB
+            if "resume_offset=" not in grub_content:
+                grub_content = grub_content.replace('"', f' resume_offset={offset}"', 1)
+            # Inject into initramfs
+            if "RESUME_OFFSET=" not in initramfs_content:
+                initramfs_content += f"RESUME_OFFSET={offset}\n"
+
+        if plan.get('grub_path'):
+            if not _atomic_write(plan['grub_path'], grub_content): return 1
+        if plan.get('initramfs_path'):
+            if not _atomic_write(plan['initramfs_path'], initramfs_content): return 1
+
+        # 4. Policy
+        print(">> STEP: Applying Hibernation Policy (ZRAM Paradox Fix)", flush=True)
+        policy_path = "/etc/tmpfiles.d/99-z-manager-hibernation.conf"
+        if not _atomic_write(policy_path, plan['policy_content']): return 1
+        subprocess.run(["systemd-tmpfiles", "--create", policy_path], check=True)
+
+        # 5. Regeneration
+        print(">> STEP: Regenerating Bootloader & initramfs (This takes a minute...)", flush=True)
+        if shutil.which("update-grub"):
+            subprocess.run(["update-grub"], check=True)
+        elif shutil.which("grub-mkconfig"):
+            # Handle Fedora/Arch style
+            for p in ["/boot/grub/grub.cfg", "/boot/grub2/grub.cfg", "/boot/efi/EFI/fedora/grub.cfg"]:
+                if os.path.exists(p):
+                    subprocess.run(["grub-mkconfig", "-o", p], check=True)
+                    break
+        
+        if shutil.which("update-initramfs"):
+            subprocess.run(["update-initramfs", "-u"], check=True)
+        elif shutil.which("dracut"):
+            subprocess.run(["dracut", "-f", "--regenerate-all"], check=True)
+
+        print(">> ALL STEPS COMPLETED SUCCESSFULLY", flush=True)
         return 0
-    except subprocess.CalledProcessError as e:
-        print(f"Error: daemon-reload failed: {e}", file=sys.stderr)
-        return e.returncode
+    except Exception as e:
+        print(f"!! FATAL ERROR: {e}", file=sys.stderr, flush=True)
+        return 1
 
 
 def cmd_systemctl(action: str, service: str) -> int:
     """Run systemctl action on a service."""
-    if action not in ("restart", "stop", "start", "enable", "disable"):
-        print(f"Error: Invalid action: {action}", file=sys.stderr)
-        return 1
-    
-    # Allow zman services and any .swap units (created by zman)
-    if not is_service_allowed(service) and not service.endswith(".swap"):
+    if action == "daemon-reload":
+        subprocess.run(["systemctl", "daemon-reload"], check=True)
+        return 0
+    if not is_service_allowed(service):
         print(f"Error: Service not allowed: {service}", file=sys.stderr)
         return 1
-    
-    try:
-        cmd = ["systemctl", action]
-        if action in ("enable", "disable"):
-            cmd.append("--now")
-        cmd.append(service)
-        
-        subprocess.run(cmd, check=True)
-        return 0
-    except subprocess.CalledProcessError as e:
-        print(f"Error: systemctl {' '.join(cmd[1:])} failed: {e}", file=sys.stderr)
-        return e.returncode
-
-
-def cmd_update_grub() -> int:
-    """Run update-grub or equivalent."""
-    if shutil.which("update-grub"):
-        cmd = ["update-grub"]
-    else:
-        # Try variants of mkconfig
-        mkconfig = shutil.which("grub-mkconfig") or shutil.which("grub2-mkconfig")
-        if not mkconfig:
-            print("Error: update-grub or grub-mkconfig not found", file=sys.stderr)
-            return 1
-            
-        # We need to find the config path. Common paths:
-        config_paths = [
-            "/boot/grub/grub.cfg", 
-            "/boot/grub2/grub.cfg",
-            "/boot/efi/EFI/fedora/grub.cfg", 
-            "/boot/efi/EFI/redhat/grub.cfg",
-            "/boot/efi/EFI/ubuntu/grub.cfg",
-            "/boot/efi/EFI/debian/grub.cfg"
-        ]
-        found_path = None
-        for p in config_paths:
-            if os.path.exists(p):
-                found_path = p
-                break
-        if not found_path:
-            print("Error: Could not find grub.cfg", file=sys.stderr)
-            return 1
-        cmd = [mkconfig, "-o", found_path]
-
-    try:
-        subprocess.run(cmd, check=True)
-        return 0
-    except subprocess.CalledProcessError as e:
-        print(f"Error: GRUB update failed: {e}", file=sys.stderr)
-        return e.returncode
-
-
-def cmd_update_initramfs() -> int:
-    """Run update-initramfs or equivalent."""
-    if shutil.which("update-initramfs"):
-        cmd = ["update-initramfs", "-u"]
-    elif shutil.which("dracut"):
-        cmd = ["dracut", "-f", "--regenerate-all"]
-    elif shutil.which("mkinitcpio"):
-        cmd = ["mkinitcpio", "-P"]
-    else:
-        print("Error: No supported initramfs tool found", file=sys.stderr)
-        return 1
-
-    try:
-        subprocess.run(cmd, check=True)
-        return 0
-    except subprocess.CalledProcessError as e:
-        print(f"Error: Initramfs update failed: {e}", file=sys.stderr)
-        return e.returncode
-
-
-def cmd_sysctl_system() -> int:
-    """Run sysctl --system."""
-    try:
-        subprocess.run(["sysctl", "--system"], check=True)
-        return 0
-    except subprocess.CalledProcessError as e:
-        print(f"Error: sysctl --system failed: {e}", file=sys.stderr)
-        return e.returncode
-
-
-def cmd_live_apply(device_name: str, config_path: str) -> int:
-    """
-    Batched operation: Stop -> Write -> Daemon Reload -> Restart.
-    Prints progress markers ">> Step Name" for the UI to parse.
-    """
-    service = f"systemd-zram-setup@{device_name}.service"
-    
-    if not is_path_allowed(config_path):
-        print(f"Error: Path not allowed: {config_path}", file=sys.stderr)
-        return 1
-    
-    # 1. STOP
-    print(f">> Stopping {service}...", flush=True)
-    # We ignore errors on stop (service might not be running)
-    subprocess.run(["systemctl", "stop", service], stderr=subprocess.STDOUT)
-    
-    # 2. WRITE
-    print(f">> Writing configuration...", flush=True)
-    if cmd_write(config_path) != 0:
-        return 1
-        
-    # 3. RELOAD
-    print(f">> Reloading systemd...", flush=True)
-    if cmd_daemon_reload() != 0:
-        return 1
-        
-    # 4. RESTART
-    print(f">> Restarting {service}...", flush=True)
-    if cmd_systemctl("restart", service) != 0:
-        return 1
-        
-    print(">> Done", flush=True)
-    return 0
-
-
-def cmd_live_remove(device_name: str, config_path: str) -> int:
-    """
-    Batched operation: Stop -> Write -> Daemon Reload.
-    """
-    service = f"systemd-zram-setup@{device_name}.service"
-    
-    if not is_path_allowed(config_path):
-        print(f"Error: Path not allowed: {config_path}", file=sys.stderr)
-        return 1
-
-    # 1. STOP
-    print(f">> Stopping {service}...", flush=True)
-    subprocess.run(["systemctl", "stop", service], stderr=subprocess.STDOUT)
-
-    # 2. WRITE
-    print(f">> Writing configuration...", flush=True)
-    if cmd_write(config_path) != 0:
-        return 1
-
-    # 3. RELOAD
-    print(f">> Reloading systemd...", flush=True)
-    if cmd_daemon_reload() != 0:
-        return 1
-    
-    print(">> Done", flush=True)
+    cmd = ["systemctl", action]
+    if action in ("enable", "disable"): cmd.append("--now")
+    cmd.append(service)
+    subprocess.run(cmd, check=True)
     return 0
 
 
 def main():
     if len(sys.argv) < 2:
-        print(__doc__)
         return 1
 
     match sys.argv[1:]:
         case ["write", path]:
             return cmd_write(path)
-
+        case ["hibernate-setup"]:
+            return cmd_hibernate_setup()
         case ["daemon-reload"]:
-            return cmd_daemon_reload()
-
-        case ["update-grub"]:
-            return cmd_update_grub()
-
-        case ["update-initramfs"]:
-            return cmd_update_initramfs()
-
-        case ["sysctl-system"]:
-            return cmd_sysctl_system()
-
-        case [("restart" | "stop" | "start" | "enable" | "disable") as action, service]:
+            return cmd_systemctl("daemon-reload", "")
+        case [action, service]:
             return cmd_systemctl(action, service)
-
-        case ["live-apply", device, config_path]:
-            return cmd_live_apply(device, config_path)
-
-        case ["live-remove", device, config_path]:
-            return cmd_live_remove(device, config_path)
-
         case _:
-            print(f"Unknown command or arguments: {' '.join(sys.argv[1:])}", file=sys.stderr)
             return 1
-
-
 
 if __name__ == "__main__":
     sys.exit(main())

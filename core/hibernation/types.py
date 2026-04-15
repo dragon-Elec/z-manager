@@ -18,6 +18,7 @@ class HibernateCheckResult:
     ]
     swap_total: int
     ram_total: int
+    recommended_swap_bytes: int
     message: str
 
 

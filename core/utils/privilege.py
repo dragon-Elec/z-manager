@@ -81,3 +81,79 @@ def pkexec_sysctl_system() -> tuple[bool, str | None]:
         return False, proc.stderr.strip() or f"pkexec sysctl-system failed (code {proc.returncode})"
     except Exception as e:
         return False, f"Z-Manager Orchestration Error: {e}"
+
+
+import json
+
+def pkexec_hibernate_setup(plan: dict) -> tuple[bool, str]:
+    """
+    Consolidated hibernation setup via pkexec.
+    Sends a JSON plan to the helper for single-prompt execution.
+    """
+    if is_root():
+        # Ideally, we'd just call the logic directly, but for consistency 
+        # and logging, we'll pipe it to a temporary instance of the helper
+        # logic or just simulate the pipe.
+        pass
+
+    helper_path = _get_helper_path()
+    try:
+        proc = subprocess.run(
+            ["pkexec", helper_path, "hibernate-setup"],
+            input=json.dumps(plan),
+            capture_output=True,
+            text=True
+        )
+        if proc.returncode == 0:
+            return True, proc.stdout.strip()
+        return False, proc.stderr.strip() or proc.stdout.strip() or f"Transaction failed (code {proc.returncode})"
+    except Exception as e:
+        return False, f"Z-Manager Orchestration Error: {e}"
+
+
+def pkexec_create_swapfile(
+    path: str, size_mb: int, fs_type: str | None = None
+) -> tuple[bool, str | None]:
+    """Privileged creation of a swapfile via pkexec helper."""
+    helper_path = _get_helper_path()
+    try:
+        proc = subprocess.run(
+            ["pkexec", helper_path, "create-swapfile", path, str(size_mb), fs_type or "none"],
+            capture_output=True,
+            text=True,
+        )
+        if proc.returncode == 0:
+            return True, None
+        return False, proc.stderr.strip() or f"pkexec create-swapfile failed (code {proc.returncode})"
+    except Exception as e:
+        return False, f"Z-Manager Orchestration Error: {e}"
+
+
+def pkexec_mkswap(device: str) -> tuple[bool, str | None]:
+    """Privileged mkswap via pkexec helper."""
+    helper_path = _get_helper_path()
+    try:
+        proc = subprocess.run(
+            ["pkexec", helper_path, "mkswap", device], capture_output=True, text=True
+        )
+        if proc.returncode == 0:
+            return True, None
+        return False, proc.stderr.strip() or f"pkexec mkswap failed (code {proc.returncode})"
+    except Exception as e:
+        return False, f"Z-Manager Orchestration Error: {e}"
+
+
+def pkexec_swapon(device: str, priority: int = 0) -> tuple[bool, str | None]:
+    """Privileged swapon via pkexec helper."""
+    helper_path = _get_helper_path()
+    try:
+        proc = subprocess.run(
+            ["pkexec", helper_path, "swapon", device, str(priority)],
+            capture_output=True,
+            text=True,
+        )
+        if proc.returncode == 0:
+            return True, None
+        return False, proc.stderr.strip() or f"pkexec swapon failed (code {proc.returncode})"
+    except Exception as e:
+        return False, f"Z-Manager Orchestration Error: {e}"

@@ -23,6 +23,7 @@ from .prober import (
     get_resume_offset,
     get_partition_uuid,
     detect_resume_swap,
+    get_fs_type,
 )
 from .provisioner import (
     create_swapfile,

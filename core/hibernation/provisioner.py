@@ -15,7 +15,13 @@ from pathlib import Path
 from core.utils.common import run, SystemCommandError
 from core.utils.io import pkexec_write
 from core.utils.block import check_device_safety, is_block_device
-from core.utils.privilege import pkexec_daemon_reload, pkexec_systemctl
+from core.utils.privilege import (
+    pkexec_daemon_reload,
+    pkexec_systemctl,
+    pkexec_create_swapfile,
+    pkexec_mkswap,
+    pkexec_swapon,
+)
 from .types import SwapCreationResult, SwapPersistResult, SwapTeardownResult
 from .prober import _get_fs_type, get_resume_offset, get_partition_uuid
 
@@ -24,7 +30,7 @@ _LOGGER = logging.getLogger(__name__)
 
 def create_swapfile(path: str, size_mb: int) -> SwapCreationResult:
     """
-    Creates a swapfile safely, handling Btrfs COW disabling.
+    Creates a swapfile safely via privileged helper, handling Btrfs COW disabling.
     """
     if os.path.exists(path) and is_block_device(path):
         return SwapCreationResult(
@@ -37,33 +43,10 @@ def create_swapfile(path: str, size_mb: int) -> SwapCreationResult:
 
     fs_type = _get_fs_type(os.path.dirname(path))
 
-    try:
-        if fs_type == "btrfs":
-            run(["truncate", "-s", "0", path], check=True)
-            run(["chattr", "+C", path], check=True)
-
-        try:
-            run(["fallocate", "-l", f"{size_mb}M", path], check=True)
-        except SystemCommandError:
-            run(
-                [
-                    "dd",
-                    "if=/dev/zero",
-                    f"of={path}",
-                    "bs=1M",
-                    f"count={size_mb}",
-                    "status=progress",
-                ],
-                check=True,
-            )
-
-        os.chmod(path, 0o600)
-        run(["mkswap", path], check=True)
-
-    except (SystemCommandError, OSError) as e:
-        if os.path.exists(path) and os.path.isfile(path) and os.path.getsize(path) == 0:
-            os.remove(path)
-        return SwapCreationResult(False, path, None, None, str(e))
+    # Delegate to privileged helper
+    success, err = pkexec_create_swapfile(path, size_mb, fs_type)
+    if not success:
+        return SwapCreationResult(False, path, None, None, f"Privileged swap creation failed: {err}")
 
     uuid = get_partition_uuid(path)
     offset = get_resume_offset(path)
@@ -73,11 +56,8 @@ def create_swapfile(path: str, size_mb: int) -> SwapCreationResult:
 
 
 def enable_swapon(path: str, priority: int = 0) -> bool:
-    try:
-        run(["swapon", "-p", str(priority), path], check=True)
-        return True
-    except SystemCommandError:
-        return False
+    success, _ = pkexec_swapon(path, priority)
+    return success
 
 
 def swapoff_swap(path: str) -> bool:
