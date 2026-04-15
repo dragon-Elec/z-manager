@@ -1,5 +1,5 @@
 # Identity
-/home/ray/Desktop/files/wrk/prjkt-z/z-man/z-manager/core/device_management
+/home/ray/Desktop/files/wrk/prjkt-z/z-manager/core/device_management
 Handles ZRAM device lifecycle: discovery, state probing, kernel node provisioning, and configuration orchestration.
 
 # Rules
@@ -41,6 +41,7 @@ Role: Read-only detection and sysfs probing.
   - .types
   - core.utils.common (run, SystemCommandError, read_file)
   - core.utils.block (is_block_device)
+  - core.utils.swap (is_device_in_swaps)
   - core.utils.zram_stats (zram_sysfs_dir, parse_zramctl_table)
 - SysDeps:
   - typing
