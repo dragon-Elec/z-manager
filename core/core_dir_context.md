@@ -1,5 +1,5 @@
 # Identity
-/home/ray/Desktop/files/wrk/prjkt-z/z-man/z-manager/core
+/home/ray/Desktop/files/wrk/prjkt-z/z-manager/core
 The engine room of Z-Manager. Handles low-level OS interactions (sysfs, systemd, GRUB), ZRAM configuration (zram-generator), system health monitoring, and persistent kernel tuning.
 
 # Rules
@@ -13,88 +13,59 @@ The engine room of Z-Manager. Handles low-level OS interactions (sysfs, systemd,
 # Index
 __init__.py: Currently empty; placeholder for future core re-exports.
 device_management: Lifecycle orchestration for ZRAM devices (see device_management_dir_context.md).
+hibernation: Lifecycle orchestration for system hibernation (see hibernation_dir_context.md).
 utils: Low-level system utilities (see utils_dir_context.md).
-os_utils.py: [DEPRECATED] Legacy monolithic shim. No longer the source of truth; see `utils/` instead.
+system_tuning.py: Privileged kernel parameter control (sysfs/proc).
 
 # Audits
 
 ### [FILE: boot_config.py]
-Role: Persistent system tuning (sysctl, GRUB, initramfs).
+Role: Persistent system tuning (sysctl, GRUB).
 
-/DNA/: [apply_sysctl_profile() -> pkexec_write() -> pkexec_sysctl_system()] + [apply_hibernation_boot_config() -> "Bootloader Handshake" pipeline]
+/DNA/: [apply_sysctl_profile() -> pkexec_write() -> pkexec_sysctl_system()] + [set_zswap_in_grub() -> pkexec_write()]
 
-- SrcDeps:
-  - .utils.common (run, SystemCommandError, read_file)
-  - .utils.io (atomic_write_to_file, is_root, pkexec_write)
-- SysDeps:
-  - logging
-  - tempfile
-  - os
-  - shutil
-  - contextlib
-  - dataclasses
-  - pathlib
+- SrcDeps: .utils.{common, io, bootloader, kernel_cmdline, grub_paths}
+- SysDeps: logging, tempfile, os, contextlib, dataclasses, pathlib
 
 API:
-  - is_kernel_param_active(param) -> bool: Checks /proc/cmdline for active boot params.
   - get_swappiness() -> Optional[int]: Reads current vm.swappiness.
   - apply_sysctl_profile(enable) -> TuneResult: Toggles performance sysctl profile.
   - apply_sysctl_values(settings) -> TuneResult: Merges custom key=value pairs into config.
   - set_zswap_in_grub(enabled) -> TuneResult: Writes GRUB config to disable/enable zswap.
   - set_psi_in_grub(enabled) -> TuneResult: Writes GRUB config to enable/disable PSI.
-  - detect_bootloader() -> str: Identifies grub vs systemd-boot.
-  - update_grub_resume(uuid, offset) -> TuneResult: Persists resume parameters to GRUB.
-  - detect_initramfs_system() -> str: Identifies initramfs-tools, dracut, or mkinitcpio.
-  - configure_initramfs_resume(uuid, offset) -> TuneResult: Persists resume parameters to initramfs-tools.
-  - regenerate_initramfs() -> TuneResult: System-agnostic initramfs update.
 
 
 ### [FILE: config_writer.py]
 Role: Configuration rendering for zram-generator.
 
-/DNA/: [update_zram_config() -> read_zram_config() -> modify ConfigObj -> serialize to string]
+/DNA/: [update_zram_config() -> _read_local_config() -> modify ConfigObj -> serialize to string]
 
-- SrcDeps:
-  - .config (CONFIG_PATH)
-- SysDeps:
-  - configobj
-  - re
-  - io
-  - typing
-  - pathlib
+- SrcDeps: .config
+- SysDeps: configobj, re, io, typing, pathlib
 
 API:
-  - generate_config_string(size, algo, priority, device, writeback) -> str: Direct ConfigObj rendering.
-  - validate_updates(updates) -> Optional[str]: Validates size formulas and algo strings.
-  - update_zram_config(device, updates) -> Tuple[bool, str, str]: Merges changes into config buffer with validation.
-  - update_writeback_config(device, writeback_device) -> Tuple[bool, str, str]: Specialized writeback update.
-  - update_host_limit_config(device, min_ram_mb) -> Tuple[bool, str, str]: Updates host-memory-limit.
-  - update_filesystem_config(device, fs_type, mount_point) -> Tuple[bool, str, str]: Updates fs-type and mount-point.
-  - update_global_config(updates) -> Tuple[bool, str, str]: Modifies [zram-generator] section.
-  - remove_device_from_config(device) -> Tuple[bool, str, str]: Deletes section and re-renders entire buffer.
+  - generate_config_string(size_formula, algorithm, priority, device, writeback_device) -> str: Direct ConfigObj rendering.
+  - validate_updates(updates) -> Optional[str]: Validates size formulas and algorithm strings.
+  - update_zram_config(device, updates) -> Tuple[bool, Optional[str], str]: Merges changes into config buffer.
+  - update_writeback_config(device, writeback_device) -> Tuple[bool, Optional[str], str]: Specialized writeback update.
+  - update_host_limit_config(device, min_ram_mb) -> Tuple[bool, Optional[str], str]: Updates host-memory-limit.
+  - update_filesystem_config(device, fs_type, mount_point) -> Tuple[bool, Optional[str], str]: Updates fs-type and mount-point.
+  - update_global_config(updates) -> Tuple[bool, Optional[str], str]: Modifies [zram-generator] section.
+  - remove_device_from_config(device) -> Tuple[bool, Optional[str], str]: Deletes section and re-renders buffer.
 
 
 ### [FILE: config.py]
 Role: Configuration path resolution and reading.
 
-/DNA/: [load_effective_config_state() -> run(systemd-analyze cat-config) -> _parse_systemd_cat_config() => EffectiveConfig(cfg, provenance)]
+/DNA/: [load_effective_config() -> run(systemd-analyze cat-config) => EffectiveConfig(cfg, provenance)]
 
-- SrcDeps:
-  - .utils.common (run, SystemCommandError)
-  - .utils.privilege (systemd_daemon_reload, systemd_try_restart)
-- SysDeps:
-  - configobj
-  - pathlib
-  - dataclasses
-  - typing
-  - io
-  - subprocess
+- SrcDeps: .utils.{common, privilege}
+- SysDeps: configobj, pathlib, dataclasses, typing, io, subprocess
 
 API:
-  - get_active_config_path() -> Optional[Path]: Resolves first existing config in hierarchy.
   - read_zram_config() -> ConfigObj: Reads the most specific config in the hierarchy.
-  - read_global_config() -> Dict: Returns [zram-generator] contents.
-  - load_effective_config() -> str: Returns the raw string of the active config.
+  - read_global_config() -> Dict[str, str]: Returns [zram-generator] contents.
+  - load_effective_config(root) -> str: Returns the raw string of the active config.
   - apply_config_with_restart(device, restart_mode) -> ConfigResult: Reloads daemon and restarts unit.
 
 
@@ -103,13 +74,8 @@ Role: System health monitoring and diagnostic reports.
 
 /DNA/: [check_system_health() -> probe commands/sysfs/swaps -> build HealthReport model]
 
-- SrcDeps:
-  - .utils.common (run)
-- SysDeps:
-  - os
-  - platform
-  - dataclasses
-  - typing
+- SrcDeps: .utils.common
+- SysDeps: os, platform, dataclasses, typing
 
 API:
   - check_system_health() -> HealthReport: Composite diagnostic of tools, nodes, and zswap.
@@ -117,34 +83,29 @@ API:
   - get_zswap_status() -> ZswapStatus: Probes /sys/module/zswap.
 
 
-### [FILE: hibernate_ctl.py]
-Role: Swapfile/partition management for hibernation.
+### [FILE: hibernate_ctl.py] [DEPRECATED]
+Role: Compatibility shim for core.hibernation.
 
-/DNA/: [create_swapfile() -> truncate+chattr+C (btrfs) -> fallocate -> mkswap -> UUID/offset]
+/DNA/: [re-exports from .hibernation.{prober, provisioner}]
 
-- SrcDeps:
-  - .utils.common (run, SystemCommandError, read_file)
-  - .utils.io (atomic_write_to_file, pkexec_write, is_root)
-  - .utils.block (check_device_safety, is_block_device)
-  - .utils.privilege (pkexec_daemon_reload, pkexec_systemctl, systemd_try_restart)
-- SysDeps:
-  - logging
-  - os
-  - re
-  - shlex
-  - shutil
-  - dataclasses
-  - pathlib
-  - typing
+- SrcDeps: .hibernation.{prober, provisioner, types}
+- SysDeps: warnings
+
+!Caveat: update_fstab has been removed; raises NotImplementedError.
+
+
+### [FILE: system_tuning.py]
+Role: Privileged kernel parameter control (sysfs/proc).
+
+/DNA/: [set_cpu_governor() -> glob /sys -> pkexec_write()] + [set_io_scheduler() -> pkexec_write()] + [set_vfs_cache_pressure() -> pkexec_write()]
+
+- SrcDeps: .utils.{common, io}
+- SysDeps: logging, pathlib, typing
 
 API:
-  - check_hibernation_readiness() -> HibernateCheckResult: Secure Boot and RAM vs Swap capacity check.
-  - get_memory_info() -> Tuple[int, int]: Reads RAM and Swap total from /proc/meminfo.
-  - create_swapfile(path, size_mb) -> SwapCreationResult: Robust swapfile creation (Nocow if Btrfs).
-  - get_resume_offset(path) -> Optional[int]: Calculates filefrag/btrfs physical offset.
-  - get_partition_uuid(path) -> Optional[str]: Resolves device UUID for kernel params.
-  - enable_swapon(path, priority) -> bool: Activates swap on direct path.
-  - update_fstab(device_path, uuid) -> bool: Safely appends entry to /etc/fstab with nofail.
+  - set_cpu_governor(governor, available_governors) -> bool: Sets governor for all online CPUs.
+  - set_io_scheduler(device_name, scheduler, available_schedulers) -> bool: Sets I/O scheduler for block device.
+  - set_vfs_cache_pressure(value) -> bool: Sets live vm.vfs_cache_pressure value.
 
 
 ### [FILE: zman_helper.py]
@@ -152,18 +113,16 @@ Role: Privileged helper script executed via pkexec.
 
 /DNA/: [main() -> match argv -> cmd_exec() -> return 0/1]
 
-- SrcDeps: None (Stand-alone)
-- SysDeps:
-  - sys
-  - os
-  - subprocess
-  - shutil
-  - tempfile
+- SrcDeps: None
+- SysDeps: sys, os, subprocess, shutil, tempfile
 
 API:
   - cmd_write(path): Atomic write with security whitelist check.
   - cmd_daemon_reload(): Privileged systemd reload.
   - cmd_systemctl(action, service): Privileged unit control.
+  - cmd_update_grub(): Regenerates GRUB configuration.
+  - cmd_update_initramfs(): Regenerates initramfs.
+  - cmd_sysctl_system(): Applies all sysctl settings.
   - cmd_live_apply(device, config_path): Batched lifecycle: Stop -> Write -> Reload -> Restart.
   - cmd_live_remove(device, config_path): Batched lifecycle: Stop -> Write -> Reload.
 

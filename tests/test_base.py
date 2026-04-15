@@ -11,9 +11,8 @@ class BaseTestCase(unittest.TestCase):
 
     def setUp(self):
         super().setUp()
-        # Common patches could be added here if they should apply to ALL tests
-        # For now, we provide helper methods to apply them selectively.
-        pass
+        self.mock_read = None
+        self.mock_run = None
 
     def mock_system_calls(self, read_data=None, run_result=None):
         """ Helper to mock common core.utils.common functions in one go. """
@@ -35,6 +34,7 @@ class BaseTestCase(unittest.TestCase):
         self.addCleanup(cleanup)
 
     # Custom Assertions
+    def assertDeviceActive(self, device_name):
         from core.device_management.prober import is_device_active
         self.assertTrue(is_device_active(device_name), f"Expected zram device '{device_name}' to be active/swapon.")
 
