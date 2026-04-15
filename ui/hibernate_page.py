@@ -22,7 +22,7 @@ from ui.device_picker import DevicePickerDialog
 class HibernatePage(Adw.PreferencesPage):
     """
     Page for managing System Hibernation settings.
-    Built purely in Python to avoid XML template overhead for this minimal implementation.
+    Synchronized with the 'Split-Horizon' background architecture.
     """
 
     __gtype_name__ = "HibernatePage"
@@ -39,7 +39,8 @@ class HibernatePage(Adw.PreferencesPage):
         self._refresh_state()
 
     def _build_ui(self):
-        self.status_group = Adw.PreferencesGroup(title="System Status")
+        # 1. System Readiness
+        self.status_group = Adw.PreferencesGroup(title="System Readiness")
         self.add(self.status_group)
 
         self.status_row = Adw.ActionRow(title="Checking...")
@@ -47,9 +48,14 @@ class HibernatePage(Adw.PreferencesPage):
         self.status_row.add_prefix(self.status_icon)
         self.status_group.add(self.status_row)
 
+        self.sb_advice_row = Adw.ActionRow(title="Secure Boot Advice")
+        self.sb_advice_row.set_subtitle("Checking security state...")
+        self.status_group.add(self.sb_advice_row)
+
+        # 2. Persistent Storage (The "Split-Horizon" Layer)
         self.swap_group = Adw.PreferencesGroup(
-            title="Persistent Storage",
-            description="Hibernation requires a dedicated disk swap device.",
+            title="Persistent Storage (Priority 0)",
+            description="A dedicated disk swap is required for hibernation. ZRAM is too volatile.",
         )
         self.add(self.swap_group)
 
@@ -63,6 +69,21 @@ class HibernatePage(Adw.PreferencesPage):
         self.create_swap_btn.connect("clicked", self._on_setup_swap_clicked)
         self.create_swap_row.add_suffix(self.create_swap_btn)
 
+        # 3. Optimization Policy (The Paradox Fix)
+        self.policy_group = Adw.PreferencesGroup(
+            title="Optimization Policy",
+            description="Manage how the kernel handles the hibernation image.",
+        )
+        self.add(self.policy_group)
+
+        self.minimize_toggle = Adw.SwitchRow(
+            title="Minimize Hibernation Image",
+            subtitle="Forces maximum compression to guarantee space (ZRAM Paradox fix).",
+        )
+        self.minimize_toggle.connect("notify::active", self._on_policy_toggled)
+        self.policy_group.add(self.minimize_toggle)
+
+        # 4. Boot Configuration
         self.boot_group = Adw.PreferencesGroup(
             title="Boot Configuration",
             description="Kernel parameters required for resuming.",
@@ -83,6 +104,7 @@ class HibernatePage(Adw.PreferencesPage):
     def _refresh_state(self):
         self.readiness = check_hibernation_readiness()
 
+        # Update Readiness UI
         if self.readiness.ready:
             self.status_row.set_title("System Ready")
             self.status_row.set_subtitle(self.readiness.message)
@@ -96,6 +118,18 @@ class HibernatePage(Adw.PreferencesPage):
             self.status_row.add_css_class("error")
             self.status_row.remove_css_class("success")
 
+        # Secure Boot Advice
+        sb = self.readiness.secure_boot
+        if sb == "confidentiality":
+            self.sb_advice_row.set_subtitle("Locked by Secure Boot. Disable Secure Boot in BIOS to enable hibernation.")
+            self.sb_advice_row.add_css_class("warning")
+        elif sb == "integrity":
+            self.sb_advice_row.set_subtitle("Secure Boot active (Integrity). Hibernation may be restricted.")
+        else:
+            self.sb_advice_row.set_subtitle("No Secure Boot restrictions detected.")
+            self.sb_advice_row.remove_css_class("warning")
+
+        # Active Swap Detection
         active_swap = detect_resume_swap()
         if active_swap:
             self.create_swap_row.set_subtitle(f"Active: {active_swap}")
@@ -106,8 +140,16 @@ class HibernatePage(Adw.PreferencesPage):
             self.create_swap_btn.set_label("Create")
             self.apply_boot_btn.set_sensitive(False)
 
-        from core.hibernation import is_kernel_param_active
+        # Policy Status (Image Size)
+        try:
+            from core.utils.common import read_file
+            val = read_file("/sys/power/image_size") or "unknown"
+            self.minimize_toggle.set_active("0" in val)
+        except Exception:
+            pass
 
+        # Kernel Params
+        from core.hibernation import is_kernel_param_active
         if is_kernel_param_active("resume="):
             self.boot_row.set_subtitle("Resume parameter active")
             self.apply_boot_btn.set_label("Update Config")
@@ -115,10 +157,14 @@ class HibernatePage(Adw.PreferencesPage):
             self.boot_row.set_subtitle("Missing 'resume=' parameter")
             self.apply_boot_btn.set_label("Apply Config")
 
+    def _on_policy_toggled(self, row, GParamSpec):
+        active = row.get_active()
+        from core.hibernation.configurator import apply_hibernation_policy
+        apply_hibernation_policy(minimize_image=active)
+
     def _on_setup_swap_clicked(self, btn):
         root = self.get_root()
         dialog = DevicePickerDialog(parent=root)
-        dialog.set_title("Select Partition for Hibernate Swap")
         dialog.connect("device-selected", self._on_device_selected)
         dialog.present()
 
@@ -127,18 +173,22 @@ class HibernatePage(Adw.PreferencesPage):
         is_dev = is_block_device(path)
 
         if not is_dev:
+            # If a directory was selected, we append 'swapfile'
             target_path = os.path.join(path, "swapfile")
 
         dialog.destroy()
 
-        ram_gb = int(self.readiness.ram_total / 1024 / 1024 / 1024)
+        rec_bytes = self.readiness.recommended_swap_bytes
+        rec_gb = round(rec_bytes / 1024 / 1024 / 1024, 1)
+        
         confirm = Adw.MessageDialog(
             transient_for=self.get_root(),
             heading="Setup Hibernate Swap",
-            body=f"This will configure '{target_path}' as the hibernation resume device.\n\n"
-            f"\u2022 If it's a file, it will be created ({ram_gb} GB+).\n"
-            f"\u2022 If it's a partition, it will be formatted (DATA LOSS).\n\n"
-            "Proceed?",
+            body=f"Target: **{target_path}**\n\n"
+            f"• Recommended size: **{rec_gb} GB** (RAM + ZRAM + Buffer).\n"
+            f"• Type: {'Partition (DATA LOSS)' if is_dev else 'Swapfile'}.\n"
+            f"• Priority: **0** (ZRAM remains primary for speed).\n\n"
+            "This will modify your system configuration. Proceed?",
         )
         confirm.add_response("cancel", "Cancel")
         confirm.add_response("proceed", "Proceed")
@@ -174,9 +224,9 @@ class HibernatePage(Adw.PreferencesPage):
                     raise Exception(f"Safety check failed: {msg}")
 
             if not is_block_device(path):
-                result = apply_full_setup(
-                    path, size_mb=int(self.readiness.ram_total / 1024 / 1024) + 1024
-                )
+                # Use recommended size in MB
+                size_mb = int(self.readiness.recommended_swap_bytes / 1024 / 1024)
+                result = apply_full_setup(path, size_mb=size_mb)
             else:
                 result = apply_full_setup(path, size_mb=0)
 
@@ -221,6 +271,7 @@ class HibernatePage(Adw.PreferencesPage):
             from core.hibernation.configurator import (
                 update_grub_resume,
                 configure_initramfs_resume,
+                apply_hibernation_policy,
                 pkexec_update_grub,
                 pkexec_update_initramfs,
             )
@@ -238,6 +289,10 @@ class HibernatePage(Adw.PreferencesPage):
 
             ok, msg = configure_initramfs_resume(uuid, offset)
             logs.append(f"initramfs: {msg}")
+
+            # Apply the image size policy (ZRAM paradox fix)
+            ok, msg = apply_hibernation_policy()
+            logs.append(f"Policy: {msg}")
 
             logs.append("Regenerating initramfs (this may take a minute)...")
             ok_grub, _ = pkexec_update_grub()
