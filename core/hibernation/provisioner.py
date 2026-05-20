@@ -23,7 +23,8 @@ from core.utils.privilege import (
     pkexec_swapon,
 )
 from .types import SwapCreationResult, SwapPersistResult, SwapTeardownResult
-from .prober import _get_fs_type, get_resume_offset, get_partition_uuid
+from .prober import get_fs_type, get_resume_offset, get_partition_uuid
+
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -41,12 +42,14 @@ def create_swapfile(path: str, size_mb: int) -> SwapCreationResult:
             "Path is an existing block device. Use it directly.",
         )
 
-    fs_type = _get_fs_type(os.path.dirname(path))
+    fs_type = get_fs_type(os.path.dirname(path))
 
     # Delegate to privileged helper
     success, err = pkexec_create_swapfile(path, size_mb, fs_type)
     if not success:
-        return SwapCreationResult(False, path, None, None, f"Privileged swap creation failed: {err}")
+        return SwapCreationResult(
+            False, path, None, None, f"Privileged swap creation failed: {err}"
+        )
 
     uuid = get_partition_uuid(path)
     offset = get_resume_offset(path)
@@ -91,9 +94,7 @@ def delete_swap(path: str) -> SwapTeardownResult:
         if not ok:
             logs.append(f"Failed to disable unit: {err}")
         # Neutralize the unit file via pkexec instead of unprivileged os.remove
-        ok, err = pkexec_write(
-            unit_path, "# Unit removed by Z-Manager teardown\n"
-        )
+        ok, err = pkexec_write(unit_path, "# Unit removed by Z-Manager teardown\n")
         if ok:
             logs.append("Neutralized systemd unit")
         else:
@@ -107,22 +108,21 @@ def delete_swap(path: str) -> SwapTeardownResult:
                     os.remove(path)
                     logs.append("Removed swapfile")
                 except OSError as e:
-                    return SwapTeardownResult(
-                        False, f"Failed to remove swapfile: {e}"
-                    )
+                    return SwapTeardownResult(False, f"Failed to remove swapfile: {e}")
             else:
                 # Swapfile in user space or needs privilege
                 try:
                     os.remove(path)
                     logs.append("Removed swapfile")
                 except PermissionError:
-                    logs.append(
-                        "Swapfile requires root to remove — left in place"
-                    )
+                    from core.utils.privilege import pkexec_remove
+                    ok, err = pkexec_remove(path)
+                    if ok:
+                        logs.append("Removed swapfile via pkexec")
+                    else:
+                        logs.append(f"Swapfile requires root and pkexec failed: {err}")
                 except OSError as e:
-                    return SwapTeardownResult(
-                        False, f"Failed to remove swapfile: {e}"
-                    )
+                    return SwapTeardownResult(False, f"Failed to remove swapfile: {e}")
     else:
         logs.append("Block device left as-is")
 

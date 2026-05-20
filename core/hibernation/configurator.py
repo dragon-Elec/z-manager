@@ -17,7 +17,11 @@ from pathlib import Path
 from core.utils.common import run, SystemCommandError, read_file
 from core.utils.io import pkexec_write, is_root, _get_helper_path
 from core.utils.block import is_block_device, check_device_safety
-from core.utils.privilege import pkexec_mkswap
+from core.utils.privilege import (
+    pkexec_mkswap,
+    pkexec_update_boot,
+    pkexec_hibernate_policy,
+)
 from core.utils.bootloader import detect_bootloader, detect_initramfs_system
 from core.utils.kernel_cmdline import is_kernel_param_active
 from core.utils.grub_paths import GRUB_RESUME_CONFIG_PATH
@@ -111,30 +115,14 @@ def pkexec_update_grub() -> tuple[bool, str]:
             return True, "GRUB configuration updated successfully."
         except SystemCommandError as e:
             return False, f"Failed to update GRUB: {e.stderr}"
-    helper_path = _get_helper_path()
-    proc = subprocess.run(
-        ["pkexec", helper_path, "update-grub"],
-        capture_output=True,
-        text=True,
-    )
-    if proc.returncode == 0:
-        return True, "GRUB configuration updated successfully via pkexec."
-    return False, f"pkexec update-grub failed: {proc.stderr.strip()}"
+    return pkexec_update_boot()
 
 
 def pkexec_update_initramfs() -> tuple[bool, str]:
     """Regenerates initramfs via pkexec."""
     if is_root():
         return _regenerate_initramfs()
-    helper_path = _get_helper_path()
-    proc = subprocess.run(
-        ["pkexec", helper_path, "update-initramfs"],
-        capture_output=True,
-        text=True,
-    )
-    if proc.returncode == 0:
-        return True, "Initramfs regenerated successfully via pkexec."
-    return False, f"pkexec update-initramfs failed: {proc.stderr.strip()}"
+    return pkexec_update_boot()
 
 
 def _regenerate_initramfs() -> tuple[bool, str]:
@@ -181,15 +169,7 @@ def apply_hibernation_policy(minimize_image: bool = True) -> tuple[bool, str]:
         except SystemCommandError as e:
             return False, f"Failed to apply tmpfiles: {e.stderr}"
     
-    helper_path = _get_helper_path()
-    proc = subprocess.run(
-        ["pkexec", helper_path, "tmpfiles"],
-        capture_output=True,
-        text=True,
-    )
-    if proc.returncode == 0:
-        return True, "Hibernation policy applied via pkexec/tmpfiles."
-    return False, f"pkexec tmpfiles failed: {proc.stderr.strip()}"
+    return pkexec_hibernate_policy()
 
 
 from .provisioner import (

@@ -46,7 +46,9 @@ Role: Safe-zone system probing and property resolution.
 
 API:
   - get_memory_info() -> tuple[int, int]: Returns total RAM and Swap in bytes.
+  - get_recommended_swap_size() -> int: Calculates recommended swap size (RAM + ZRAM + buffer).
   - check_hibernation_readiness() -> HibernateCheckResult: Validates logind and kernel support.
+  - get_fs_type(path) -> str | None: Detects filesystem type via df.
   - get_resume_offset(path) -> int | None: Calculates physical swapfile offset.
   - get_partition_uuid(path) -> str | None: Resolves UUID for block device or file host.
 
@@ -74,7 +76,7 @@ Role: High-level orchestrator for boot and service configuration.
 
 /DNA/: [pkexec_write(GRUB/initramfs) -> update-grub -> update-initramfs]
 
-- SrcDeps: .types, .prober, .provisioner, core.utils{common, io, block, bootloader, kernel_cmdline, grub_paths}
+- SrcDeps: .types, .prober, .provisioner, core.utils{common, io, block, bootloader, kernel_cmdline, grub_paths, privilege}
 - SysDeps: logging, os, shutil, subprocess, pathlib
 
 API:
@@ -82,4 +84,5 @@ API:
   - configure_initramfs_resume(uuid, offset) -> tuple[bool, str]: Configures initramfs-tools resume.
   - pkexec_update_grub() -> tuple[bool, str]: Orchestrates GRUB config regeneration.
   - pkexec_update_initramfs() -> tuple[bool, str]: Orchestrates initramfs regeneration.
+  - apply_hibernation_policy(minimize_image) -> tuple[bool, str]: Persists image size policy via tmpfiles.
   - apply_full_setup(swap_path, size_mb, priority) -> HibernateSetupResult: Executes end-to-end configuration.

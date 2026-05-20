@@ -60,58 +60,34 @@ def get_recommended_swap_size() -> int:
 
 def check_hibernation_readiness() -> HibernateCheckResult:
     """
-    Checks system readiness by delegating to systemd-logind with a fallback
-    to sysfs parsing.
+    Checks system readiness by parsing sysfs directly to avoid D-Bus polkit prompts.
     """
     secure_boot_mode: str = "queried-via-logind"
     ready = False
     msg = ""
 
-    try:
-        res = run(
-            [
-                "busctl",
-                "call",
-                "org.freedesktop.login1",
-                "/org/freedesktop/login1",
-                "org.freedesktop.login1.Manager",
-                "CanHibernate",
-            ],
-            check=True,
+    power_state = read_file("/sys/power/state") or ""
+    if "disk" not in power_state:
+        ready, msg = (
+            False,
+            "Hardware/Kernel does not support hibernation ('disk' missing from /sys/power/state).",
         )
-        out = res.out.lower()
-        if '"yes"' in out:
-            ready, msg = True, "System is fully ready for hibernation."
-        elif '"challenge"' in out:
-            ready, msg = True, "Hibernation available (requires authentication)."
-        else:
-            raise ValueError(
-                f"Logind returned {out.strip()}, triggering manual hardware check."
-            )
-
-    except (SystemCommandError, ValueError):
-        power_state = read_file("/sys/power/state") or ""
-        if "disk" not in power_state:
+        secure_boot_mode = "disabled"
+    else:
+        ready, msg = (
+            True,
+            "Hardware supports hibernation (Swap configuration required).",
+        )
+        secure_boot_mode = "disabled"
+        lockdown = read_file("/sys/kernel/security/lockdown") or ""
+        if "[integrity]" in lockdown:
+            secure_boot_mode = "integrity"
+        elif "[confidentiality]" in lockdown:
+            secure_boot_mode = "confidentiality"
             ready, msg = (
                 False,
-                "Hardware/Kernel does not support hibernation ('disk' missing from /sys/power/state).",
+                "Secure Boot confidentiality is active. Hibernation is blocked.",
             )
-            secure_boot_mode = "disabled"
-        else:
-            ready, msg = (
-                True,
-                "Hardware supports hibernation (Swap configuration required).",
-            )
-            secure_boot_mode = "disabled"
-            lockdown = read_file("/sys/kernel/security/lockdown") or ""
-            if "[integrity]" in lockdown:
-                secure_boot_mode = "integrity"
-            elif "[confidentiality]" in lockdown:
-                secure_boot_mode = "confidentiality"
-                ready, msg = (
-                    False,
-                    "Secure Boot confidentiality is active. Hibernation is blocked.",
-                )
 
     mem_total, swap_total = get_memory_info()
     return HibernateCheckResult(
