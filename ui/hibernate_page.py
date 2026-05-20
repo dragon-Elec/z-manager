@@ -34,8 +34,15 @@ class HibernatePage(Adw.PreferencesPage):
         self.set_icon_name("system-suspend-hibernate-symbolic")
 
         self.readiness = None
+        self._loaded = False
 
         self._build_ui()
+
+    def lazy_load(self):
+        """Called when the tab is first opened."""
+        if self._loaded:
+            return
+        self._loaded = True
         self._refresh_state()
 
     def _build_ui(self):
@@ -102,6 +109,7 @@ class HibernatePage(Adw.PreferencesPage):
         self.boot_row.add_suffix(self.apply_boot_btn)
 
     def _refresh_state(self):
+        self._is_refreshing = True
         self.readiness = check_hibernation_readiness()
 
         # Update Readiness UI
@@ -156,8 +164,12 @@ class HibernatePage(Adw.PreferencesPage):
         else:
             self.boot_row.set_subtitle("Missing 'resume=' parameter")
             self.apply_boot_btn.set_label("Apply Config")
+            
+        self._is_refreshing = False
 
     def _on_policy_toggled(self, row, GParamSpec):
+        if getattr(self, '_is_refreshing', False):
+            return
         active = row.get_active()
         from core.hibernation.configurator import apply_hibernation_policy
         apply_hibernation_policy(minimize_image=active)

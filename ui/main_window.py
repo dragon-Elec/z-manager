@@ -12,6 +12,8 @@ from .status_page import StatusPage
 from .configure_page import ConfigurePage
 from .tune_page import TunePage
 from .hibernate_page import HibernatePage
+from .log_viewer import LogViewerDialog
+from .global_config_dialog import GlobalConfigDialog
 
 class MainWindow(Gtk.ApplicationWindow):
     def __init__(self, *args, **kwargs):
@@ -82,6 +84,23 @@ class MainWindow(Gtk.ApplicationWindow):
         button_box.append(config_button)
 
         header.pack_start(button_box)
+
+        # --- NEW: App Action Buttons (Logs & Settings) ---
+        app_actions_box = Gtk.Box(spacing=6, orientation=Gtk.Orientation.HORIZONTAL)
+        
+        logs_btn = Gtk.Button.new_from_icon_name("utilities-terminal-symbolic")
+        logs_btn.add_css_class("flat")
+        logs_btn.set_tooltip_text("View System Logs")
+        logs_btn.connect("clicked", self.on_logs_clicked)
+        app_actions_box.append(logs_btn)
+        
+        settings_btn = Gtk.Button.new_from_icon_name("emblem-system-symbolic")
+        settings_btn.add_css_class("flat")
+        settings_btn.set_tooltip_text("Global Settings")
+        settings_btn.connect("clicked", self.on_settings_clicked)
+        app_actions_box.append(settings_btn)
+        
+        header.pack_end(app_actions_box)
 
         # --- 2. NEW: Create custom window controls ---
         controls_box = Gtk.Box(spacing=0, orientation=Gtk.Orientation.HORIZONTAL)
@@ -181,6 +200,35 @@ class MainWindow(Gtk.ApplicationWindow):
         if button.get_active():
             page_name = button.get_name()
             self.stack.set_visible_child_name(page_name)
+            
+            # Lazy loading trigger
+            page = self.stack.get_visible_child()
+            if hasattr(page, "lazy_load"):
+                page.lazy_load()
+
+    def on_logs_clicked(self, btn):
+        """Opens the Log Viewer dialog."""
+        dialog = LogViewerDialog(parent_window=self)
+        dialog.present()
+
+    def on_settings_clicked(self, btn):
+        """Opens the Global Config dialog."""
+        from core import config as zram_config
+        current = zram_config.read_global_config()
+        dialog = GlobalConfigDialog(parent=self, current_config=current)
+        dialog.connect("applied", self._on_global_applied)
+        dialog.present()
+
+    def _on_global_applied(self, dialog):
+        updates = dialog.updates
+        from core.device_management import configurator
+        res = configurator.apply_global_config(updates)
+        
+        # Simple feedback
+        if res.success:
+            print("Global settings applied.")
+        else:
+            print(f"Error applying global settings: {res.message}")
 
     def create_placeholder_page(self, text: str) -> Gtk.Widget:
         """

@@ -15,14 +15,13 @@ import psutil # Added for RAM calculation
 from ui.custom_widgets import CircularWidget, MemoryTube
 from ui.health_button import HealthStatusButton, HealthState
 from ui.health_dialog import HealthReportDialog
-
-import xml.etree.ElementTree as ET
+from modules import psi
 import os
-from typing import List
 
-# Helper to get the absolute path to the .ui file
-def get_ui_path(file_name: str) -> str:
+
+def get_ui_path(file_name):
     return os.path.join(os.path.dirname(__file__), file_name)
+
 
 def _kb_to_human(size_kb: int) -> str:
     if not isinstance(size_kb, int):
@@ -36,7 +35,28 @@ def _kb_to_human(size_kb: int) -> str:
     return f"{size_gb:.2f} GiB"
 
 
+class PsiRow(Adw.ActionRow):
+    def __init__(self, resource_name, **kwargs):
+        super().__init__(**kwargs)
+        self.set_title(resource_name.upper())
+        self.set_subtitle("Initializing...")
+        
+        self.progress = Gtk.LevelBar()
+        self.progress.set_min_value(0)
+        self.progress.set_max_value(100)
+        self.progress.set_valign(Gtk.Align.CENTER)
+        self.progress.set_size_request(120, -1)
+        self.add_suffix(self.progress)
+
+    def update(self, stats: psi.PsiStats):
+        # We'll use 'some' 10s average for the progress bar
+        val = stats.some_avg10
+        self.progress.set_value(val)
+        self.set_subtitle(f"Some: {stats.some_avg10}% | Full: {stats.full_avg10}% (10s avg)")
+
+
 @Gtk.Template(filename=get_ui_path('status_page.ui'))
+
 class StatusPage(Adw.Bin):
     # CRITICAL FIX: Name must match the 'class' attribute in the .ui file
     __gtype_name__ = 'StatusPage'
@@ -87,6 +107,19 @@ class StatusPage(Adw.Bin):
         
         # Add the FlowBox to the Group
         self.device_list_group.add(self._device_flowbox)
+
+        # PSI Monitoring Group
+        self.psi_group = Adw.PreferencesGroup(title="System Pressure (PSI)")
+        self.psi_group.set_description("Resource stall information (Kernel 4.20+)")
+        self.get_child().get_child().get_child().append(self.psi_group) # Append to the main Box
+        
+        self.psi_rows = {
+            "cpu": PsiRow("CPU"),
+            "memory": PsiRow("Memory"),
+            "io": PsiRow("I/O")
+        }
+        for row in self.psi_rows.values():
+            self.psi_group.add(row)
         
         # Optimize: Only run refresh loop when visible
         self.connect("map", self._on_map)
@@ -114,6 +147,7 @@ class StatusPage(Adw.Bin):
         self._populate_zram_devices(ram_total)
         self._populate_swap_list()
         self._update_health_button()
+        self._update_psi_stats()
         
         # Check coverage
         if not self._device_widgets:
@@ -301,6 +335,19 @@ class StatusPage(Adw.Bin):
         # Store report for dialog
         self._current_health_report = health_report
     
+    def _update_psi_stats(self):
+        """Updates the PSI monitoring rows."""
+        any_visible = False
+        for res, row in self.psi_rows.items():
+            stats = psi.get_psi(res)
+            if stats:
+                row.update(stats)
+                row.set_visible(True)
+                any_visible = True
+            else:
+                row.set_visible(False)
+        self.psi_group.set_visible(any_visible)
+
     def _on_health_button_clicked(self, button):
         """Opens the health report dialog when the button is clicked."""
         if hasattr(self, '_current_health_report'):

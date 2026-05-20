@@ -75,6 +75,10 @@ class DevicePickerDialog(Adw.Window):
         self._populate_list()
 
     def _populate_list(self):
+        # Clear existing
+        while (child := self.list_box.get_first_child()):
+            self.list_box.remove(child)
+            
         devices = list_block_devices()
         
         if not devices:
@@ -118,6 +122,9 @@ class DevicePickerDialog(Adw.Window):
             is_safe = False
             safety_msg = "Contains partitions"
 
+        if not is_safe:
+            return # Skip unsafe devices completely
+
         # 2. UI Elements
         title = f"{label} ({size})" if label else f"{name} ({size})"
         extras = [path]
@@ -127,23 +134,14 @@ class DevicePickerDialog(Adw.Window):
 
         row = Adw.ActionRow(title=title, subtitle=subtitle)
         icon = Gtk.Image.new_from_icon_name(icon_name)
-        if not is_safe:
-            icon.add_css_class("warning")
         row.add_prefix(icon)
 
-        btn = Gtk.Button(label="Select" if is_safe else "Overwrite")
+        btn = Gtk.Button(label="Select")
         btn.set_valign(Gtk.Align.CENTER)
-        btn.add_css_class("suggested-action" if is_safe else "destructive-action")
+        btn.add_css_class("suggested-action")
         btn.connect("clicked", self._on_selected, path)
         row.add_suffix(btn)
         
-        if not is_safe:
-            lbl = Gtk.Label(label=safety_msg)
-            lbl.add_css_class("dim-label")
-            lbl.set_valign(Gtk.Align.CENTER)
-            lbl.set_margin_end(10)
-            row.add_suffix(lbl)
-
         self.list_box.append(row)
 
     def _on_select_folder_clicked(self, btn):

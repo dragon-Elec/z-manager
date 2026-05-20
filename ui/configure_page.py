@@ -78,11 +78,9 @@ class ConfigurePage(Gtk.Box):
         super().__init__(**kwargs)
         
         # Internal State: Map device_name -> config_dict
-        # Load from config file, or default to zram0 if no config exists
         self.device_configs = {}
         self.current_device = None
-        self._load_devices_from_config()
-
+        self._loaded = False
         
         # Connect Signals for Device Management
         self.device_selector_row.connect("notify::selected", self._on_device_selector_changed)
@@ -93,7 +91,6 @@ class ConfigurePage(Gtk.Box):
         self.apply_button.connect("clicked", self._on_apply_clicked)
         self.revert_button.connect("clicked", self._on_revert_clicked)
 
-
         # Connect Form Signals
         self.algorithm_row.connect("notify::selected", self._on_algorithm_changed)
         self.size_mode_row.connect("notify::selected", self._on_size_mode_changed)
@@ -101,7 +98,6 @@ class ConfigurePage(Gtk.Box):
         self.fs_mode_switch.connect("notify::active", self._on_fs_mode_toggled)
         
         # Connect signals for Change Detection
-        # We also need these to trigger _check_for_changes
         self.algorithm_row.connect("notify::selected", self._on_conf_changed)
         self.custom_algorithm_row.connect("notify::text", self._on_conf_changed)
         self.size_mode_row.connect("notify::selected", self._on_conf_changed)
@@ -116,7 +112,7 @@ class ConfigurePage(Gtk.Box):
         self.fs_type_row.connect("notify::selected", self._on_conf_changed)
         self.mount_point_row.connect("notify::text", self._on_conf_changed)
         
-        self.writeback_row.connect("notify::subtitle", self._on_conf_changed) # If subtitle changes
+        self.writeback_row.connect("notify::subtitle", self._on_conf_changed)
         self.options_row.connect("notify::text", self._on_conf_changed)
         
         # Connect Raw Config Buttons
@@ -127,7 +123,13 @@ class ConfigurePage(Gtk.Box):
 
         # Populate Profiles
         self._populate_profiles()
-        
+
+    def lazy_load(self):
+        """Called when the tab is first opened."""
+        if self._loaded:
+            return
+        self._loaded = True
+        self._load_devices_from_config()
         # Initialize Form with the first device from config
         if self.current_device:
             self._load_form_state(self.current_device)
