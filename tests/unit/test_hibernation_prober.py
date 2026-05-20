@@ -7,50 +7,56 @@ from core.hibernation.prober import (
     get_resume_offset,
     get_partition_uuid,
     get_memory_info,
-    _get_fs_type,
+    get_fs_type,
 )
 from core.utils.swap import detect_resume_swap
 
 
 class TestProber(BaseTestCase):
     @patch("core.hibernation.prober.read_file")
-    @patch("core.hibernation.prober.run")
     @patch("core.hibernation.prober.get_memory_info")
-    def test_check_readiness_busctl_yes(self, mock_mem, mock_run, mock_read):
+    def test_check_readiness_success(self, mock_mem, mock_read):
         mock_mem.return_value = (8 * 1024 * 1024 * 1024, 4 * 1024 * 1024 * 1024)
-        mock_run.return_value = MagicMock(out='s "yes"', code=0)
+        def mock_read_file(path):
+            if "state" in path: return "freeze mem disk"
+            if "lockdown" in path: return "none [none]"
+            return ""
+        mock_read.side_effect = mock_read_file
 
         res = check_hibernation_readiness()
         self.assertTrue(res.ready)
-        self.assertIn("ready", res.message)
+        self.assertIn("Hardware supports hibernation", res.message)
 
     @patch("core.hibernation.prober.read_file")
-    @patch("core.hibernation.prober.run")
     @patch("core.hibernation.prober.get_memory_info")
-    def test_check_readiness_busctl_no_fallback(self, mock_mem, mock_run, mock_read):
+    def test_check_readiness_no_disk(self, mock_mem, mock_read):
         mock_mem.return_value = (8 * 1024 * 1024 * 1024, 0)
-        mock_run.return_value = MagicMock(out='s "no"', code=0)
-        mock_read.return_value = "freeze mem"
+        def mock_read_file(path):
+            if "state" in path: return "freeze mem"
+            return ""
+        mock_read.side_effect = mock_read_file
 
         res = check_hibernation_readiness()
         self.assertFalse(res.ready)
         self.assertIn("not support", res.message)
 
     @patch("core.hibernation.prober.read_file")
-    @patch("core.hibernation.prober.run")
     @patch("core.hibernation.prober.get_memory_info")
-    def test_check_readiness_busctl_na_fallback_success(
-        self, mock_mem, mock_run, mock_read
+    def test_check_readiness_secure_boot_confidentiality(
+        self, mock_mem, mock_read
     ):
         mock_mem.return_value = (8 * 1024 * 1024 * 1024, 0)
-        mock_run.return_value = MagicMock(out='s "na"', code=0)
-        mock_read.return_value = "freeze mem disk"
+        def mock_read_file(path):
+            if "state" in path: return "freeze mem disk"
+            if "lockdown" in path: return "none integrity [confidentiality]"
+            return ""
+        mock_read.side_effect = mock_read_file
 
         res = check_hibernation_readiness()
-        self.assertTrue(res.ready)
-        self.assertIn("Hardware supports hibernation", res.message)
+        self.assertFalse(res.ready)
+        self.assertIn("confidentiality is active", res.message)
 
-    @patch("core.hibernation.prober._get_fs_type")
+    @patch("core.hibernation.prober.get_fs_type")
     @patch("core.hibernation.prober.run")
     def test_get_resume_offset_btrfs(self, mock_run, mock_fs):
         mock_fs.return_value = "btrfs"
@@ -59,7 +65,7 @@ class TestProber(BaseTestCase):
         self.assertEqual(offset, 12345)
         self.assertIn("inspect-internal", mock_run.call_args[0][0])
 
-    @patch("core.hibernation.prober._get_fs_type")
+    @patch("core.hibernation.prober.get_fs_type")
     @patch("core.hibernation.prober.run")
     def test_get_resume_offset_ext4(self, mock_run, mock_fs):
         mock_fs.return_value = "ext4"

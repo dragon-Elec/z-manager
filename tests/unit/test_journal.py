@@ -5,7 +5,6 @@ from modules import journal
 
 
 class TestJournalHelpers(BaseTestCase):
-
     def test_format_ts_safe_datetime(self):
         dt = datetime(2024, 1, 15, 10, 30, 0)
         result = journal._format_ts_safe(dt)
@@ -31,7 +30,6 @@ class TestJournalHelpers(BaseTestCase):
 
 
 class TestParseIsoBestEffort(BaseTestCase):
-
     def test_parse_iso_valid(self):
         result = journal._parse_iso_best_effort("2024-01-15T10:30:00")
         self.assertIsNotNone(result)
@@ -49,14 +47,13 @@ class TestParseIsoBestEffort(BaseTestCase):
 
 
 class TestPythonJournalAvailable(BaseTestCase):
-
-    @patch('modules.journal.run')
+    @patch("modules.journal.run")
     def test_python_journal_available_true(self, mock_run):
         mock_run.return_value = MagicMock(code=0)
         result = journal.python_journal_available()
         self.assertTrue(result)
 
-    @patch('modules.journal.run')
+    @patch("modules.journal.run")
     def test_python_journal_available_false(self, mock_run):
         mock_run.return_value = MagicMock(code=1)
         result = journal.python_journal_available()
@@ -64,15 +61,14 @@ class TestPythonJournalAvailable(BaseTestCase):
 
 
 class TestSystemdJournalAvailableFlag(BaseTestCase):
-
-    @patch('modules.journal.python_journal_available')
+    @patch("modules.journal.python_journal_available")
     def test_available(self, mock_pja):
         mock_pja.return_value = True
         available, reason = journal.systemd_journal_available_flag()
         self.assertTrue(available)
         self.assertIsNone(reason)
 
-    @patch('modules.journal.python_journal_available')
+    @patch("modules.journal.python_journal_available")
     def test_not_available(self, mock_pja):
         mock_pja.return_value = False
         available, reason = journal.systemd_journal_available_flag()
@@ -81,55 +77,51 @@ class TestSystemdJournalAvailableFlag(BaseTestCase):
 
 
 class TestListZramLogs(BaseTestCase):
-
-    @patch('modules.journal.run')
+    @patch("modules.journal.run")
     def test_list_zram_logs_fallback(self, mock_run):
         """Test journalctl fallback when python3-systemd is not available."""
         mock_run.return_value = MagicMock(
             code=0,
             out="""2024-01-15T10:30:00+0530 zram0: Started zram device
 2024-01-15T10:30:01+0530 zram0: Swap enabled
-"""
+""",
         )
 
         # Force ImportError for systemd.journal
-        with patch.dict('sys.modules', {'systemd': None, 'systemd.journal': None}):
+        with patch.dict("sys.modules", {"systemd": None, "systemd.journal": None}):
             records = journal.list_zram_logs(count=2)
 
         # Should return JournalRecord objects
         self.assertIsInstance(records, list)
 
-    @patch('modules.journal.run')
+    @patch("modules.journal.run")
     def test_list_zram_logs_empty(self, mock_run):
         """Test with no log output."""
         mock_run.return_value = MagicMock(code=0, out="")
 
-        with patch.dict('sys.modules', {'systemd': None, 'systemd.journal': None}):
+        with patch.dict("sys.modules", {"systemd": None, "systemd.journal": None}):
             records = journal.list_zram_logs()
 
         self.assertEqual(records, [])
 
 
-class TestGetZramLogsFromApi(BaseTestCase):
+class TestListZramLogsRecords(BaseTestCase):
+    @patch("modules.journal.list_zram_logs")
+    def test_returns_records(self, mock_list):
+        rec = journal.JournalRecord(
+            timestamp=datetime.now(),
+            priority=6,
+            message="Test message",
+            fields={"source": "test"},
+        )
+        mock_list.return_value = [rec]
 
-    @patch('modules.journal.list_zram_logs')
-    def test_returns_dicts(self, mock_list):
-        mock_list.return_value = [
-            journal.JournalRecord(
-                timestamp=datetime.now(),
-                priority=6,
-                message="Test message",
-                fields={"source": "test"}
-            )
-        ]
-
-        result = journal.get_zram_logs_from_api()
+        result = journal.list_zram_logs()
         self.assertIsInstance(result, list)
         self.assertEqual(len(result), 1)
-        self.assertIn("timestamp", result[0])
-        self.assertIn("priority", result[0])
-        self.assertIn("message", result[0])
+        self.assertIsInstance(result[0], journal.JournalRecord)
+        self.assertEqual(result[0].message, "Test message")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

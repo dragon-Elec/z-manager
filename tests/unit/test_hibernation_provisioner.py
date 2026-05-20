@@ -16,47 +16,39 @@ from core.hibernation.provisioner import (
 class TestProvisioner(BaseTestCase):
     @patch("core.hibernation.provisioner.get_resume_offset")
     @patch("core.hibernation.provisioner.get_partition_uuid")
-    @patch("core.hibernation.provisioner.os.chmod")
-    @patch("core.hibernation.provisioner.run")
-    @patch("core.hibernation.provisioner._get_fs_type")
+    @patch("core.hibernation.provisioner.pkexec_create_swapfile")
+    @patch("core.hibernation.provisioner.get_fs_type")
     @patch("os.path.exists")
     def test_create_swapfile_ext4(
-        self, mock_exists, mock_fs, mock_run, mock_chmod, mock_uuid, mock_offset
+        self, mock_exists, mock_fs, mock_pkexec, mock_uuid, mock_offset
     ):
         mock_exists.return_value = False
         mock_fs.return_value = "ext4"
         mock_uuid.return_value = "uuid-123"
         mock_offset.return_value = 12345
-        mock_run.return_value = MagicMock(code=0)
+        mock_pkexec.return_value = (True, "")
 
         res = create_swapfile("/swapfile", 1024)
         self.assertTrue(res.success)
-
-        calls = [str(c[0][0]) for c in mock_run.call_args_list]
-        self.assertTrue(any("fallocate" in cmd for cmd in calls))
-        self.assertFalse(any("truncate" in cmd for cmd in calls))
+        self.assertEqual(res.message, "Swapfile created successfully.")
 
     @patch("core.hibernation.provisioner.get_resume_offset")
     @patch("core.hibernation.provisioner.get_partition_uuid")
-    @patch("core.hibernation.provisioner.os.chmod")
-    @patch("core.hibernation.provisioner.run")
-    @patch("core.hibernation.provisioner._get_fs_type")
+    @patch("core.hibernation.provisioner.pkexec_create_swapfile")
+    @patch("core.hibernation.provisioner.get_fs_type")
     @patch("os.path.exists")
     def test_create_swapfile_btrfs(
-        self, mock_exists, mock_fs, mock_run, mock_chmod, mock_uuid, mock_offset
+        self, mock_exists, mock_fs, mock_pkexec, mock_uuid, mock_offset
     ):
         mock_exists.return_value = False
         mock_fs.return_value = "btrfs"
         mock_uuid.return_value = "uuid-123"
         mock_offset.return_value = 12345
-        mock_run.return_value = MagicMock(code=0)
+        mock_pkexec.return_value = (True, "")
 
         res = create_swapfile("/swapfile", 1024)
         self.assertTrue(res.success)
-
-        calls = str([c[0][0] for c in mock_run.call_args_list])
-        self.assertIn("truncate", calls)
-        self.assertIn("chattr", calls)
+        self.assertEqual(res.message, "Swapfile created successfully.")
 
     def test_generate_swap_unit_content(self):
         unit_text = generate_swap_unit("/var/swapfile", priority=0)
@@ -107,18 +99,14 @@ class TestProvisioner(BaseTestCase):
         self.assertEqual(systemctl_args[0], "enable")
         self.assertEqual(systemctl_args[1], "var-swapfile.swap")
 
-    @patch("core.hibernation.provisioner.run")
-    def test_enable_swapon_success(self, mock_run):
-        mock_run.return_value = MagicMock(code=0)
+    @patch("core.hibernation.provisioner.pkexec_swapon")
+    def test_enable_swapon_success(self, mock_swapon):
+        mock_swapon.return_value = (True, "")
         self.assertTrue(enable_swapon("/swapfile", priority=0))
 
-    @patch("core.hibernation.provisioner.run")
-    def test_enable_swapon_failure(self, mock_run):
-        from core.utils.common import SystemCommandError
-
-        mock_run.side_effect = SystemCommandError(
-            ["swapon"], 1, "", "permission denied"
-        )
+    @patch("core.hibernation.provisioner.pkexec_swapon")
+    def test_enable_swapon_failure(self, mock_swapon):
+        mock_swapon.return_value = (False, "permission denied")
         self.assertFalse(enable_swapon("/swapfile"))
 
     @patch("core.hibernation.provisioner.run")
