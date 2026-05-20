@@ -57,12 +57,14 @@ API:
 ### [FILE: config.py]
 Role: Configuration path resolution and reading.
 
-/DNA/: [load_effective_config() -> run(systemd-analyze cat-config) => EffectiveConfig(cfg, provenance)]
+/DNA/: [load_effective_config() -> run(systemd-analyze cat-config) => str] + [load_effective_config_state() => EffectiveConfig(cfg, provenance)]
 
 - SrcDeps: .utils.{common, privilege}
 - SysDeps: configobj, pathlib, dataclasses, typing, io, subprocess
 
 API:
+  - get_active_config_path() -> Optional[Path]: Returns the primary config file path.
+  - load_effective_config_state(root) -> EffectiveConfig: God-view with merged config and provenance tracking.
   - read_zram_config() -> ConfigObj: Reads the most specific config in the hierarchy.
   - read_global_config() -> Dict[str, str]: Returns [zram-generator] contents.
   - load_effective_config(root) -> str: Returns the raw string of the active config.
@@ -114,16 +116,13 @@ Role: Privileged helper script executed via pkexec.
 /DNA/: [main() -> match argv -> cmd_exec() -> return 0/1]
 
 - SrcDeps: None
-- SysDeps: sys, os, subprocess, shutil, tempfile
+- SysDeps: sys, os, subprocess, shutil, tempfile, json
 
 API:
-  - cmd_write(path): Atomic write with security whitelist check.
-  - cmd_daemon_reload(): Privileged systemd reload.
-  - cmd_systemctl(action, service): Privileged unit control.
-  - cmd_update_grub(): Regenerates GRUB configuration.
-  - cmd_update_initramfs(): Regenerates initramfs.
-  - cmd_sysctl_system(): Applies all sysctl settings.
-  - cmd_live_apply(device, config_path): Batched lifecycle: Stop -> Write -> Reload -> Restart.
-  - cmd_live_remove(device, config_path): Batched lifecycle: Stop -> Write -> Reload.
+  - is_path_allowed(path) -> bool: Security whitelist check for write operations.
+  - is_service_allowed(service) -> bool: Security whitelist check for systemctl operations.
+  - cmd_write(path) -> int: Atomic write with security whitelist (reads from stdin).
+  - cmd_hibernate_setup() -> int: Master transaction for full hibernation setup (JSON plan from stdin).
+  - cmd_systemctl(action, service) -> int: Privileged unit control (daemon-reload, start, stop, enable, disable).
 
 

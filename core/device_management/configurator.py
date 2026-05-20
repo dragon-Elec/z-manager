@@ -80,10 +80,12 @@ def apply_global_config(updates: Dict[str, Any]) -> UnitResult:
         ok, err, rendered = update_global_config(updates)
         if not ok: return UnitResult(False, f"Config generation failed: {err}")
             
-        ok_w, err_w = atomic_write_to_file(CONFIG_PATH, rendered, backup=True)
+        ok_w, err_w = pkexec_write(CONFIG_PATH, rendered)
         if not ok_w: return UnitResult(False, f"Write failed: {err_w}")
             
-        systemd_daemon_reload()
+        ok_reload, err_reload = pkexec_daemon_reload()
+        if not ok_reload: return UnitResult(False, f"Daemon reload failed: {err_reload}")
+        
         return UnitResult(True, "Global configuration updated.")
     except Exception as e:
         return UnitResult(False, str(e))

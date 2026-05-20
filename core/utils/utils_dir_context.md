@@ -49,10 +49,11 @@ Role: Atomic and privileged file operations.
 - SysDeps: shutil, tempfile, subprocess, pathlib
 
 API:
-  - atomic_write_to_file(file_path, content, backup) -> tuple[bool, str | None]: Safely overwrites file via move.
-  - pkexec_write(file_path, content) -> tuple[bool, str | None]: Elevated write using pkexec + zman_helper.
-  - sysfs_write(path, value): Direct string-write to a sysfs node.
+  - _get_helper_path() -> str: Returns path to zman_helper.py script.
   - is_root() -> bool: Checks os.geteuid() == 0.
+  - atomic_write_to_file(file_path, content, backup) -> tuple[bool, str | None]: Safely overwrites file via move.
+  - sysfs_write(path, value): Direct string-write to a sysfs node.
+  - pkexec_write(file_path, content) -> tuple[bool, str | None]: Elevated write using pkexec + zman_helper.
 
 
 ### [FILE: privilege.py]
@@ -61,7 +62,7 @@ Role: systemd orchestration and root access management.
 /DNA/: [pkexec_systemctl() -> if(is_root) -> systemd_action(...) else -> pkexec helper]
 
 - SrcDeps: .common, .io
-- SysDeps: subprocess, pathlib
+- SysDeps: subprocess, pathlib, json
 
 API:
   - systemd_daemon_reload(): Run systemctl daemon-reload.
@@ -70,6 +71,10 @@ API:
   - pkexec_systemctl(action, service) -> tuple[bool, str | None]: Elevated systemctl action.
   - systemd_try_restart(service) -> tuple[bool, str | None]: Dual-mode restart (normal -> pkexec).
   - pkexec_sysctl_system() -> tuple[bool, str | None]: Elevated sysctl --system application.
+  - pkexec_hibernate_setup(plan) -> tuple[bool, str]: Consolidated hibernation setup via pkexec.
+  - pkexec_create_swapfile(path, size_mb, fs_type) -> tuple[bool, str | None]: Privileged swapfile creation.
+  - pkexec_mkswap(device) -> tuple[bool, str | None]: Privileged mkswap.
+  - pkexec_swapon(device, priority) -> tuple[bool, str | None]: Privileged swapon.
 
 
 ### [FILE: block.py]
@@ -82,10 +87,11 @@ Role: Hardware discovery and safety validation.
 
 API:
   - is_block_device(path) -> bool: Verifies S_IFBLK via stat.st_mode.
-  - get_device_filesystem_type(path) -> Optional[str]: Probes via blkid.
-  - check_device_safety(path) -> Tuple[bool, str]: Rejects active swaps or formatted nodes.
+  - get_device_filesystem_type(device_path) -> str | None: Probes via blkid.
+  - check_device_safety(device_path) -> Tuple[bool, str]: Rejects active swaps or formatted nodes.
+  - get_device_scheduler(device_name) -> Tuple[str, List[str]]: Reads /sys/block/queue/scheduler.
+  - set_device_scheduler(device_name, scheduler) -> bool: Writes to /sys/block/queue/scheduler.
   - list_block_devices() -> List[Dict]: Flat-array of selectable nodes.
-  - get_device_scheduler(device) -> Tuple[str, List[str]]: Reads /sys/block/queue/scheduler.
 
 
 ### [FILE: bootloader.py]
@@ -110,7 +116,10 @@ Role: Centralized GRUB/sysctl path and content constants.
 - SysDeps: pathlib
 
 API:
-  - GRUB_ZSWAP_DISABLE_PATH, GRUB_RESUME_CONFIG_PATH, SYSCTL_CONFIG_PATH: Path objects.
+  - GRUB_ZSWAP_DISABLE_PATH, GRUB_ZSWAP_DISABLE_CONTENT: Path + content for zswap disable.
+  - GRUB_PSI_ENABLE_PATH, GRUB_PSI_ENABLE_CONTENT: Path + content for PSI enable.
+  - GRUB_RESUME_CONFIG_PATH, GRUB_RESUME_CONTENT_TEMPLATE: Path + template for resume config.
+  - SYSCTL_CONFIG_PATH: Path object for sysctl config.
   - SYSCTL_DEFAULT_SETTINGS, SYSCTL_GAMING_PROFILE: Tuning profile content strings.
   - ZMAN_HELPER_ALLOWED_PATHS: Security whitelist of paths help is allowed to write.
 

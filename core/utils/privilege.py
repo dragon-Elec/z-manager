@@ -55,6 +55,28 @@ def pkexec_systemctl(action: str, service: str) -> tuple[bool, str | None]:
     except Exception as e:
         return False, f"Z-Manager Orchestration Error: {e}"
 
+def pkexec_update_boot() -> tuple[bool, str]:
+    """Regenerates GRUB and initramfs via pkexec."""
+    helper_path = _get_helper_path()
+    try:
+        proc = subprocess.run(["pkexec", helper_path, "update-boot"], capture_output=True, text=True)
+        if proc.returncode == 0:
+            return True, proc.stdout.strip()
+        return False, proc.stderr.strip() or f"pkexec update-boot failed (code {proc.returncode})"
+    except Exception as e:
+        return False, f"Z-Manager Orchestration Error: {e}"
+
+def pkexec_hibernate_policy() -> tuple[bool, str]:
+    """Applies hibernation policy via pkexec."""
+    helper_path = _get_helper_path()
+    try:
+        proc = subprocess.run(["pkexec", helper_path, "hibernate-policy"], capture_output=True, text=True)
+        if proc.returncode == 0:
+            return True, "Policy applied."
+        return False, proc.stderr.strip() or f"pkexec hibernate-policy failed (code {proc.returncode})"
+    except Exception as e:
+        return False, f"Z-Manager Orchestration Error: {e}"
+
 def systemd_try_restart(service: str) -> tuple[bool, str | None]:
     """Attempts to restart a service using standard run() first, then pkexec."""
     res = run(["systemctl", "restart", service])
@@ -155,5 +177,17 @@ def pkexec_swapon(device: str, priority: int = 0) -> tuple[bool, str | None]:
         if proc.returncode == 0:
             return True, None
         return False, proc.stderr.strip() or f"pkexec swapon failed (code {proc.returncode})"
+    except Exception as e:
+        return False, f"Z-Manager Orchestration Error: {e}"
+
+
+def pkexec_remove(path: str) -> tuple[bool, str | None]:
+    """Remove a file via pkexec."""
+    helper_path = _get_helper_path()
+    try:
+        proc = subprocess.run(["pkexec", helper_path, "remove", path], capture_output=True, text=True)
+        if proc.returncode == 0:
+            return True, None
+        return False, proc.stderr.strip() or f"pkexec remove failed (code {proc.returncode})"
     except Exception as e:
         return False, f"Z-Manager Orchestration Error: {e}"

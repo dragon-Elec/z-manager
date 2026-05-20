@@ -97,6 +97,28 @@ def _get_resume_offset(path: str) -> str:
     return "0"
 
 
+def _check_device_safety(device_path: str) -> tuple[bool, str]:
+    """Verify if device is safe for write operations (no filesystem)."""
+    if not device_path.startswith("/dev/"):
+        return True, ""
+    try:
+        # blkid -p (low-level probe) returns 2 if no filesystem found
+        res = subprocess.run(["blkid", "-p", device_path], capture_output=True, text=True)
+        if res.returncode == 0:
+            # Check for TYPE= in output
+            if "TYPE=" in res.stdout:
+                import re
+                m = re.search(r'TYPE="([^"]+)"', res.stdout)
+                fs = m.group(1) if m else "unknown"
+                if fs == "swap": return True, "" # Swap is safe to reuse
+                return False, f"Device contains a '{fs}' filesystem."
+        elif res.returncode == 2:
+            return True, "" # No filesystem found
+        return False, f"Safety check failed (code {res.returncode})"
+    except Exception as e:
+        return False, str(e)
+
+
 def cmd_hibernate_setup() -> int:
     """
     Master Transaction for Hibernation Setup.
@@ -110,6 +132,12 @@ def cmd_hibernate_setup() -> int:
         print(f">> STEP: Provisioning Storage ({path})", flush=True)
         is_block = path.startswith("/dev/")
         
+        # --- CRITICAL SAFETY CHECK ---
+        safe, reason = _check_device_safety(path)
+        if not safe:
+            print(f"!! SAFETY VIOLATION: {reason}", file=sys.stderr, flush=True)
+            return 1
+        # -----------------------------
         if not is_block:
             if plan.get('fs_type') == "btrfs":
                 print("   Executing: btrfs NoCOW setup...", flush=True)
@@ -200,6 +228,74 @@ def cmd_systemctl(action: str, service: str) -> int:
     return 0
 
 
+def cmd_live_apply(device_name: str, config_path: str) -> int:
+    """Atomic config update + daemon-reload + service restart."""
+    content = sys.stdin.read()
+    print(f">> STEP: Updating Configuration ({config_path})", flush=True)
+    if not _atomic_write(config_path, content): return 1
+    
+    print(">> STEP: Reloading systemd daemon", flush=True)
+    subprocess.run(["systemctl", "daemon-reload"], check=True)
+    
+    svc = f"systemd-zram-setup@{device_name}.service"
+    print(f">> STEP: Restarting {svc}", flush=True)
+    subprocess.run(["systemctl", "restart", svc], check=True)
+    
+    print(">> LIVE APPLY COMPLETED", flush=True)
+    return 0
+
+
+def cmd_live_remove(device_name: str, config_path: str) -> int:
+    """Service stop + atomic config update + daemon-reload."""
+    content = sys.stdin.read()
+    svc = f"systemd-zram-setup@{device_name}.service"
+    
+    print(f">> STEP: Stopping {svc}", flush=True)
+    subprocess.run(["systemctl", "stop", svc], check=True)
+    
+    print(f">> STEP: Updating Configuration ({config_path})", flush=True)
+    if not _atomic_write(config_path, content): return 1
+    
+    print(">> STEP: Reloading systemd daemon", flush=True)
+    subprocess.run(["systemctl", "daemon-reload"], check=True)
+    
+    print(">> LIVE REMOVE COMPLETED", flush=True)
+    return 0
+
+
+def cmd_update_boot() -> int:
+    """Regenerate GRUB and initramfs."""
+    print(">> STEP: Regenerating Bootloader", flush=True)
+    if shutil.which("update-grub"):
+        subprocess.run(["update-grub"], check=True)
+    elif shutil.which("grub-mkconfig"):
+        for p in ["/boot/grub/grub.cfg", "/boot/grub2/grub.cfg", "/boot/efi/EFI/fedora/grub.cfg"]:
+            if os.path.exists(p):
+                subprocess.run(["grub-mkconfig", "-o", p], check=True)
+                break
+                
+    print(">> STEP: Regenerating initramfs", flush=True)
+    if shutil.which("update-initramfs"):
+        subprocess.run(["update-initramfs", "-u"], check=True)
+    elif shutil.which("dracut"):
+        subprocess.run(["dracut", "-f", "--regenerate-all"], check=True)
+    return 0
+
+
+def cmd_remove(path: str) -> int:
+    """Remove a file if it is in the whitelist."""
+    if not is_path_allowed(path):
+        print(f"Error: Path not allowed for removal: {path}", file=sys.stderr)
+        return 1
+    try:
+        if os.path.exists(path):
+            os.remove(path)
+        return 0
+    except Exception as e:
+        print(f"Error removing {path}: {e}", file=sys.stderr)
+        return 1
+
+
 def main():
     if len(sys.argv) < 2:
         return 1
@@ -207,8 +303,23 @@ def main():
     match sys.argv[1:]:
         case ["write", path]:
             return cmd_write(path)
+        case ["remove", path]:
+            return cmd_remove(path)
         case ["hibernate-setup"]:
             return cmd_hibernate_setup()
+        case ["live-apply", device, path]:
+            return cmd_live_apply(device, path)
+        case ["live-remove", device, path]:
+            return cmd_live_remove(device, path)
+        case ["sysctl-system"]:
+            subprocess.run(["sysctl", "--system"], check=True)
+            return 0
+        case ["hibernate-policy"]:
+            # Trigger tmpfiles to apply the policy
+            subprocess.run(["systemd-tmpfiles", "--create", "/etc/tmpfiles.d/99-z-manager-hibernation.conf"], check=True)
+            return 0
+        case ["update-boot"]:
+            return cmd_update_boot()
         case ["daemon-reload"]:
             return cmd_systemctl("daemon-reload", "")
         case [action, service]:
