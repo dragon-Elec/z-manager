@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import platform
+import shutil
 from dataclasses import dataclass
 from typing import Optional, List, Dict
 
@@ -46,8 +47,7 @@ def _check_cmd_available(cmd: str) -> bool:
     if cmd in _CMD_CACHE:
         return _CMD_CACHE[cmd]
 
-    r = run(["/bin/sh", "-lc", f"command -v {cmd} >/dev/null 2>&1"], check=False)
-    available = r.code == 0
+    available = shutil.which(cmd) is not None
     _CMD_CACHE[cmd] = available
     return available
 

@@ -149,6 +149,20 @@ def get_resume_offset(path: str) -> int | None:
 
 def get_partition_uuid(path: str) -> str | None:
     """Get UUID of a partition or the device holding a file."""
+    # Try findmnt first (unprivileged, highly reliable)
+    try:
+        cmd = ["findmnt", "-n", "-o", "UUID"]
+        if is_block_device(path):
+            cmd.append(path)
+        else:
+            cmd.extend(["-T", path])
+        res = run(cmd, check=False)
+        if res.code == 0 and res.out.strip():
+            return res.out.strip()
+    except Exception:
+        pass
+
+    # Fallback to blkid
     target_dev = path
     if not is_block_device(path):
         try:

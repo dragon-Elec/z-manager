@@ -647,36 +647,6 @@ class ConfigurePage(Gtk.Box):
         Attempts to highlight the file in the file manager using DBus.
         Falls back to opening the parent folder if DBus fails.
         """
-        # (omitted for brevity)
-        pass
-
-    def _on_global_settings_clicked(self, btn):
-        """Open the Global Config Dialog."""
-        current = zram_config.read_global_config()
-        dialog = GlobalConfigDialog(parent=self.get_root(), current_config=current)
-        dialog.connect("applied", self._on_global_applied)
-        dialog.present()
-        
-    def _on_global_applied(self, dialog):
-        updates = dialog.updates
-        # We process this immediately (blocking UI briefly is fine for this action) or use thread.
-        # Since it's a simple write, we can do it here and show toast.
-        
-        # We need to use configurator to ensure safety/consistency
-        res = configurator.apply_global_config(updates)
-        
-        if res.success:
-            self._show_toast("Global settings updated.")
-        else:
-            # Show Error
-            dlg = Adw.MessageDialog(
-                 transient_for=self.get_root(),
-                 heading="Error Updating Global Settings",
-                 body=res.message
-            )
-            dlg.add_response("ok", "OK")
-            dlg.present()
-
         if not os.path.exists(path):
              self._open_resource(os.path.dirname(path))
              return
@@ -721,6 +691,33 @@ class ConfigurePage(Gtk.Box):
             # DBus method failed (not supported or permissions issue).
             # Fallback: Just open the folder.
             self._open_resource(os.path.dirname(path))
+
+    def _on_global_settings_clicked(self, btn):
+        """Open the Global Config Dialog."""
+        current = zram_config.read_global_config()
+        dialog = GlobalConfigDialog(parent=self.get_root(), current_config=current)
+        dialog.connect("applied", self._on_global_applied)
+        dialog.present()
+        
+    def _on_global_applied(self, dialog):
+        updates = dialog.updates
+        # We process this immediately (blocking UI briefly is fine for this action) or use thread.
+        # Since it's a simple write, we can do it here and show toast.
+        
+        # We need to use configurator to ensure safety/consistency
+        res = configurator.apply_global_config(updates)
+        
+        if res.success:
+            self._show_toast("Global settings updated.")
+        else:
+            # Show Error
+            dlg = Adw.MessageDialog(
+                 transient_for=self.get_root(),
+                 heading="Error Updating Global Settings",
+                 body=res.message
+            )
+            dlg.add_response("ok", "OK")
+            dlg.present()
 
     def _open_resource(self, path):
         """

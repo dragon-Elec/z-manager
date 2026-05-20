@@ -86,6 +86,26 @@ def cmd_write(path: str) -> int:
 def _get_resume_offset(path: str) -> str:
     """Internal helper to calculate physical offset for resume."""
     if path.startswith("/dev/"): return "0"
+    
+    # 1. Detect Filesystem Type
+    fs_type = "unknown"
+    try:
+        parent_dir = os.path.dirname(path) or "/"
+        res = subprocess.run(["df", "-T", parent_dir], capture_output=True, text=True, check=True)
+        lines = res.stdout.strip().splitlines()
+        if len(lines) >= 2:
+            fs_type = lines[1].split()[1]
+    except Exception:
+        pass
+
+    # 2. Filesystem-specific Offset Calculations
+    if fs_type == "btrfs":
+        try:
+            res = subprocess.run(["btrfs", "inspect-internal", "map-swapfile", "-r", path], capture_output=True, text=True, check=True)
+            return res.stdout.strip()
+        except Exception:
+            pass
+
     try:
         # Try filefrag (standard)
         res = subprocess.run(["filefrag", "-v", path], capture_output=True, text=True, check=True)

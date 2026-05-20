@@ -21,8 +21,11 @@ def python_journal_available() -> bool:
     """
     Returns True if python3-systemd journal module is importable.
     """
-    r = run(["/bin/sh", "-lc", "python3 -c 'import systemd.journal'"], check=False)
-    return r.code == 0
+    try:
+        import systemd.journal  # type: ignore
+        return True
+    except ImportError:
+        return False
 
 
 def _format_ts_safe(value: Any) -> datetime:
