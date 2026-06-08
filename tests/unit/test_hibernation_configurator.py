@@ -58,7 +58,7 @@ class TestSystemDetection(BaseTestCase):
 
 class TestResumeConfig(BaseTestCase):
     @patch("core.hibernation.configurator.pkexec_write")
-    @patch("core.utils.bootloader.detect_bootloader")
+    @patch("core.hibernation.configurator.detect_bootloader")
     def test_update_grub_resume_success(self, mock_detect, mock_write):
         mock_detect.return_value = "grub"
         mock_write.return_value = (True, None)
@@ -67,7 +67,7 @@ class TestResumeConfig(BaseTestCase):
         self.assertTrue(ok)
         self.assertIn("written", msg.lower())
 
-    @patch("core.utils.bootloader.detect_bootloader")
+    @patch("core.hibernation.configurator.detect_bootloader")
     def test_update_grub_resume_no_grub(self, mock_detect):
         mock_detect.return_value = "systemd-boot"
 

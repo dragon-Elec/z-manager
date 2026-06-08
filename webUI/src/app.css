@@ -1,0 +1,36 @@
+@import "tailwindcss";
+@plugin "daisyui" {
+  themes: all;
+}
+
+html, body {
+  margin: 0;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  user-select: none;
+  touch-action: pan-y;
+}
+
+.selectable {
+  user-select: text;
+}
+
+/* 
+  Fix WebKitGTK subpixel rendering blur:
+  1. Remove heavy GPU-bound backdrop filters from scrollable/transitioning elements.
+  2. Force integer coordinate layers to prevent fractional subpixel rounding errors.
+  3. Use paint isolation to prevent flexbox decimals from shifting child positions.
+*/
+.card, .card-widget {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transform: translate3d(0, 0, 0);
+  -webkit-transform: translate3d(0, 0, 0);
+  contain: paint layout;
+  box-sizing: border-box;
+}
+
+html, body {
+  -webkit-font-smoothing: subpixel-antialiased;
+}

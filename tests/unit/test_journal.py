@@ -47,15 +47,13 @@ class TestParseIsoBestEffort(BaseTestCase):
 
 
 class TestPythonJournalAvailable(BaseTestCase):
-    @patch("modules.journal.run")
-    def test_python_journal_available_true(self, mock_run):
-        mock_run.return_value = MagicMock(code=0)
+    @patch.dict("sys.modules", {"systemd.journal": MagicMock()})
+    def test_python_journal_available_true(self):
         result = journal.python_journal_available()
         self.assertTrue(result)
 
-    @patch("modules.journal.run")
-    def test_python_journal_available_false(self, mock_run):
-        mock_run.return_value = MagicMock(code=1)
+    @patch.dict("sys.modules", {"systemd.journal": None})
+    def test_python_journal_available_false(self):
         result = journal.python_journal_available()
         self.assertFalse(result)
 
