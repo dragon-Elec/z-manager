@@ -54,6 +54,12 @@ fn send_to_sidecar(state: tauri::State<'_, SidecarState>, action: String, payloa
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(target_os = "linux")]
+    {
+        std::env::set_var("GDK_DEBUG", "gl-no-fractional");
+        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    }
+
     tauri::Builder::default()
         .manage(SidecarState {
             stdin: Mutex::new(None),
@@ -156,18 +162,25 @@ pub fn run() {
                                     .next()
                                 });
 
-                        if let Some(web_view) = webview_widget {
-                            unsafe {
-                                let raw_view: *mut gobject_sys::GObject = web_view.as_ptr() as *mut _;
-                                let gesture_key = "wk-view-zoom-gesture\0".as_ptr() as *const std::os::raw::c_char;
-                                let gesture_ptr = gobject_sys::g_object_get_data(raw_view, gesture_key);
+                         if let Some(web_view) = webview_widget {
+                             // Disable smooth scrolling to prevent fractional pixel offsets
+                             use webkit2gtk::{WebViewExt, SettingsExt};
+                             if let Some(settings) = WebViewExt::settings(&web_view) {
+                                 SettingsExt::set_enable_smooth_scrolling(&settings, false);
+                                 println!("[Rust] Disabled WebKitGTK smooth scrolling");
+                             }
 
-                                if !gesture_ptr.is_null() {
-                                    gobject_sys::g_signal_handlers_destroy(gesture_ptr as *mut gobject_sys::GObject);
-                                    println!("[Rust] Neutralized WebKitGTK zoom gesture");
-                                }
-                            }
-                        }
+                             unsafe {
+                                 let raw_view: *mut gobject_sys::GObject = web_view.as_ptr() as *mut _;
+                                 let gesture_key = "wk-view-zoom-gesture\0".as_ptr() as *const std::os::raw::c_char;
+                                 let gesture_ptr = gobject_sys::g_object_get_data(raw_view, gesture_key);
+
+                                 if !gesture_ptr.is_null() {
+                                     gobject_sys::g_signal_handlers_destroy(gesture_ptr as *mut gobject_sys::GObject);
+                                     println!("[Rust] Neutralized WebKitGTK zoom gesture");
+                                 }
+                             }
+                         }
                     }
                 }
             }

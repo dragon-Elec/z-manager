@@ -6,7 +6,7 @@ import path from 'path'
 
 export default defineConfig({
   base: './',
-  plugins: [tailwindcss(), svelte(), viteSingleFile()],
+  plugins: [svelte(), tailwindcss(), viteSingleFile()],
   resolve: {
     alias: {
       '$lib': path.resolve(__dirname, './src/lib')

@@ -1,6 +1,4 @@
 // TypeScript interface for the Z-Manager bridge (supporting WebKitGTK, Tauri, and HTTP/SSE Sidecar)
-import { listen } from '@tauri-apps/api/event';
-import { invoke } from '@tauri-apps/api/core';
 
 declare global {
     interface Window {
@@ -26,6 +24,25 @@ let isConnecting = false;
 
 const isTauri = typeof window !== 'undefined' && window.__TAURI_INTERNALS__ !== undefined;
 
+// Dynamic imports for Tauri APIs to prevent crashes in non-Tauri environments (WebKitGTK, standard browsers)
+let tauriAPIs: {
+    listen: typeof import('@tauri-apps/api/event').listen;
+    invoke: typeof import('@tauri-apps/api/core').invoke;
+} | null = null;
+
+async function getTauriAPIs() {
+    if (tauriAPIs) return tauriAPIs;
+    const [eventModule, coreModule] = await Promise.all([
+        import('@tauri-apps/api/event'),
+        import('@tauri-apps/api/core')
+    ]);
+    tauriAPIs = {
+        listen: eventModule.listen,
+        invoke: coreModule.invoke
+    };
+    return tauriAPIs;
+}
+
 // Listen for messages from WebKitGTK (legacy/current)
 if (typeof window !== 'undefined') {
     window.onPythonMessage = (data: any) => {
@@ -37,11 +54,15 @@ if (typeof window !== 'undefined') {
 // Listen for messages from Tauri
 if (isTauri) {
     console.log('[Bridge] Running under Tauri. Initializing Tauri event listener...');
-    listen('sidecar-message', (event) => {
-        console.log('[Bridge] Received from Tauri sidecar event:', event.payload);
-        triggerCallback(event.payload);
+    getTauriAPIs().then(({ listen }) => {
+        listen('sidecar-message', (event) => {
+            console.log('[Bridge] Received from Tauri sidecar event:', event.payload);
+            triggerCallback(event.payload);
+        }).catch((err) => {
+            console.error('[Bridge] Failed to listen to Tauri sidecar events:', err);
+        });
     }).catch((err) => {
-        console.error('[Bridge] Failed to listen to Tauri sidecar events:', err);
+        console.error('[Bridge] Failed to load Tauri APIs:', err);
     });
 }
 
@@ -131,7 +152,15 @@ export async function sendToPython(action: string, payload: any = {}): Promise<a
         });
 
         if (isTauri) {
-            invoke('send_to_sidecar', { action, payload: messageObj })
+            getTauriAPIs()
+                .then(({ invoke }) => {
+                    invoke('send_to_sidecar', { action, payload: messageObj })
+                        .catch((err) => {
+                            clearTimeout(timeoutId);
+                            callbacks.delete(requestId);
+                            reject(err);
+                        });
+                })
                 .catch((err) => {
                     clearTimeout(timeoutId);
                     callbacks.delete(requestId);
