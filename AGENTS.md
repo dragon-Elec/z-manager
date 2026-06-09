@@ -4,55 +4,41 @@ This document outlines key technical decisions, environment constraints, and dev
 
 ## Developer Workflows & Commands
 
-- **Build Frontend:** Run `pnpm build` inside the `webUI/` directory to compile the Svelte 5 application.
-- **Run Backend/UI (Production Mode):** Run `python3 webUI/server.py` to boot up the application.
-- **Run Backend/UI (Development Mode):**
-  1. Start the Vite dev server: `cd webUI && pnpm dev`
-  2. Run the wrapper in dev mode: `ZMAN_DEV=1 python3 webUI/server.py`
-  This enables Hot Module Replacement (HMR) in the WebKitGTK window.
+- **Run Tauri (Primary Dev Mode):** Run `pnpm tauri dev` inside the `webUI/` directory.
+- **Build Tauri (Production):** Run `pnpm tauri build` inside the `webUI/` directory.
+- **Run PyGObject Shell (Legacy Dev Mode):**
+  1. Start Vite dev server: `cd webUI && pnpm dev`
+  2. Run wrapper in dev mode: `ZMAN_DEV=1 python3 webUI/server.py`
+- **Build Frontend Assets:** Run `pnpm build` inside the `webUI/` directory.
+- **Run Python Unit Tests:** Run `pytest` in the root directory. Tests mock privileged commands (e.g., `detect_bootloader`) and `systemd.journal` to prevent sudo prompts.
 
-## Architecture
+## Architecture & IPC
 
-- **Decoupled Sidecar Architecture:** To prevent Python's Global Interpreter Lock (GIL) from blocking the UI rendering thread, the application is split into two processes:
-  1. **UI Shell (`webUI/server.py`):** A lightweight PyGObject wrapper that spawns the GTK window and WebKitGTK webview, manages the backend sidecar lifecycle, and handles native IPC.
-  2. **Backend Sidecar (`webUI/sidecar.py`):** A pure Python process that handles system telemetry queries, resource management, and mutation commands.
-- **IPC Details (Stdio-Based JSON Stream):**
-  - **No Network Ports:** The application does not use HTTP, SSE, or TCP sockets. Communication is completely port-free and uses standard output/input streams.
-  - **Telemetry (Python -> JS):** The sidecar prints line-delimited JSON telemetry payloads to `stdout` every second. The UI shell reads these lines from the sub-process output stream and natively evaluates them in the webview context via `window.onPythonMessage(data)`.
-  - **Commands (JS -> Python):** The frontend dispatches commands natively via `window.webkit.messageHandlers.zmanager.postMessage()`. The UI shell captures these messages in Python and writes the JSON lines to the sidecar's `stdin`.
-  - **Standard Stream Rules:** Since `stdout` is reserved strictly for serialized JSON lines, any debug statement, warning, or unhandled traceback in the sidecar **must** be directed to `sys.stderr` to avoid stream corruption.
-  - **Line-Buffering:** The sidecar must explicitly call `sys.stdout.flush()` after every JSON line to prevent buffering latency.
+- **Dual-Mode Shell Architecture:** The application can run under a Tauri Rust shell (primary) or a PyGObject/Gjs shell (legacy).
+- **Port-Free Stdio IPC:**
+  - The backend sidecar (`webUI/sidecar.py`) runs in Stdio IPC mode (no `--port` argument) when spawned by the shell.
+  - **Telemetry (Python -> JS):** The sidecar prints line-delimited JSON telemetry to `stdout`. The shell reads these lines and forwards them to the webview (via Tauri events or `window.onPythonMessage`).
+  - **Commands (JS -> Python):** The frontend sends commands to the shell (via Tauri `invoke` or WebKit `postMessage`), which writes them to the sidecar's `stdin`.
+  - **Standard Stream Rules:** Since `stdout` is reserved strictly for JSON lines, all sidecar logging, warnings, and tracebacks **must** go to `sys.stderr` to avoid stream corruption.
+  - **Line-Buffering:** The sidecar must explicitly call `sys.stdout.flush()` after every JSON line.
+  - **Request-Response Matching:** The sidecar preserves `requestId` from the request payload in the response payload to allow Promise-based matching in the frontend bridge (`webUI/src/lib/bridge.ts`).
 
-## Frontend UI Rules (Strict UI Guidelines)
+## WebKitGTK & Wayland Rendering Constraints
 
-- **UI Stack:** Svelte 5 (using Runes: `$state`, `$derived`, `$props`), Vite 8, Tailwind CSS 4.3, DaisyUI 5.
-- **Component Stack Strategy (DaisyUI 5 + Bits UI):** 
-  - Use native DaisyUI components and default styles as much as possible. Keep styling simple and do **not** implement any custom themes; use the default themes provided by DaisyUI.
-  - To prevent rigid rendering and viewport clipping errors (e.g., in menus, tooltips, dropdowns, and modals), combine DaisyUI styling with portal-based, dynamically positioned headless components from **Bits UI**.
-  - **Tooltip Provider Rule:** Tooltip components require a top-level `<Tooltip.Provider>` wrapping the app container. Without this wrapper, the app will throw a context exception on runtime startup and display a blank window.
-  - Do **not** use static CSS-only DaisyUI tooltips (`data-tip`) or rigid overlays which clip near viewport boundaries.
-  - If a component or pattern is not natively available in DaisyUI, search the internet using the google search tool to find how to implement it or find standard patterns.
-  - Svelte transitions and animations must be layout-stable to avoid dropping frames or causing lag inside WebKitGTK.
+- **Scroll-Blur & Fractional Rendering Fixes:**
+  - WebKitGTK on Wayland can cause text/icon blurriness if elements rest on fractional coordinates.
+  - **Environment Variables:** The Rust and Python shells set `GDK_DEBUG=gl-no-fractional` (forces integer pixel alignment) and `WEBKIT_DISABLE_DMABUF_RENDERER=1` (bypasses buffer-sharing driver bugs on Wayland while keeping hardware acceleration fully enabled).
+  - **CSS Containment:** Card containers must use `contain: paint layout;` and `box-sizing: border-box;` to prevent flexbox fractional coordinate bleed.
+  - **Smooth Scrolling:** Smooth scrolling is enabled (`set_enable_smooth_scrolling(true)`) for a native feel; the GDK env vars and CSS containment are sufficient to prevent blur.
+
+## Frontend UI & Build Rules
+
+- **UI Stack:** Svelte 5 (Runes), Vite 8, Tailwind CSS 4.3, DaisyUI 5.
+- **Vite Plugin Order:** In `webUI/vite.config.ts`, `svelte()` **must** be placed before `tailwindcss()`. Otherwise, Tailwind will attempt to parse raw Svelte source code as CSS, throwing `Invalid declaration` errors.
+- **Tauri API Imports:** Do **not** import `@tauri-apps/api` statically in frontend files. It will crash the app with a `TypeError` in non-Tauri environments (like the PyGObject shell or standard browsers). Use dynamic imports guarded by `window.__TAURI_INTERNALS__ !== undefined` (see `webUI/src/lib/bridge.ts`).
+- **Component Stack Strategy (DaisyUI 5 + Bits UI):**
+  - Use native DaisyUI components and default themes.
+  - Use portal-based, dynamically positioned headless components from **Bits UI** for menus, tooltips, dropdowns, and modals to prevent viewport clipping.
+  - **Tooltip Provider Rule:** Tooltip components require a top-level `<Tooltip.Provider>` wrapping the app container in `App.svelte` to prevent runtime startup crashes.
 - **State Mutation & Effect Safe Zones:**
-  - **Avoid Direct State Mutation in Effects:** Reading and mutating Svelte `$state` objects within the same `$effect` block causes circular dependencies. Always wrap state modifications inside Svelte 5's `untrack` function (e.g., in history buffers or reactive telemetry syncs) to prevent `effect_update_depth_exceeded` runtime errors.
-- **Glassmorphism & Grain (Future Direction):**
-  - Keep the UI simple and clean. If glassmorphism and grain are implemented in later updates, achieve them using standard Tailwind backdrop blur (`backdrop-blur-md`), semi-transparent backgrounds (`bg-base-100/60`), and a global low-opacity SVG noise filter (`opacity-[0.015]` with `mix-blend-overlay`) to avoid heavy custom CSS.
-- **ZramGauge Visual Proportions:** 
-  - The circular `ZramGauge` widget uses exact 1:1 Cairo canvas proportions: size `156x170`, inner radius `70.2`, line width `9.36`, background/ghost tracks, and precise text vertical positions. Do not alter this geometry.
-- **Theme Auto-Detection:** 
-  - Detect system dark/light modes automatically using CSS media queries (`prefers-color-scheme`) and apply matching theme tokens. Keep themes clean, readable, and consistent.
-- **Build Constraints:** 
-  - Vite inlines all assets into a single static file via `vite-plugin-singlefile` for WebKitGTK local loading compatibility. Avoid importing huge binary assets or external URLs directly in Svelte components.
-
-## Dashboard Layout & State Management
-
-- **Bento Grid Layout:** The main dashboard is structured as a bento grid of four specialized cards:
-  - **Bento A (ZRAM Live Telemetry):** Holds the circular `ZramGauge` widget (Hero card).
-  - **Bento B (System Pressure):** Sparklines showing Memory/CPU/IO pressure trends using PSI (Pressure Stall Information).
-  - **Bento C (Hibernate Readiness):** A checklist verifying if ZRAM and hibernation are configured to safely coexist.
-  - **Bento D (Quick Tuning):** Quick sysctl sliders (e.g., `vm.swappiness`) and CPU governor selection.
-- **State & Calculations:**
-  - The backend streams raw bytes. The frontend must use Svelte 5 `$derived` runes to perform all formatting and calculations (e.g., Compression Ratio = `origBytes / comprBytes`) on the client side.
-- **Optimistic UI & Hazard Zones:**
-  - **Optimistic UI:** When toggling system settings, immediately update the UI control and show a loading state while the backend executes the command. If the command fails (or the user cancels the Polkit password prompt), gracefully revert the UI state and trigger a notification.
-  - **Hazard Zones:** Read-only widgets have no friction. Any mutation (e.g., resetting ZRAM or modifying hibernation settings) must require explicit confirmation dialogs (using portal-based dialogs) to prevent accidental misclicks.
+  - Wrap state modifications inside Svelte 5's `untrack` function when reading and mutating `$state` objects within the same `$effect` block to prevent `effect_update_depth_exceeded` runtime errors.
