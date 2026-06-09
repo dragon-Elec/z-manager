@@ -464,7 +464,7 @@
   <main class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
     
     <!-- ZONE A: ZRAM Live Telemetry -->
-    <div class="card bg-base-100 border border-base-content/10 shadow-sm p-6 flex flex-col gap-6 {expandedZone === 'A' ? 'lg:col-span-2' : ''}">
+    <div class="card bg-base-100 border border-base-content/10 shadow-sm p-6 flex flex-col gap-6 lg:col-span-2">
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div class="flex items-center justify-between cursor-pointer" onclick={() => toggleZone('A')}>
@@ -585,7 +585,7 @@
     </div>
 
     <!-- ZONE B: Cold Tier / Hibernate -->
-    <div class="card bg-base-100 border border-base-content/10 shadow-sm p-6 flex flex-col gap-6 transition-all duration-300 {expandedZone === 'B' ? 'lg:col-span-2' : ''}">
+    <div class="card bg-base-100 border border-base-content/10 shadow-sm p-6 flex flex-col gap-6 lg:col-span-2">
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div class="flex items-center justify-between cursor-pointer" onclick={() => toggleZone('B')}>

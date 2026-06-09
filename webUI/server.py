@@ -33,7 +33,7 @@ class ZManagerWindow(Gtk.ApplicationWindow):
         settings.set_enable_write_console_messages_to_stdout(True) # Print console logs to terminal
         settings.set_allow_file_access_from_file_urls(True)
         settings.set_allow_universal_access_from_file_urls(True)
-        settings.set_enable_smooth_scrolling(False) # Force discrete integer steps to prevent GPU subpixel scroll offsets
+        settings.set_enable_smooth_scrolling(True) # Enable smooth scrolling for a native desktop feel
         settings.set_zoom_text_only(False)
         self.webview.set_zoom_level(1.0)
         
