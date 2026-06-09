@@ -1,14 +1,20 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { sendToPython, onPython, initSidecarBridge } from '$lib/bridge';
-  import ZramGauge from '$lib/components/ZramGauge.svelte';
-  import Sparkline from '$lib/components/Sparkline.svelte';
-  import { Dialog, Tooltip } from 'bits-ui';
+  import { Tooltip } from 'bits-ui';
   import { 
-    Activity, Settings, HardDrive, Info, CheckCircle2, XCircle, 
-    AlertTriangle, Gauge, Sliders, Cpu, Database, RefreshCw, Trash2, 
-    Moon, Sun, Loader2, Plus, Check, ChevronDown, ChevronUp
+    Settings, Database, AlertTriangle, Sliders, Cpu, RefreshCw, Trash2, 
+    Loader2, Plus, CheckCircle2, ChevronDown, ChevronUp, Activity, Info
   } from 'lucide-svelte';
+
+  // Import modular components
+  import HealthStrip from '$lib/components/HealthStrip.svelte';
+  import ZramGaugesList from '$lib/components/ZramGaugesList.svelte';
+  import ColdTierSwap from '$lib/components/ColdTierSwap.svelte';
+  import SystemPressure from '$lib/components/SystemPressure.svelte';
+  import AmbientTuning from '$lib/components/AmbientTuning.svelte';
+  import SettingsDrawer from '$lib/components/SettingsDrawer.svelte';
+  import ConfirmationModal from '$lib/components/ConfirmationModal.svelte';
 
   // Telemetry state
   let devices = $state<any[]>([]);
@@ -33,12 +39,22 @@
     cpu_governor: 'powersave',
     available_governors: ['powersave', 'performance', 'schedutil']
   });
+  let health = $state<any>({
+    zramctl_available: true,
+    systemd_available: true,
+    sysfs_root_accessible: true,
+    zswap: { available: false, enabled: false, detail: '' },
+    journal_available: true,
+    kernel_version: '',
+    devices_summary: '',
+    notes: []
+  });
 
   // UI state
-  let expandedZone = $state<'none' | 'A' | 'B'>('none');
+  let activeTab = $state<'dashboard' | 'zram' | 'hibernation'>('dashboard');
   let settingsOpen = $state(false);
   let lastUpdate = $state<Date | null>(null);
-  let sseConnected = $derived(lastUpdate !== null && (Date.now() - lastUpdate.getTime() < 3000));
+  let backendConnected = $derived(lastUpdate !== null && (Date.now() - lastUpdate.getTime() < 3000));
 
   // Theme state
   let themeMode = $state<string>('system');
@@ -63,6 +79,10 @@
 
   // ZRAM Device form configuration state
   let zramForms = $state<Record<string, { algo: string; size: string; backingDev: string; loading: boolean }>>({});
+  let newDeviceAlgo = $state('zstd');
+  let newDeviceSize = $state('2G');
+  let newDeviceBacking = $state('none');
+  let loadingNewDevice = $state(false);
 
   // Hibernation setup form state
   let swapPath = $state('/swapfile');
@@ -123,22 +143,6 @@
     const mb = bytes / (1024 ** 2);
     return `${Math.round(mb)}M`;
   }
-
-  // Derived properties
-  let memoryPressure = $derived(psi?.memory?.some ?? 0);
-  let statusDotClass = $derived.by(() => {
-    if (memoryPressure > 40) return 'bg-error animate-pulse';
-    if (memoryPressure > 15) return 'bg-warning animate-pulse';
-    return 'bg-primary';
-  });
-
-  let systemSummary = $derived.by(() => {
-    const devCount = devices.length;
-    const devText = devCount === 1 ? '1 device' : `${devCount} devices`;
-    const ramSize = formatSize(ram.total);
-    const hStat = hibernation.ready ? 'Hibernate Ready' : 'Hibernate Config Needed';
-    return `${devText} · ${ramSize} RAM · ${hStat}`;
-  });
 
   let activeTheme = $derived.by(() => {
     if (themeMode === 'system') {
@@ -236,6 +240,9 @@
           localCpuGovernor = tuning.cpu_governor;
         }
       }
+      if (data.health) {
+        health = data.health;
+      }
     });
 
     // Request initial data
@@ -247,15 +254,6 @@
   function changeTheme(mode: string) {
     themeMode = mode;
     localStorage.setItem('zman-theme', mode);
-  }
-
-  // Toggle grid expansion
-  function toggleZone(zone: 'A' | 'B') {
-    if (expandedZone === zone) {
-      expandedZone = 'none';
-    } else {
-      expandedZone = zone;
-    }
   }
 
   // Tuning Apply
@@ -315,6 +313,35 @@
       showToast('error', `Configuration failed: ${e.message}`);
     } finally {
       form.loading = false;
+    }
+  }
+
+  async function createZramDevice() {
+    // Find next available device name (e.g. zram0, zram1)
+    let nextIndex = 0;
+    while (devices.some(d => d.name === `zram${nextIndex}`)) {
+      nextIndex++;
+    }
+    const deviceName = `zram${nextIndex}`;
+    loadingNewDevice = true;
+
+    try {
+      const data = await sendToPython('configure_zram', {
+        device: deviceName,
+        algo: newDeviceAlgo,
+        size: newDeviceSize,
+        backingDev: newDeviceBacking === 'none' ? '' : newDeviceBacking
+      });
+      if (data.status === 'success') {
+        showToast('success', data.message);
+        activeTab = 'dashboard';
+      } else {
+        showToast('error', data.message);
+      }
+    } catch (e: any) {
+      showToast('error', `Creation failed: ${e.message}`);
+    } finally {
+      loadingNewDevice = false;
     }
   }
 
@@ -417,6 +444,10 @@
   function savePowerPolicy() {
     showToast('success', 'Power policy saved successfully.');
   }
+
+  function handleConfigureDevice(name: string) {
+    activeTab = 'zram';
+  }
 </script>
 
 <Tooltip.Provider>
@@ -425,30 +456,36 @@
   <!-- Minimal Top Bar -->
   <header class="navbar card bg-base-100 border border-base-content/10 shadow-sm px-6 py-3 flex items-center justify-between gap-4">
     <div class="flex items-center gap-3">
-      <!-- Status Dot -->
-      <span class="w-3.5 h-3.5 rounded-full {statusDotClass} transition-colors duration-500 shadow-sm"></span>
       <h1 class="text-xl font-bold tracking-tight font-sans">Z-Manager</h1>
     </div>
 
-    <!-- Center Summary -->
-    <div class="hidden md:flex text-sm text-base-content/70 font-medium tracking-wide">
-      {systemSummary}
+    <!-- Navigation Tabs -->
+    <div role="tablist" class="tabs tabs-box bg-base-200/50 border border-base-content/5 p-1 rounded-xl flex gap-1">
+      <button 
+        role="tab"
+        class="tab tab-sm font-semibold rounded-lg transition-all {activeTab === 'dashboard' ? 'tab-active bg-primary text-primary-content' : 'text-base-content/60 hover:text-base-content'}"
+        onclick={() => activeTab = 'dashboard'}
+      >
+        Dashboard
+      </button>
+      <button 
+        role="tab"
+        class="tab tab-sm font-semibold rounded-lg transition-all {activeTab === 'zram' ? 'tab-active bg-primary text-primary-content' : 'text-base-content/60 hover:text-base-content'}"
+        onclick={() => activeTab = 'zram'}
+      >
+        ZRAM Config
+      </button>
+      <button 
+        role="tab"
+        class="tab tab-sm font-semibold rounded-lg transition-all {activeTab === 'hibernation' ? 'tab-active bg-primary text-primary-content' : 'text-base-content/60 hover:text-base-content'}"
+        onclick={() => activeTab = 'hibernation'}
+      >
+        Hibernation
+      </button>
     </div>
 
     <!-- Right Controls -->
     <div class="flex items-center gap-3">
-      <!-- Theme Select -->
-      <select 
-        class="select select-sm select-bordered font-medium focus:outline-none"
-        value={themeMode}
-        onchange={(e) => changeTheme((e.target as HTMLSelectElement).value)}
-      >
-        <option value="system">System (Auto)</option>
-        {#each availableThemes as theme}
-          <option value={theme}>{theme.charAt(0).toUpperCase() + theme.slice(1)}</option>
-        {/each}
-      </select>
-
       <!-- Settings Gear -->
       <button 
         class="btn btn-sm btn-ghost btn-circle text-base-content/70 hover:text-base-content"
@@ -460,504 +497,305 @@
     </div>
   </header>
 
-  <!-- Main Bento Grid Content Area -->
-  <main class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-    
-    <!-- ZONE A: ZRAM Live Telemetry -->
-    <div class="card bg-base-100 border border-base-content/10 shadow-sm p-6 flex flex-col gap-6 lg:col-span-2">
-      <!-- svelte-ignore a11y_click_events_have_key_events -->
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div class="flex items-center justify-between cursor-pointer" onclick={() => toggleZone('A')}>
-        <div class="flex items-center gap-3">
-          <Gauge class="text-primary" size={22} />
+  <!-- Main Content Area -->
+  {#if activeTab === 'dashboard'}
+    <!-- DASHBOARD (THE HUB) -->
+    <div class="flex flex-col gap-6 animate-fade-in">
+      
+      <!-- Zone A: Health Strip -->
+      <HealthStrip 
+        {health} 
+        {ram} 
+        {devices} 
+        {hibernation} 
+        {backendConnected} 
+      />
+
+      <!-- Zone B: ZRAM Live Telemetry -->
+      <div class="card bg-base-100 border border-base-content/10 shadow-sm p-6 flex flex-col gap-6">
+        <div class="flex items-center justify-between">
           <div>
             <h2 class="text-lg font-bold">ZRAM Live Telemetry</h2>
             <p class="text-xs text-base-content/60">Hot Tier · Fast volatile RAM compression</p>
           </div>
+          <button 
+            class="btn btn-xs btn-ghost font-semibold"
+            onclick={() => activeTab = 'zram'}
+          >
+            Configure
+          </button>
         </div>
-        <button class="btn btn-xs btn-ghost btn-circle">
-          {#if expandedZone === 'A'}
-            <ChevronUp size={16} />
-          {:else}
-            <ChevronDown size={16} />
-          {/if}
-        </button>
-      </div>
 
-      <!-- At Rest: Gauges Grid -->
-      <div class="flex flex-wrap gap-6 justify-center md:justify-start">
-        {#each devices as device}
-          <ZramGauge
-            name={device.name}
-            algo={device.algo}
-            usedBytes={device.usedBytes}
-            totalBytes={device.totalBytes}
-            origBytes={device.origBytes}
-            comprBytes={device.comprBytes}
-            ramTotal={ram.total}
-            isSwap={device.isSwap}
-            backingDev={device.backingDev}
-            wbNum={device.wbNum}
-            wbFailed={device.wbFailed}
-            memUsedTotalBytes={device.memUsedTotalBytes}
-            onclick={() => toggleZone('A')}
-            onconfigure={() => {
-              if (expandedZone !== 'A') {
-                expandedZone = 'A';
-              }
-            }}
+        {#if devices.length > 0}
+          <ZramGaugesList 
+            {devices} 
+            onConfigureDevice={handleConfigureDevice} 
           />
         {:else}
           <div class="py-12 flex flex-col items-center justify-center text-center w-full">
             <Loader2 class="animate-spin text-primary mb-2" size={24} />
             <p class="text-sm text-base-content/60">Waiting for ZRAM telemetry...</p>
           </div>
-        {/each}
+        {/if}
       </div>
 
-      <!-- Expanded State: Per-device detail forms -->
-      {#if expandedZone === 'A' && devices.length > 0}
-        <div class="border-t border-base-content/10 pt-6 flex flex-col gap-6">
-          <h3 class="text-md font-semibold text-base-content/80">Device Configuration</h3>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {#each devices as dev}
-              {@const form = zramForms[dev.name]}
-              {#if form}
-                  <div class="bg-base-200/40 border border-base-content/5 rounded-2xl p-5 flex flex-col gap-4 relative">
-                  {#if form.loading}
-                    <div class="absolute inset-0 bg-base-100/50 rounded-2xl flex items-center justify-center z-10">
-                      <Loader2 class="animate-spin text-primary" size={24} />
-                    </div>
-                  {/if}
-
-                  <div class="flex items-center justify-between">
-                    <span class="text-md font-bold font-mono">{dev.name}</span>
-                    <div class="flex gap-2">
-                      <button 
-                        class="btn btn-xs btn-error btn-soft"
-                        onclick={() => removeZramDevice(dev.name)}
-                      >
-                        <Trash2 size={13} /> Remove
-                      </button>
-                      <button 
-                        class="btn btn-xs btn-neutral btn-soft"
-                        onclick={() => resetZramDevice(dev.name)}
-                      >
-                        <RefreshCw size={13} /> Reset
-                      </button>
-                    </div>
-                  </div>
-
-                  <div class="grid grid-cols-2 gap-3">
-                    <label class="form-control">
-                      <div class="label py-1"><span class="label-text text-xs font-semibold text-base-content/60">Algorithm</span></div>
-                      <select class="select select-sm select-bordered w-full" bind:value={form.algo}>
-                        <option value="zstd">zstd (Recommended)</option>
-                        <option value="lz4">lz4 (Fastest)</option>
-                        <option value="lzo">lzo</option>
-                        <option value="deflate">deflate</option>
-                      </select>
-                    </label>
-
-                    <label class="form-control">
-                      <div class="label py-1"><span class="label-text text-xs font-semibold text-base-content/60">Size</span></div>
-                      <input type="text" class="input input-sm input-bordered w-full font-mono" placeholder="e.g. 2G or ram/2" bind:value={form.size} />
-                    </label>
-                  </div>
-
-                  <label class="form-control">
-                    <div class="label py-1"><span class="label-text text-xs font-semibold text-base-content/60">Writeback (Backing Device)</span></div>
-                    <input type="text" class="input input-sm input-bordered w-full font-mono" placeholder="e.g. /dev/nvme0n1p3 or none" bind:value={form.backingDev} />
-                  </label>
-
-                  <button 
-                    class="btn btn-sm btn-primary w-full mt-2"
-                    onclick={() => applyZramConfig(dev.name)}
-                  >
-                    Apply & Restart Service
-                  </button>
-                </div>
-              {/if}
-            {/each}
-          </div>
-        </div>
-      {/if}
-    </div>
-
-    <!-- ZONE B: Cold Tier / Hibernate -->
-    <div class="card bg-base-100 border border-base-content/10 shadow-sm p-6 flex flex-col gap-6 lg:col-span-2">
-      <!-- svelte-ignore a11y_click_events_have_key_events -->
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div class="flex items-center justify-between cursor-pointer" onclick={() => toggleZone('B')}>
-        <div class="flex items-center gap-3">
-          <Database class="text-secondary" size={22} />
-          <div>
-            <h2 class="text-lg font-bold">Cold Tier & Hibernation</h2>
-            <p class="text-xs text-base-content/60">Persistent Storage · Swap files & partitions</p>
-          </div>
-        </div>
-        <button class="btn btn-xs btn-ghost btn-circle">
-          {#if expandedZone === 'B'}
-            <ChevronUp size={16} />
-          {:else}
-            <ChevronDown size={16} />
-          {/if}
-        </button>
-      </div>
-
-      <!-- At Rest: Badges & Summary -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <!-- Readiness Badge -->
-        <div class="flex items-center gap-3 bg-base-200/30 border border-base-content/5 p-4 rounded-2xl">
-          <span class="text-xs font-semibold uppercase tracking-wider text-base-content/50">Readiness:</span>
-          
-          <Tooltip.Root>
-            <Tooltip.Trigger class="badge badge-lg {hibernation.ready ? 'badge-primary' : 'badge-warning animate-pulse'} font-semibold gap-1.5 cursor-help">
-              {#if hibernation.ready}
-                <CheckCircle2 size={14} /> Ready
-              {:else}
-                <AlertTriangle size={14} /> Config Needed
-              {/if}
-            </Tooltip.Trigger>
-            <Tooltip.Portal>
-              <Tooltip.Content class="z-50 max-w-xs rounded-xl border border-base-content/10 bg-neutral text-neutral-content p-3 text-xs shadow-lg">
-                {hibernation.message}
-              </Tooltip.Content>
-            </Tooltip.Portal>
-          </Tooltip.Root>
-        </div>
-
-        <!-- Swap Tiers list -->
-        <div class="flex flex-col gap-1.5 bg-base-200/30 border border-base-content/5 p-4 rounded-2xl">
-          <span class="text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-1">Active Swap Tiers</span>
-          {#each swaps as swap}
-            <div class="flex items-center justify-between text-xs font-mono">
-              <span class="font-bold text-base-content/80">{swap.name}</span>
-              <span class="text-base-content/60">{swap.used} / {swap.size} (Pri {swap.priority})</span>
-            </div>
-          {:else}
-            <span class="text-xs text-base-content/40 italic">No disk swap active</span>
-          {/each}
-        </div>
-      </div>
-
-      <!-- Expanded State: Full configuration checklist & controls -->
-      {#if expandedZone === 'B'}
-        <div class="border-t border-base-content/10 pt-6 grid grid-cols-1 md:grid-cols-2 gap-8">
-          
-          <!-- Checklist & Power Policy -->
-          <div class="flex flex-col gap-6">
-            <div>
-              <h3 class="text-md font-semibold mb-4 text-base-content/80">Readiness Checklist</h3>
-              <ul class="space-y-3">
-                <!-- Coexistence -->
-                <li class="flex items-start gap-3 text-sm">
-                  {#if hibernation.swap_total >= hibernation.recommended_swap_bytes}
-                    <CheckCircle2 class="text-primary mt-0.5 shrink-0" size={16} />
-                  {:else}
-                    <XCircle class="text-warning mt-0.5 shrink-0" size={16} />
-                  {/if}
-                  <div>
-                    <span class="font-medium">ZRAM Coexistence Check</span>
-                    <p class="text-xs text-base-content/60">
-                      Recommended swap size: {formatSize(hibernation.recommended_swap_bytes)}. Active swap: {formatSize(hibernation.swap_total)}.
-                    </p>
-                  </div>
-                </li>
-
-                <!-- Swap Size -->
-                <li class="flex items-start gap-3 text-sm">
-                  {#if hibernation.swap_total >= hibernation.ram_total}
-                    <CheckCircle2 class="text-primary mt-0.5 shrink-0" size={16} />
-                  {:else}
-                    <XCircle class="text-error mt-0.5 shrink-0" size={16} />
-                  {/if}
-                  <div>
-                    <span class="font-medium">Swap Size Fitness</span>
-                    <p class="text-xs text-base-content/60">
-                      Swap must be larger than total RAM ({formatSize(hibernation.ram_total)}) to safely dump memory.
-                    </p>
-                  </div>
-                </li>
-
-                <!-- Secure Boot -->
-                <li class="flex items-start gap-3 text-sm">
-                  {#if hibernation.secure_boot === 'disabled'}
-                    <CheckCircle2 class="text-primary mt-0.5 shrink-0" size={16} />
-                  {:else}
-                    <XCircle class="text-error mt-0.5 shrink-0" size={16} />
-                  {/if}
-                  <div>
-                    <span class="font-medium">Secure Boot Lockdown</span>
-                    <p class="text-xs text-base-content/60">
-                      Secure Boot mode: {hibernation.secure_boot}. Confidentiality mode blocks hibernation.
-                    </p>
-                  </div>
-                </li>
-
-                <!-- Resume Parameters -->
-                <li class="flex items-start gap-3 text-sm">
-                  {#if hibernation.ready}
-                    <CheckCircle2 class="text-primary mt-0.5 shrink-0" size={16} />
-                  {:else}
-                    <XCircle class="text-warning mt-0.5 shrink-0" size={16} />
-                  {/if}
-                  <div>
-                    <span class="font-medium">Resume Parameters</span>
-                    <p class="text-xs text-base-content/60">
-                      Kernel commandline must include valid resume partition UUID and offset.
-                    </p>
-                  </div>
-                </li>
-              </ul>
-            </div>
-
-            <!-- Power Policy -->
-            <div class="border-t border-base-content/10 pt-6">
-              <h3 class="text-md font-semibold mb-4 text-base-content/80">Power Policy</h3>
-              <div class="space-y-4 bg-base-200/30 p-4 rounded-2xl border border-base-content/5">
-                <div class="flex items-center justify-between">
-                  <span class="text-sm font-medium">Hibernate on lid close</span>
-                  <input type="checkbox" class="toggle toggle-secondary" bind:checked={lidCloseHibernate} onchange={savePowerPolicy} />
-                </div>
-                <div class="flex flex-col gap-2">
-                  <div class="flex justify-between text-xs font-semibold text-base-content/60">
-                    <span>Hibernate delay (hybrid sleep)</span>
-                    <span>{hibernateDelay} minutes</span>
-                  </div>
-                  <input type="range" class="range range-secondary range-sm" min="5" max="180" step="5" bind:value={hibernateDelay} onchange={savePowerPolicy} />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Swap Manager & Boot Config -->
-          <div class="flex flex-col gap-6">
-            <!-- Swap Manager -->
-            <div class="bg-base-200/40 border border-base-content/5 rounded-2xl p-5 flex flex-col gap-4 relative">
-              {#if loadingHibernate}
-                <div class="absolute inset-0 bg-base-100/50 rounded-2xl flex items-center justify-center z-10">
-                  <Loader2 class="animate-spin text-secondary" size={24} />
-                </div>
-              {/if}
-
-              <h3 class="text-md font-semibold text-base-content/80 flex items-center gap-2">
-                <Plus size={18} /> Provision Swap Storage
-              </h3>
-
-              <label class="form-control">
-                <div class="label py-1"><span class="label-text text-xs font-semibold text-base-content/60">Swap Path</span></div>
-                <input type="text" class="input input-sm input-bordered w-full font-mono" bind:value={swapPath} />
-              </label>
-
-              <div class="grid grid-cols-2 gap-3">
-                <label class="form-control">
-                  <div class="label py-1"><span class="label-text text-xs font-semibold text-base-content/60">Size (MB)</span></div>
-                  <input type="number" class="input input-sm input-bordered w-full font-mono" bind:value={swapSizeMb} />
-                </label>
-
-                <label class="form-control">
-                  <div class="label py-1"><span class="label-text text-xs font-semibold text-base-content/60">Priority</span></div>
-                  <input type="number" class="input input-sm input-bordered w-full font-mono" bind:value={swapPriority} />
-                </label>
-              </div>
-
-              <button 
-                class="btn btn-sm btn-secondary w-full mt-2"
-                onclick={setupHibernation}
-              >
-                Create & Enable Swap
-              </button>
-            </div>
-
-            <!-- Boot Config -->
-            <div class="bg-base-200/40 border border-base-content/5 rounded-2xl p-5 flex flex-col gap-4 relative">
-              {#if loadingBoot}
-                <div class="absolute inset-0 bg-base-100/50 rounded-2xl flex items-center justify-center z-10">
-                  <Loader2 class="animate-spin text-secondary" size={24} />
-                </div>
-              {/if}
-
-              <h3 class="text-md font-semibold text-base-content/80 flex items-center gap-2">
-                <Settings size={18} /> Bootloader Configuration
-              </h3>
-              
-              <div class="text-xs text-base-content/70 space-y-2">
-                <p>To finalize hibernation resume settings, the bootloader configuration must be updated and initramfs regenerated.</p>
-                <div class="p-3 bg-base-300/50 rounded-xl font-mono text-[11px] leading-relaxed break-all select-all">
-                  resume=UUID={hibernation.secure_boot === 'disabled' ? '...' : 'UUID'}
-                </div>
-              </div>
-
-              <button 
-                class="btn btn-sm btn-neutral w-full"
-                onclick={regenerateBoot}
-              >
-                Apply & Regenerate Initramfs
-              </button>
-            </div>
-          </div>
-
-        </div>
-      {/if}
-    </div>
-
-    <!-- ZONE C: System Pressure -->
-    <div class="card bg-base-100 border border-base-content/10 shadow-sm p-6 flex flex-col gap-6">
-      <div class="flex items-center gap-3">
-        <Activity class="text-primary" size={22} />
-        <div>
-          <h2 class="text-lg font-bold">System Pressure</h2>
-          <p class="text-xs text-base-content/60">PSI Stall Information · Last 60 seconds</p>
-        </div>
-      </div>
-
-      <div class="flex flex-col gap-5 bg-base-200/20 p-4 rounded-2xl border border-base-content/5">
-        <!-- CPU Pressure -->
-        <Sparkline 
-          value={psi?.cpu?.some ?? 0} 
-          label="CPU Stall (Some)" 
-          colorClass="stroke-secondary"
-        />
-
-        <!-- Memory Pressure -->
-        <Sparkline 
-          value={psi?.memory?.some ?? 0} 
-          label="Memory Stall (Some)" 
-          colorClass={psi?.memory?.some > 15 ? 'stroke-warning' : 'stroke-primary'}
-        />
-
-        <!-- I/O Pressure -->
-        <Sparkline 
-          value={psi?.io?.some ?? 0} 
-          label="I/O Stall (Some)" 
-          colorClass="stroke-accent"
-        />
-      </div>
-    </div>
-
-    <!-- ZONE D: Quick Tuning -->
-    <div class="card bg-base-100 border border-base-content/10 shadow-sm p-6 flex flex-col gap-6">
-      <div class="flex items-center gap-3">
-        <Sliders class="text-accent" size={22} />
-        <div>
-          <h2 class="text-lg font-bold">Quick Tuning</h2>
-          <p class="text-xs text-base-content/60">Volatile Kernel Tunables · Applied live</p>
-        </div>
-      </div>
-
-      <div class="flex flex-col gap-5 bg-base-200/20 p-5 rounded-2xl border border-base-content/5">
+      <!-- Row 3: Cold Tier & System Pressure -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
         
-        <!-- vm.swappiness -->
-        <div class="flex flex-col gap-2 relative">
-          <div class="flex justify-between items-center text-xs font-semibold">
-            <span class="text-base-content/60 flex items-center gap-1.5">
-              vm.swappiness 
+        <!-- Zone C: Cold Tier & Swap Summary -->
+        <div class="card bg-base-100 border border-base-content/10 shadow-sm p-6 flex flex-col gap-6">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <Database class="text-secondary" size={22} />
+              <div>
+                <h2 class="text-lg font-bold">Cold Tier & Swap</h2>
+                <p class="text-xs text-base-content/60">Persistent Storage · Swap files & partitions</p>
+              </div>
+            </div>
+            <button 
+              class="btn btn-xs btn-ghost font-semibold"
+              onclick={() => activeTab = 'hibernation'}
+            >
+              Manage
+            </button>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- Readiness Badge -->
+            <div class="flex items-center gap-3 bg-base-200/30 border border-base-content/5 p-4 rounded-2xl">
+              <span class="text-xs font-semibold uppercase tracking-wider text-base-content/50">Readiness:</span>
+              
               <Tooltip.Root>
-                <Tooltip.Trigger class="cursor-help text-base-content/40 hover:text-base-content"><Info size={13} /></Tooltip.Trigger>
+                <Tooltip.Trigger class="badge badge-lg {hibernation.ready ? 'badge-primary' : 'badge-warning animate-pulse'} font-semibold gap-1.5 cursor-help">
+                  {#if hibernation.ready}
+                    <CheckCircle2 size={14} /> Ready
+                  {:else}
+                    <AlertTriangle size={14} /> Config Needed
+                  {/if}
+                </Tooltip.Trigger>
                 <Tooltip.Portal>
                   <Tooltip.Content class="z-50 max-w-xs rounded-xl border border-base-content/10 bg-neutral text-neutral-content p-3 text-xs shadow-lg">
-                    Controls how aggressively the kernel swaps memory pages. Higher values (e.g. 150-200) are optimal for ZRAM.
+                    {hibernation.message}
                   </Tooltip.Content>
                 </Tooltip.Portal>
               </Tooltip.Root>
-            </span>
-            <div class="flex items-center gap-2">
-              {#if loadingSwappiness}
-                <Loader2 class="animate-spin text-accent" size={12} />
-              {/if}
-              <span class="font-mono text-sm font-bold bg-base-300 px-2 py-0.5 rounded">{localSwappiness}</span>
+            </div>
+
+            <!-- Swap Tiers list -->
+            <div class="flex flex-col gap-1.5 bg-base-200/30 border border-base-content/5 p-4 rounded-2xl">
+              <span class="text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-1">Active Swap Tiers</span>
+              {#each swaps as swap}
+                <div class="flex items-center justify-between text-xs font-mono">
+                  <span class="font-bold text-base-content/80">{swap.name}</span>
+                  <span class="text-base-content/60">{swap.used} / {swap.size} (Pri {swap.priority})</span>
+                </div>
+              {:else}
+                <span class="text-xs text-base-content/40 italic">No disk swap active</span>
+              {/each}
             </div>
           </div>
-          <input 
-            type="range" 
-            class="range range-accent range-sm" 
-            min="0" 
-            max="200" 
-            step="5" 
-            bind:value={localSwappiness}
-            onchange={() => applyTuningChange('swappiness', localSwappiness)}
-            disabled={loadingSwappiness}
-          />
         </div>
 
-        <!-- vm.vfs_cache_pressure -->
-        <div class="flex flex-col gap-2 relative">
-          <div class="flex justify-between items-center text-xs font-semibold">
-            <span class="text-base-content/60 flex items-center gap-1.5">
-              vm.vfs_cache_pressure
-              <Tooltip.Root>
-                <Tooltip.Trigger class="cursor-help text-base-content/40 hover:text-base-content"><Info size={13} /></Tooltip.Trigger>
-                <Tooltip.Portal>
-                  <Tooltip.Content class="z-50 max-w-xs rounded-xl border border-base-content/10 bg-neutral text-neutral-content p-3 text-xs shadow-lg">
-                    Controls the kernel's tendency to reclaim memory used for directory and inode caches.
-                  </Tooltip.Content>
-                </Tooltip.Portal>
-              </Tooltip.Root>
-            </span>
-            <div class="flex items-center gap-2">
-              {#if loadingVfsCachePressure}
-                <Loader2 class="animate-spin text-accent" size={12} />
-              {/if}
-              <span class="font-mono text-sm font-bold bg-base-300 px-2 py-0.5 rounded">{localVfsCachePressure}</span>
-            </div>
-          </div>
-          <input 
-            type="range" 
-            class="range range-accent range-sm" 
-            min="0" 
-            max="500" 
-            step="10" 
-            bind:value={localVfsCachePressure}
-            onchange={() => applyTuningChange('vfs_cache_pressure', localVfsCachePressure)}
-            disabled={loadingVfsCachePressure}
-          />
-        </div>
-
-        <!-- CPU Governor -->
-        <div class="form-control w-full relative">
-          <div class="flex justify-between items-center mb-1.5">
-            <span class="text-xs font-semibold text-base-content/60 flex items-center gap-1.5">
-              CPU Governor
-              <Tooltip.Root>
-                <Tooltip.Trigger class="cursor-help text-base-content/40 hover:text-base-content"><Info size={13} /></Tooltip.Trigger>
-                <Tooltip.Portal>
-                  <Tooltip.Content class="z-50 max-w-xs rounded-xl border border-base-content/10 bg-neutral text-neutral-content p-3 text-xs shadow-lg">
-                    CPU scaling governor. 'performance' forces maximum frequency, 'powersave' balances dynamically.
-                  </Tooltip.Content>
-                </Tooltip.Portal>
-              </Tooltip.Root>
-            </span>
-            {#if loadingCpuGovernor}
-              <Loader2 class="animate-spin text-accent" size={12} />
-            {/if}
-          </div>
-          <select 
-            class="select select-bordered select-sm w-full font-sans font-medium"
-            bind:value={localCpuGovernor}
-            onchange={() => applyTuningChange('cpu_governor', localCpuGovernor)}
-            disabled={loadingCpuGovernor}
-          >
-            {#each tuning.available_governors as gov}
-              <option value={gov}>{gov}</option>
-            {:else}
-              <option value="powersave">powersave</option>
-              <option value="performance">performance</option>
-              <option value="schedutil">schedutil</option>
-            {/each}
-          </select>
-        </div>
+        <!-- Zone D: System Pressure -->
+        <SystemPressure {psi} />
 
       </div>
-    </div>
 
-  </main>
+      <!-- Zone E: Ambient Tuning -->
+      <AmbientTuning 
+        {tuning}
+        bind:localSwappiness
+        bind:localVfsCachePressure
+        bind:localCpuGovernor
+        {loadingSwappiness}
+        {loadingVfsCachePressure}
+        {loadingCpuGovernor}
+        onApplyTuningChange={applyTuningChange}
+      />
+
+    </div>
+  {:else}
+    <!-- SPOKES (CONFIGURATION VIEWS) -->
+    <div class="flex flex-col gap-6 animate-fade-in">
+      
+      {#if activeTab === 'zram'}
+        <!-- ZRAM CONFIGURATION SPOKE -->
+        <div class="card bg-base-100 border border-base-content/10 shadow-sm p-6 flex flex-col gap-6">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-lg font-bold">ZRAM Configuration</h2>
+              <p class="text-xs text-base-content/60">Create, modify, or remove ZRAM devices</p>
+            </div>
+            <button 
+              class="btn btn-xs btn-ghost font-semibold"
+              onclick={() => activeTab = 'dashboard'}
+            >
+              Back to Dashboard
+            </button>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+            <!-- Device List & Forms -->
+            <div class="lg:col-span-2 flex flex-col gap-6">
+              {#each devices as dev}
+                {@const form = zramForms[dev.name]}
+                {#if form}
+                  <div class="bg-base-200/40 border border-base-content/5 rounded-2xl p-5 flex flex-col gap-4 relative">
+                    {#if form.loading}
+                      <div class="absolute inset-0 bg-base-100/50 rounded-2xl flex items-center justify-center z-10">
+                        <Loader2 class="animate-spin text-primary" size={24} />
+                      </div>
+                    {/if}
+
+                    <div class="flex items-center justify-between">
+                      <span class="text-md font-bold font-mono">{dev.name}</span>
+                      <div class="flex gap-2">
+                        <button 
+                          class="btn btn-xs btn-error btn-soft"
+                          onclick={() => removeZramDevice(dev.name)}
+                        >
+                          <Trash2 size={13} /> Remove
+                        </button>
+                        <button 
+                          class="btn btn-xs btn-neutral btn-soft"
+                          onclick={() => resetZramDevice(dev.name)}
+                        >
+                          <RefreshCw size={13} /> Reset
+                        </button>
+                      </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                      <label class="form-control">
+                        <div class="label py-1"><span class="label-text text-xs font-semibold text-base-content/60">Algorithm</span></div>
+                        <select class="select select-sm select-bordered w-full" bind:value={form.algo}>
+                          <option value="zstd">zstd (Recommended)</option>
+                          <option value="lz4">lz4 (Fastest)</option>
+                          <option value="lzo">lzo</option>
+                          <option value="deflate">deflate</option>
+                        </select>
+                      </label>
+
+                      <label class="form-control">
+                        <div class="label py-1"><span class="label-text text-xs font-semibold text-base-content/60">Size</span></div>
+                        <input type="text" class="input input-sm input-bordered w-full font-mono" placeholder="e.g. 2G or ram/2" bind:value={form.size} />
+                      </label>
+                    </div>
+
+                    <!-- Advanced Options (Writeback) -->
+                    <div class="collapse collapse-arrow bg-base-300/20 border border-base-content/5 rounded-xl">
+                      <input type="checkbox" /> 
+                      <div class="collapse-title text-xs font-semibold text-base-content/60 py-2 min-h-0">
+                        Advanced Options (Writeback)
+                      </div>
+                      <div class="collapse-content py-2">
+                        <label class="form-control">
+                          <div class="label py-1"><span class="label-text text-xs font-semibold text-base-content/60">Writeback (Backing Device)</span></div>
+                          <input type="text" class="input input-sm input-bordered w-full font-mono" placeholder="e.g. /dev/nvme0n1p3 or none" bind:value={form.backingDev} />
+                        </label>
+                      </div>
+                    </div>
+
+                    <button 
+                      class="btn btn-sm btn-primary w-full mt-2"
+                      onclick={() => applyZramConfig(dev.name)}
+                    >
+                      Apply & Restart Service
+                    </button>
+                  </div>
+                {/if}
+              {:else}
+                <div class="py-12 flex flex-col items-center justify-center text-center w-full bg-base-200/20 border border-base-content/5 rounded-2xl">
+                  <Info size={32} class="mb-2 opacity-50" />
+                  <p class="text-sm text-base-content/60">No active ZRAM devices configured.</p>
+                </div>
+              {/each}
+            </div>
+
+            <!-- Create New Device Card -->
+            <div class="bg-base-200/40 border border-base-content/5 rounded-2xl p-5 flex flex-col gap-4 relative">
+              {#if loadingNewDevice}
+                <div class="absolute inset-0 bg-base-100/50 rounded-2xl flex items-center justify-center z-10">
+                  <Loader2 class="animate-spin text-primary" size={24} />
+                </div>
+              {/if}
+
+              <h3 class="text-md font-semibold text-base-content/80 flex items-center gap-2">
+                <Plus size={18} /> Create ZRAM Device
+              </h3>
+
+              <div class="grid grid-cols-1 gap-3">
+                <label class="form-control">
+                  <div class="label py-1"><span class="label-text text-xs font-semibold text-base-content/60">Algorithm</span></div>
+                  <select class="select select-sm select-bordered w-full" bind:value={newDeviceAlgo}>
+                    <option value="zstd">zstd (Recommended)</option>
+                    <option value="lz4">lz4 (Fastest)</option>
+                    <option value="lzo">lzo</option>
+                    <option value="deflate">deflate</option>
+                  </select>
+                </label>
+
+                <label class="form-control">
+                  <div class="label py-1"><span class="label-text text-xs font-semibold text-base-content/60">Size</span></div>
+                  <input type="text" class="input input-sm input-bordered w-full font-mono" placeholder="e.g. 2G or ram/2" bind:value={newDeviceSize} />
+                </label>
+
+                <label class="form-control">
+                  <div class="label py-1"><span class="label-text text-xs font-semibold text-base-content/60">Writeback (Backing Device)</span></div>
+                  <input type="text" class="input input-sm input-bordered w-full font-mono" placeholder="e.g. /dev/nvme0n1p3 or none" bind:value={newDeviceBacking} />
+                </label>
+              </div>
+
+              <button 
+                class="btn btn-sm btn-primary w-full mt-2"
+                onclick={createZramDevice}
+              >
+                Create Device
+              </button>
+            </div>
+          </div>
+        </div>
+      {:else if activeTab === 'hibernation'}
+        <!-- HIBERNATION CONFIGURATION SPOKE -->
+        <div class="card bg-base-100 border border-base-content/10 shadow-sm p-6 flex flex-col gap-6">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-lg font-bold">Hibernation & Cold Tier</h2>
+              <p class="text-xs text-base-content/60">Configure persistent swap storage and bootloader settings</p>
+            </div>
+            <button 
+              class="btn btn-xs btn-ghost font-semibold"
+              onclick={() => activeTab = 'dashboard'}
+            >
+              Back to Dashboard
+            </button>
+          </div>
+
+          <ColdTierSwap 
+            {swaps}
+            {hibernation}
+            bind:swapPath
+            bind:swapSizeMb
+            bind:swapPriority
+            {loadingHibernate}
+            {loadingBoot}
+            bind:lidCloseHibernate
+            bind:hibernateDelay
+            onSetupHibernation={setupHibernation}
+            onRegenerateBoot={regenerateBoot}
+            onSavePowerPolicy={savePowerPolicy}
+          />
+        </div>
+      {/if}
+
+    </div>
+  {/if}
 
   <!-- Bottom Status line -->
   <footer class="mt-auto py-4 text-center text-xs text-base-content/40 flex flex-col md:flex-row items-center justify-between gap-2 border-t border-base-content/5">
     <div class="flex items-center gap-2">
-      <span class="inline-block w-2 h-2 rounded-full {sseConnected ? 'bg-primary' : 'bg-error'}"></span>
-      <span>{sseConnected ? 'Native Bridge Connected' : 'Connecting...'}</span>
+      <span class="inline-block w-2 h-2 rounded-full {backendConnected ? 'bg-primary' : 'bg-error'}"></span>
+      <span>{backendConnected ? 'Native Bridge Connected' : 'Connecting...'}</span>
     </div>
     <span>Z-Manager v0.9.0-beta · Built for Calm Control</span>
   </footer>
@@ -965,72 +803,22 @@
 </div>
 </Tooltip.Provider>
 
-<!-- Portal-based Settings Drawer -->
-<Dialog.Root bind:open={settingsOpen}>
-  <Dialog.Portal>
-    <Dialog.Overlay class="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" />
-    <Dialog.Content class="fixed right-0 top-0 bottom-0 z-50 w-80 border-l border-base-content/10 bg-base-100/90 backdrop-blur-md p-6 shadow-lg outline-none flex flex-col justify-between">
-      <div>
-        <Dialog.Title class="text-xl font-bold flex items-center gap-2 mb-6">
-          <Settings size={20} /> Settings
-        </Dialog.Title>
-        
-        <div class="space-y-6">
-          <!-- Connection Status -->
-          <div class="flex flex-col gap-2">
-            <span class="text-xs uppercase tracking-wider text-base-content/50 font-semibold">Backend Connection</span>
-            <div class="flex items-center gap-2">
-              <span class="w-2.5 h-2.5 rounded-full {sseConnected ? 'bg-primary' : 'bg-error'}"></span>
-              <span class="text-sm font-medium">{sseConnected ? 'Connected (Native)' : 'Disconnected'}</span>
-            </div>
-          </div>
+<!-- Settings Drawer -->
+<SettingsDrawer 
+  bind:open={settingsOpen}
+  bind:themeMode
+  {availableThemes}
+  {backendConnected}
+  onChangeTheme={changeTheme}
+/>
 
-          <!-- Theme Override -->
-          <div class="flex flex-col gap-2">
-            <span class="text-xs uppercase tracking-wider text-base-content/50 font-semibold">Theme Mode</span>
-            <select 
-              class="select select-sm select-bordered w-full font-medium focus:outline-none"
-              value={themeMode}
-              onchange={(e) => changeTheme((e.target as HTMLSelectElement).value)}
-            >
-              <option value="system">System (Auto)</option>
-              {#each availableThemes as theme}
-                <option value={theme}>{theme.charAt(0).toUpperCase() + theme.slice(1)}</option>
-              {/each}
-            </select>
-          </div>
-
-          <!-- App Version -->
-          <div class="flex flex-col gap-1">
-            <span class="text-xs uppercase tracking-wider text-base-content/50 font-semibold">Version</span>
-            <span class="text-sm font-mono text-base-content/80">v0.9.0-beta</span>
-          </div>
-        </div>
-      </div>
-      
-      <Dialog.Close class="btn btn-soft w-full mt-6">Close</Dialog.Close>
-    </Dialog.Content>
-  </Dialog.Portal>
-</Dialog.Root>
-
-<!-- Portal-based Confirmation Dialog -->
-<Dialog.Root bind:open={confirmOpen}>
-  <Dialog.Portal>
-    <Dialog.Overlay class="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" />
-    <Dialog.Content class="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-base-content/10 bg-base-100/95 backdrop-blur-md p-6 shadow-lg outline-none">
-      <Dialog.Title class="text-lg font-bold flex items-center gap-2 text-warning">
-        <AlertTriangle size={20} /> {confirmTitle}
-      </Dialog.Title>
-      <Dialog.Description class="mt-2 text-sm text-base-content/70">
-        {confirmDesc}
-      </Dialog.Description>
-      <div class="mt-6 flex justify-end gap-3">
-        <Dialog.Close class="btn btn-soft">Cancel</Dialog.Close>
-        <button class="btn btn-warning" onclick={() => confirmAction?.()}>Confirm</button>
-      </div>
-    </Dialog.Content>
-  </Dialog.Portal>
-</Dialog.Root>
+<!-- Confirmation Dialog -->
+<ConfirmationModal 
+  bind:open={confirmOpen}
+  title={confirmTitle}
+  desc={confirmDesc}
+  onConfirm={() => confirmAction?.()}
+/>
 
 <!-- Toast Notifications -->
 {#if toast}
@@ -1047,20 +835,3 @@
     </div>
   </div>
 {/if}
-
-<style>
-  /* Subtle slide-in animation for toast */
-  @keyframes slideIn {
-    from {
-      transform: translateY(1rem);
-      opacity: 0;
-    }
-    to {
-      transform: translateY(0);
-      opacity: 1;
-    }
-  }
-  .animate-slide-in {
-    animation: slideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  }
-</style>
