@@ -708,7 +708,7 @@
                               <DropdownMenu.Content class="z-50 min-w-[12rem] rounded-xl border border-base-content/10 bg-base-200 p-1 shadow-lg flex flex-col gap-0.5">
                                 {#each ['zstd', 'lz4', 'lzo', 'deflate'] as algo}
                                   <DropdownMenu.Item 
-                                    class="flex w-full cursor-default select-none items-center rounded-lg px-3 py-2 text-sm outline-none hover:bg-base-300 focus:bg-base-300 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 font-medium"
+                                    class="flex w-full cursor-default select-none items-center rounded-lg px-3 py-2 text-sm outline-none hover:bg-base-300 focus:bg-base-300 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 font-medium {form.algo === algo ? 'bg-primary text-primary-content' : ''}"
                                     onclick={() => form.algo = algo}
                                   >
                                     {algo === 'zstd' ? 'zstd (Recommended)' : algo === 'lz4' ? 'lz4 (Fastest)' : algo}
@@ -779,7 +779,7 @@
                         <DropdownMenu.Content class="z-50 min-w-[12rem] rounded-xl border border-base-content/10 bg-base-200 p-1 shadow-lg flex flex-col gap-0.5">
                           {#each ['zstd', 'lz4', 'lzo', 'deflate'] as algo}
                             <DropdownMenu.Item 
-                              class="flex w-full cursor-default select-none items-center rounded-lg px-3 py-2 text-sm outline-none hover:bg-base-300 focus:bg-base-300 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 font-medium"
+                              class="flex w-full cursor-default select-none items-center rounded-lg px-3 py-2 text-sm outline-none hover:bg-base-300 focus:bg-base-300 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 font-medium {newDeviceAlgo === algo ? 'bg-primary text-primary-content' : ''}"
                               onclick={() => newDeviceAlgo = algo}
                             >
                               {algo === 'zstd' ? 'zstd (Recommended)' : algo === 'lz4' ? 'lz4 (Fastest)' : algo}

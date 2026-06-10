@@ -15,6 +15,15 @@
     backendConnected: boolean;
     onChangeTheme: (mode: string) => void;
   }>();
+
+  function scrollActiveIntoView(node: HTMLElement) {
+    const active = node.querySelector('.bg-primary');
+    if (active) {
+      requestAnimationFrame(() => {
+        active.scrollIntoView({ block: 'nearest' });
+      });
+    }
+  }
 </script>
 
 <Dialog.Root bind:open={open}>
@@ -46,22 +55,24 @@
                 <ChevronDown size={14} class="opacity-60 shrink-0" />
               </DropdownMenu.Trigger>
               <DropdownMenu.Portal>
-                <DropdownMenu.Content class="z-50 min-w-[12rem] max-h-60 overflow-y-auto rounded-xl border border-base-content/10 bg-base-200 p-1 shadow-lg flex flex-col gap-0.5">
-                  <DropdownMenu.Item 
-                    class="flex w-full cursor-default select-none items-center rounded-lg px-3 py-2 text-sm outline-none hover:bg-base-300 focus:bg-base-300 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 font-medium"
-                    onclick={() => onChangeTheme('system')}
-                  >
-                    System (Auto)
-                  </DropdownMenu.Item>
-                  <DropdownMenu.Separator class="my-1 h-px bg-base-content/10" />
-                  {#each availableThemes as theme}
+                <DropdownMenu.Content class="z-50 min-w-[12rem] rounded-xl border border-base-content/10 bg-base-200 p-1 shadow-lg">
+                  <div class="max-h-60 overflow-y-auto flex flex-col gap-0.5" use:scrollActiveIntoView>
                     <DropdownMenu.Item 
-                      class="flex w-full cursor-default select-none items-center rounded-lg px-3 py-2 text-sm outline-none hover:bg-base-300 focus:bg-base-300 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 font-medium"
-                      onclick={() => onChangeTheme(theme)}
+                      class="flex w-full cursor-default select-none items-center rounded-lg px-3 py-2 text-sm outline-none hover:bg-base-300 focus:bg-base-300 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 font-medium {themeMode === 'system' ? 'bg-primary text-primary-content' : ''}"
+                      onclick={() => onChangeTheme('system')}
                     >
-                      {theme.charAt(0).toUpperCase() + theme.slice(1)}
+                      System (Auto)
                     </DropdownMenu.Item>
-                  {/each}
+                    <DropdownMenu.Separator class="my-1 h-px bg-base-content/10" />
+                    {#each availableThemes as theme}
+                      <DropdownMenu.Item 
+                        class="flex w-full cursor-default select-none items-center rounded-lg px-3 py-2 text-sm outline-none hover:bg-base-300 focus:bg-base-300 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 font-medium {themeMode === theme ? 'bg-primary text-primary-content' : ''}"
+                        onclick={() => onChangeTheme(theme)}
+                      >
+                        {theme.charAt(0).toUpperCase() + theme.slice(1)}
+                      </DropdownMenu.Item>
+                    {/each}
+                  </div>
                 </DropdownMenu.Content>
               </DropdownMenu.Portal>
             </DropdownMenu.Root>

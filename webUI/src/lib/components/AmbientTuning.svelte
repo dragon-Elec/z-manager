@@ -131,7 +131,7 @@
           <DropdownMenu.Content class="z-50 min-w-[12rem] rounded-xl border border-base-content/10 bg-base-200 p-1 shadow-lg flex flex-col gap-0.5">
             {#each tuning.available_governors as gov}
               <DropdownMenu.Item 
-                class="flex w-full cursor-default select-none items-center rounded-lg px-3 py-2 text-sm outline-none hover:bg-base-300 focus:bg-base-300 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 font-medium"
+                class="flex w-full cursor-default select-none items-center rounded-lg px-3 py-2 text-sm outline-none hover:bg-base-300 focus:bg-base-300 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 font-medium {localCpuGovernor === gov ? 'bg-primary text-primary-content' : ''}"
                 onclick={() => {
                   localCpuGovernor = gov;
                   onApplyTuningChange('cpu_governor', gov);
@@ -142,7 +142,7 @@
             {:else}
               {#each ['powersave', 'performance', 'schedutil'] as gov}
                 <DropdownMenu.Item 
-                  class="flex w-full cursor-default select-none items-center rounded-lg px-3 py-2 text-sm outline-none hover:bg-base-300 focus:bg-base-300 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 font-medium"
+                  class="flex w-full cursor-default select-none items-center rounded-lg px-3 py-2 text-sm outline-none hover:bg-base-300 focus:bg-base-300 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 font-medium {localCpuGovernor === gov ? 'bg-primary text-primary-content' : ''}"
                   onclick={() => {
                     localCpuGovernor = gov;
                     onApplyTuningChange('cpu_governor', gov);
