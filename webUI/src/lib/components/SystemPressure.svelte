@@ -10,7 +10,7 @@
   let dialogOpen = $state(false);
 </script>
 
-<div class="card bg-base-100 border border-base-content/10 shadow-sm p-6 flex flex-col gap-6">
+<div class="card bg-base-100 border border-base-content/10 shadow-sm p-4 flex flex-col gap-4">
   <div class="flex items-center justify-between">
     <div class="flex items-center gap-3">
       <Activity class="text-primary" size={22} />
@@ -29,7 +29,7 @@
     </button>
   </div>
 
-  <div class="flex flex-col gap-5 bg-base-200/20 p-4 rounded-2xl border border-base-content/5">
+  <div class="flex flex-col gap-4 bg-base-200/20 p-3 rounded-xl border border-base-content/5">
     <!-- CPU Pressure -->
     <div class="flex flex-col gap-1.5">
       <Sparkline 

@@ -48,10 +48,10 @@
 <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
   
   <!-- Checklist & Power Policy -->
-  <div class="flex flex-col gap-6">
+  <div class="flex flex-col gap-4">
     <div>
-      <h3 class="text-md font-semibold mb-4 text-base-content/80">Readiness Checklist</h3>
-      <ul class="space-y-3">
+      <h3 class="text-md font-semibold mb-2.5 text-base-content/80">Readiness Checklist</h3>
+      <ul class="space-y-2">
         <!-- Coexistence -->
         <li class="flex items-start gap-3 text-sm">
           {#if hibernation.swap_total >= hibernation.recommended_swap_bytes}
@@ -115,9 +115,9 @@
     </div>
 
     <!-- Power Policy -->
-    <div class="border-t border-base-content/10 pt-6">
-      <h3 class="text-md font-semibold mb-4 text-base-content/80">Power Policy</h3>
-      <div class="space-y-4 bg-base-200/30 p-4 rounded-2xl border border-base-content/5">
+    <div class="border-t border-base-content/10 pt-4">
+      <h3 class="text-md font-semibold mb-2.5 text-base-content/80">Power Policy</h3>
+      <div class="space-y-3 bg-base-200/30 p-3 rounded-xl border border-base-content/5">
         <div class="flex items-center justify-between">
           <span class="text-sm font-medium">Hibernate on lid close</span>
           <input type="checkbox" class="toggle toggle-secondary" bind:checked={lidCloseHibernate} onchange={onSavePowerPolicy} />
@@ -134,9 +134,9 @@
   </div>
 
   <!-- Swap Manager & Boot Config -->
-  <div class="flex flex-col gap-6">
+  <div class="flex flex-col gap-4">
     <!-- Swap Manager -->
-    <div class="bg-base-200/40 border border-base-content/5 rounded-2xl p-5 flex flex-col gap-4 relative">
+    <div class="bg-base-200/40 border border-base-content/5 rounded-2xl p-4 flex flex-col gap-3.5 relative">
       {#if loadingHibernate}
         <div class="absolute inset-0 bg-base-100/50 rounded-2xl flex items-center justify-center z-10">
           <Loader2 class="animate-spin text-secondary" size={24} />
