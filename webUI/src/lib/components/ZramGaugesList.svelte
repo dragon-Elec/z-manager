@@ -74,8 +74,7 @@
 <Dialog.Root bind:open={statsOpen}>
   <Dialog.Portal>
     <Dialog.Overlay class="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" />
-    <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <Dialog.Content class="w-full max-w-md rounded-2xl border border-base-content/10 bg-base-100/95 backdrop-blur-md p-6 shadow-lg outline-none flex flex-col gap-4">
+    <Dialog.Content class="fixed inset-0 m-auto z-50 w-full max-w-md h-fit rounded-2xl border border-base-content/10 bg-base-100/95 backdrop-blur-md p-6 shadow-lg outline-none flex flex-col gap-4">
       {#if selectedDevice}
         <Dialog.Title class="text-lg font-bold flex items-center justify-between">
           <span class="font-mono">{selectedDevice.name} Statistics</span>
@@ -170,6 +169,5 @@
         </div>
       {/if}
     </Dialog.Content>
-    </div>
   </Dialog.Portal>
 </Dialog.Root>

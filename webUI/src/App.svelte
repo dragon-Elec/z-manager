@@ -463,10 +463,10 @@
 </script>
 
 <Tooltip.Provider>
-<div class="flex flex-col md:flex-row min-h-screen bg-base-100 text-base-content relative z-10">
+<div class="flex flex-row min-h-screen bg-base-100 text-base-content relative z-10">
   
   <!-- Sidebar Navigation -->
-  <aside class="w-full md:w-64 bg-base-200 border-r border-base-content/10 p-4 flex flex-col justify-between shrink-0">
+  <aside class="w-64 bg-base-200 border-r border-base-content/10 p-4 flex flex-col justify-between shrink-0">
     <div class="flex flex-col gap-6">
       <!-- Sidebar Header -->
       <div class="flex items-center gap-3 px-2 py-3">
