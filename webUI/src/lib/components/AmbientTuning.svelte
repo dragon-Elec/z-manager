@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { Tooltip, DropdownMenu } from 'bits-ui';
-  import { Sliders, Info, Loader2, ChevronDown } from 'lucide-svelte';
+  import { Tooltip } from 'bits-ui';
+  import { Sliders, Info, Loader2 } from 'lucide-svelte';
+  import Select from './Select.svelte';
 
   let {
     tuning,
@@ -21,6 +22,12 @@
     loadingCpuGovernor: boolean;
     onApplyTuningChange: (type: 'swappiness' | 'vfs_cache_pressure' | 'cpu_governor', value: any) => void;
   }>();
+
+  // Map governors to Select items format
+  let governorItems = $derived.by(() => {
+    const govs = tuning.available_governors || ['powersave', 'performance', 'schedutil'];
+    return govs.map((gov: string) => ({ value: gov, label: gov }));
+  });
 </script>
 
 <div class="card bg-base-100 border border-base-content/10 shadow-sm p-6 flex flex-col gap-6">
@@ -119,42 +126,12 @@
         {/if}
       </div>
       
-      <DropdownMenu.Root>
-        <DropdownMenu.Trigger 
-          class="btn btn-sm btn-outline justify-between w-full font-medium"
-          disabled={loadingCpuGovernor}
-        >
-          <span class="truncate">{localCpuGovernor}</span>
-          <ChevronDown size={14} class="opacity-60 shrink-0" />
-        </DropdownMenu.Trigger>
-        <DropdownMenu.Portal>
-          <DropdownMenu.Content class="z-50 min-w-[12rem] rounded-xl border border-base-content/10 bg-base-200 p-1 shadow-lg flex flex-col gap-0.5">
-            {#each tuning.available_governors as gov}
-              <DropdownMenu.Item 
-                class="flex w-full cursor-default select-none items-center rounded-lg px-3 py-2 text-sm outline-none hover:bg-base-300 focus:bg-base-300 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 font-medium"
-                onclick={() => {
-                  localCpuGovernor = gov;
-                  onApplyTuningChange('cpu_governor', gov);
-                }}
-              >
-                {gov}
-              </DropdownMenu.Item>
-            {:else}
-              {#each ['powersave', 'performance', 'schedutil'] as gov}
-                <DropdownMenu.Item 
-                  class="flex w-full cursor-default select-none items-center rounded-lg px-3 py-2 text-sm outline-none hover:bg-base-300 focus:bg-base-300 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 font-medium"
-                  onclick={() => {
-                    localCpuGovernor = gov;
-                    onApplyTuningChange('cpu_governor', gov);
-                  }}
-                >
-                  {gov}
-                </DropdownMenu.Item>
-              {/each}
-            {/each}
-          </DropdownMenu.Content>
-        </DropdownMenu.Portal>
-      </DropdownMenu.Root>
+      <Select 
+        bind:value={localCpuGovernor}
+        items={governorItems}
+        disabled={loadingCpuGovernor}
+        onchange={(val) => onApplyTuningChange('cpu_governor', val)}
+      />
     </div>
 
   </div>
