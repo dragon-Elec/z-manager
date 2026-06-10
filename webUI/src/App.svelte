@@ -396,42 +396,44 @@
   </aside>
 
   <!-- Main Content Spoke (Independent scrolling h-full overflow-y-auto) -->
-  <main class="flex-1 h-full overflow-y-auto p-4 md:p-5 max-w-5xl">
-    {#if activeTab === 'dashboard'}
-      <DashboardTab 
-        {health} 
-        {ram} 
-        {devices} 
-        {swaps} 
-        {hibernation} 
-        {psi} 
-        {backendConnected} 
-        onConfigureDevice={handleConfigureDevice} 
-        onManageHibernation={() => activeTab = 'hibernation'} 
-      />
-    {:else}
-      <div class="flex flex-col gap-4 animate-fade-in">
-        {#if activeTab === 'zram'}
-          <ZramConfigTab 
-            {devices} 
-            {showToast} 
-            {requestConfirmation} 
-          />
-        {:else if activeTab === 'hibernation'}
-          <HibernationTab 
-            {swaps} 
-            {hibernation} 
-            {showToast} 
-            {requestConfirmation} 
-          />
-        {:else if activeTab === 'tuning'}
-          <TuningTab 
-            {tuning} 
-            {showToast} 
-          />
-        {/if}
-      </div>
-    {/if}
+  <main class="flex-1 h-full overflow-y-auto p-4 md:p-5">
+    <div class="max-w-5xl mx-auto w-full flex flex-col gap-4">
+      {#if activeTab === 'dashboard'}
+        <DashboardTab 
+          {health} 
+          {ram} 
+          {devices} 
+          {swaps} 
+          {hibernation} 
+          {psi} 
+          {backendConnected} 
+          onConfigureDevice={handleConfigureDevice} 
+          onManageHibernation={() => activeTab = 'hibernation'} 
+        />
+      {:else}
+        <div class="flex flex-col gap-4 animate-fade-in">
+          {#if activeTab === 'zram'}
+            <ZramConfigTab 
+              {devices} 
+              {showToast} 
+              {requestConfirmation} 
+            />
+          {:else if activeTab === 'hibernation'}
+            <HibernationTab 
+              {swaps} 
+              {hibernation} 
+              {showToast} 
+              {requestConfirmation} 
+            />
+          {:else if activeTab === 'tuning'}
+            <TuningTab 
+              {tuning} 
+              {showToast} 
+            />
+          {/if}
+        </div>
+      {/if}
+    </div>
   </main>
 </div>
 
