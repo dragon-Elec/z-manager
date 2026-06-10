@@ -1,12 +1,13 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { sendToPython, onPython, initSidecarBridge } from '$lib/bridge';
-  import { Tooltip, DropdownMenu } from 'bits-ui';
+  import { Tooltip } from 'bits-ui';
   import { 
     Settings, Database, AlertTriangle, Sliders, Cpu, RefreshCw, Trash2, 
     Loader2, Plus, CheckCircle2, ChevronDown, ChevronUp, Activity, Info,
     Gauge, LayoutDashboard, ShieldAlert
   } from 'lucide-svelte';
+  import { formatSize, formatBytesToSizeString } from '$lib/utils';
 
   // Import modular components
   import HealthStrip from '$lib/components/HealthStrip.svelte';
@@ -16,6 +17,7 @@
   import AmbientTuning from '$lib/components/AmbientTuning.svelte';
   import SettingsDrawer from '$lib/components/SettingsDrawer.svelte';
   import ConfirmationModal from '$lib/components/ConfirmationModal.svelte';
+  import Select from '$lib/components/Select.svelte';
 
   // Telemetry state
   let devices = $state<any[]>([]);
@@ -74,6 +76,10 @@
   let localVfsCachePressure = $state(100);
   let localCpuGovernor = $state('powersave');
 
+  let lastSwappinessChange = 0;
+  let lastVfsCachePressureChange = 0;
+  let lastCpuGovernorChange = 0;
+
   let loadingSwappiness = $state(false);
   let loadingVfsCachePressure = $state(false);
   let loadingCpuGovernor = $state(false);
@@ -124,27 +130,6 @@
     confirmOpen = true;
   }
 
-  // Format bytes to human readable
-  function formatSize(size: number) {
-    let s = size;
-    for (const unit of ['B', 'KiB', 'MiB', 'GiB', 'TiB']) {
-      if (Math.abs(s) < 1024.0) {
-        return `${s.toFixed(1)} ${unit}`;
-      }
-      s /= 1024.0;
-    }
-    return `${s.toFixed(1)} PiB`;
-  }
-
-  // Format bytes to clean size string (e.g. 2G)
-  function formatBytesToSizeString(bytes: number) {
-    if (bytes <= 0) return '1G';
-    const gb = bytes / (1024 ** 3);
-    if (gb >= 1) return `${Math.round(gb)}G`;
-    const mb = bytes / (1024 ** 2);
-    return `${Math.round(mb)}M`;
-  }
-
   let activeTheme = $derived.by(() => {
     if (themeMode === 'system') {
       return systemIsDark ? 'forest' : 'nord';
@@ -169,13 +154,19 @@
   // Helper to initialize/update ZRAM form state from telemetry
   function updateZramForms(devList: any[]) {
     devList.forEach((dev) => {
-      if (!zramForms[dev.name]) {
+      const existing = zramForms[dev.name];
+      if (!existing) {
         zramForms[dev.name] = {
           algo: dev.algo || 'zstd',
           size: formatBytesToSizeString(dev.totalBytes),
           backingDev: dev.backingDev || 'none',
           loading: false
         };
+      } else if (!existing.loading && activeTab !== 'zram') {
+        // Only sync when not on the config tab to avoid overwriting user input
+        existing.algo = dev.algo || 'zstd';
+        existing.size = formatBytesToSizeString(dev.totalBytes);
+        existing.backingDev = dev.backingDev || 'none';
       }
     });
   }
@@ -231,13 +222,14 @@
       }
       if (data.tuning) {
         tuning = data.tuning;
-        if (!loadingSwappiness && tuning.swappiness !== undefined) {
+        const now = Date.now();
+        if (!loadingSwappiness && (now - lastSwappinessChange > 2000) && tuning.swappiness !== undefined) {
           localSwappiness = tuning.swappiness;
         }
-        if (!loadingVfsCachePressure && tuning.vfs_cache_pressure !== undefined) {
+        if (!loadingVfsCachePressure && (now - lastVfsCachePressureChange > 2000) && tuning.vfs_cache_pressure !== undefined) {
           localVfsCachePressure = tuning.vfs_cache_pressure;
         }
-        if (!loadingCpuGovernor && tuning.cpu_governor !== undefined) {
+        if (!loadingCpuGovernor && (now - lastCpuGovernorChange > 2000) && tuning.cpu_governor !== undefined) {
           localCpuGovernor = tuning.cpu_governor;
         }
       }
@@ -259,9 +251,18 @@
 
   // Tuning Apply
   async function applyTuningChange(type: 'swappiness' | 'vfs_cache_pressure' | 'cpu_governor', value: any) {
-    if (type === 'swappiness') loadingSwappiness = true;
-    if (type === 'vfs_cache_pressure') loadingVfsCachePressure = true;
-    if (type === 'cpu_governor') loadingCpuGovernor = true;
+    if (type === 'swappiness') {
+      loadingSwappiness = true;
+      lastSwappinessChange = Date.now();
+    }
+    if (type === 'vfs_cache_pressure') {
+      loadingVfsCachePressure = true;
+      lastVfsCachePressureChange = Date.now();
+    }
+    if (type === 'cpu_governor') {
+      loadingCpuGovernor = true;
+      lastCpuGovernorChange = Date.now();
+    }
 
     try {
       const data = await sendToPython('apply_tuning', {
@@ -699,24 +700,15 @@
                       <div class="grid grid-cols-2 gap-3">
                         <label class="form-control">
                           <div class="label py-1"><span class="label-text text-xs font-semibold text-base-content/60">Algorithm</span></div>
-                          <DropdownMenu.Root>
-                            <DropdownMenu.Trigger class="btn btn-sm btn-outline justify-between w-full font-medium">
-                              <span>{form.algo}</span>
-                              <ChevronDown size={14} class="opacity-60 shrink-0" />
-                            </DropdownMenu.Trigger>
-                            <DropdownMenu.Portal>
-                              <DropdownMenu.Content class="z-50 min-w-[12rem] rounded-xl border border-base-content/10 bg-base-200 p-1 shadow-lg flex flex-col gap-0.5">
-                                {#each ['zstd', 'lz4', 'lzo', 'deflate'] as algo}
-                                  <DropdownMenu.Item 
-                                    class="flex w-full cursor-default select-none items-center rounded-lg px-3 py-2 text-sm outline-none hover:bg-base-300 focus:bg-base-300 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 font-medium {form.algo === algo ? 'bg-primary text-primary-content' : ''}"
-                                    onclick={() => form.algo = algo}
-                                  >
-                                    {algo === 'zstd' ? 'zstd (Recommended)' : algo === 'lz4' ? 'lz4 (Fastest)' : algo}
-                                  </DropdownMenu.Item>
-                                {/each}
-                              </DropdownMenu.Content>
-                            </DropdownMenu.Portal>
-                          </DropdownMenu.Root>
+                          <Select 
+                            bind:value={form.algo}
+                            items={[
+                              { value: 'zstd', label: 'zstd (Recommended)' },
+                              { value: 'lz4', label: 'lz4 (Fastest)' },
+                              { value: 'lzo', label: 'lzo' },
+                              { value: 'deflate', label: 'deflate' }
+                            ]}
+                          />
                         </label>
 
                         <label class="form-control">
@@ -770,24 +762,15 @@
                 <div class="grid grid-cols-1 gap-3">
                   <label class="form-control">
                     <div class="label py-1"><span class="label-text text-xs font-semibold text-base-content/60">Algorithm</span></div>
-                    <DropdownMenu.Root>
-                      <DropdownMenu.Trigger class="btn btn-sm btn-outline justify-between w-full font-medium">
-                        <span>{newDeviceAlgo}</span>
-                        <ChevronDown size={14} class="opacity-60 shrink-0" />
-                      </DropdownMenu.Trigger>
-                      <DropdownMenu.Portal>
-                        <DropdownMenu.Content class="z-50 min-w-[12rem] rounded-xl border border-base-content/10 bg-base-200 p-1 shadow-lg flex flex-col gap-0.5">
-                          {#each ['zstd', 'lz4', 'lzo', 'deflate'] as algo}
-                            <DropdownMenu.Item 
-                              class="flex w-full cursor-default select-none items-center rounded-lg px-3 py-2 text-sm outline-none hover:bg-base-300 focus:bg-base-300 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 font-medium {newDeviceAlgo === algo ? 'bg-primary text-primary-content' : ''}"
-                              onclick={() => newDeviceAlgo = algo}
-                            >
-                              {algo === 'zstd' ? 'zstd (Recommended)' : algo === 'lz4' ? 'lz4 (Fastest)' : algo}
-                            </DropdownMenu.Item>
-                          {/each}
-                        </DropdownMenu.Content>
-                      </DropdownMenu.Portal>
-                    </DropdownMenu.Root>
+                    <Select 
+                      bind:value={newDeviceAlgo}
+                      items={[
+                        { value: 'zstd', label: 'zstd (Recommended)' },
+                        { value: 'lz4', label: 'lz4 (Fastest)' },
+                        { value: 'lzo', label: 'lzo' },
+                        { value: 'deflate', label: 'deflate' }
+                      ]}
+                    />
                   </label>
 
                   <label class="form-control">

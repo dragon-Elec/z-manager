@@ -2,6 +2,7 @@
   import { Dialog } from 'bits-ui';
   import ZramGauge from './ZramGauge.svelte';
   import { Info, Settings, HardDrive, AlertTriangle, CheckCircle2, XCircle } from 'lucide-svelte';
+  import { formatSize } from '$lib/utils';
 
   let { devices, onConfigureDevice } = $props<{
     devices: any[];
@@ -14,18 +15,6 @@
   function openStats(device: any) {
     selectedDevice = device;
     statsOpen = true;
-  }
-
-  // Format bytes to human readable
-  function formatSize(size: number) {
-    let s = size;
-    for (const unit of ['B', 'KiB', 'MiB', 'GiB', 'TiB']) {
-      if (Math.abs(s) < 1024.0) {
-        return `${s.toFixed(1)} ${unit}`;
-      }
-      s /= 1024.0;
-    }
-    return `${s.toFixed(1)} PiB`;
   }
 
   let efficiency = $derived(selectedDevice && selectedDevice.comprBytes > 0 

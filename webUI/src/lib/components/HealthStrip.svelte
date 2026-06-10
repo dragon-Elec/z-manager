@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Dialog } from 'bits-ui';
   import { AlertTriangle, CheckCircle2, XCircle, Info, Shield, ShieldAlert, ShieldCheck } from 'lucide-svelte';
+  import { formatSize } from '$lib/utils';
 
   let { health, ram, devices, hibernation, backendConnected } = $props<{
     health: any;
@@ -11,18 +12,6 @@
   }>();
 
   let reportOpen = $state(false);
-
-  // Format bytes to human readable
-  function formatSize(size: number) {
-    let s = size;
-    for (const unit of ['B', 'KiB', 'MiB', 'GiB', 'TiB']) {
-      if (Math.abs(s) < 1024.0) {
-        return `${s.toFixed(1)} ${unit}`;
-      }
-      s /= 1024.0;
-    }
-    return `${s.toFixed(1)} PiB`;
-  }
 
   // Determine health status
   let isCritical = $derived(!health.sysfs_root_accessible || !health.systemd_available);
@@ -84,7 +73,7 @@
 <Dialog.Root bind:open={reportOpen}>
   <Dialog.Portal>
     <Dialog.Overlay class="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" />
-    <Dialog.Content class="fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-base-content/10 bg-base-100/95 backdrop-blur-md p-6 shadow-lg outline-none max-h-[85vh] overflow-y-auto flex flex-col gap-4">
+    <Dialog.Content class="fixed inset-0 m-auto z-50 w-full max-w-lg h-fit rounded-2xl border border-base-content/10 bg-base-100/95 backdrop-blur-md p-6 shadow-lg outline-none max-h-[85vh] overflow-y-auto flex flex-col gap-4">
       <Dialog.Title class="text-xl font-bold flex items-center gap-2">
         {#if isCritical}
           <ShieldAlert class="text-error" size={22} /> System Health Report (Critical)
@@ -172,14 +161,3 @@
     </Dialog.Content>
   </Dialog.Portal>
 </Dialog.Root>
-<style>
-  .card {
-    contain: paint layout;
-    box-sizing: border-box;
-  }
-  .card, .btn, .badge {
-    transform: translate3d(0, 0, 0);
-    backface-visibility: hidden;
-    -webkit-backface-visibility: hidden;
-  }
-</style>

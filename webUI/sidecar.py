@@ -288,7 +288,8 @@ def get_telemetry_data():
                 "priority": swap.priority
             })
     except Exception as e:
-        print(f"[Sidecar Telemetry] Error getting swaps: {e}")
+        sys.stderr.write(f"[Sidecar Telemetry] Error getting swaps: {e}\n")
+        sys.stderr.flush()
 
     # PSI
     psi_data = {}
@@ -303,7 +304,8 @@ def get_telemetry_data():
             else:
                 psi_data[res] = {"some": 0.0, "full": 0.0}
     except Exception as e:
-        print(f"[Sidecar Telemetry] Error getting PSI: {e}")
+        sys.stderr.write(f"[Sidecar Telemetry] Error getting PSI: {e}\n")
+        sys.stderr.flush()
 
     # Hibernation Readiness
     hibernation_data = {
@@ -325,7 +327,39 @@ def get_telemetry_data():
             "message": hr.message
         }
     except Exception as e:
-        print(f"[Sidecar Telemetry] Error getting hibernation readiness: {e}")
+        sys.stderr.write(f"[Sidecar Telemetry] Error getting hibernation readiness: {e}\n")
+        sys.stderr.flush()
+
+    # System Health
+    health_data = {
+        "zramctl_available": True,
+        "systemd_available": True,
+        "sysfs_root_accessible": True,
+        "zswap": {"available": False, "enabled": False, "detail": ""},
+        "journal_available": True,
+        "kernel_version": "",
+        "devices_summary": "",
+        "notes": []
+    }
+    try:
+        hr = health.check_system_health()
+        health_data = {
+            "zramctl_available": hr.zramctl_available,
+            "systemd_available": hr.systemd_available,
+            "sysfs_root_accessible": hr.sysfs_root_accessible,
+            "zswap": {
+                "available": hr.zswap.available,
+                "enabled": hr.zswap.enabled,
+                "detail": hr.zswap.detail
+            },
+            "journal_available": hr.journal_available,
+            "kernel_version": hr.kernel_version,
+            "devices_summary": hr.devices_summary,
+            "notes": hr.notes
+        }
+    except Exception as e:
+        sys.stderr.write(f"[Sidecar Telemetry] Error getting system health: {e}\n")
+        sys.stderr.flush()
 
     # Tuning settings
     tuning_data = {
@@ -342,7 +376,8 @@ def get_telemetry_data():
         tuning_data["cpu_governor"] = runtime.get_current_cpu_governor()
         tuning_data["available_governors"] = runtime.get_available_cpu_governors()
     except Exception as e:
-        print(f"[Sidecar Telemetry] Error getting tuning settings: {e}")
+        sys.stderr.write(f"[Sidecar Telemetry] Error getting tuning settings: {e}\n")
+        sys.stderr.flush()
 
     return {
         "action": "dashboard_update",
@@ -351,7 +386,8 @@ def get_telemetry_data():
         "swaps": swaps_data,
         "psi": psi_data,
         "hibernation": hibernation_data,
-        "tuning": tuning_data
+        "tuning": tuning_data,
+        "health": health_data
     }
 
 def telemetry_broadcaster(use_http=False):
@@ -360,9 +396,9 @@ def telemetry_broadcaster(use_http=False):
             data = get_telemetry_data()
             if use_http:
                 # Push to SSE queues
-                if len(sse_queues) > 0:
-                    message = f"data: {json.dumps(data)}\n\n".encode('utf-8')
-                    with sse_queues_lock:
+                with sse_queues_lock:
+                    if len(sse_queues) > 0:
+                        message = f"data: {json.dumps(data)}\n\n".encode('utf-8')
                         for q in sse_queues:
                             q.put(message)
             else:
