@@ -582,8 +582,8 @@
               <div class="flex items-center gap-2">
                 <Database class="text-secondary" size={20} />
                 <div>
-                  <h2 class="text-md font-bold">Cold Tier & Swap</h2>
-                  <p class="text-xs text-base-content/60">Persistent Storage · Swap files & partitions</p>
+                  <h2 class="text-md font-bold">Cold Tier & Hibernation</h2>
+                  <p class="text-xs text-base-content/60">Persistent Storage · Swap & Hibernation readiness</p>
                 </div>
               </div>
               <button 
