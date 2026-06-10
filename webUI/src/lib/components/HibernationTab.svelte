@@ -209,12 +209,20 @@
         <div class="grid grid-cols-2 gap-2.5">
           <label class="form-control">
             <span class="text-3xs uppercase tracking-wider text-base-content/50 font-bold mb-1">Size (MB)</span>
-            <input type="number" class="input input-xs input-bordered w-full font-mono font-semibold" bind:value={swapSizeMb} />
+            <div class="join w-full">
+              <button class="btn btn-xs join-item btn-neutral font-bold" onclick={() => swapSizeMb = Math.max(1024, Number(swapSizeMb) - 1024)}>-</button>
+              <input type="text" class="input input-xs join-item input-bordered w-full text-center font-mono font-semibold" bind:value={swapSizeMb} />
+              <button class="btn btn-xs join-item btn-neutral font-bold" onclick={() => swapSizeMb = Number(swapSizeMb) + 1024}>+</button>
+            </div>
           </label>
 
           <label class="form-control">
             <span class="text-3xs uppercase tracking-wider text-base-content/50 font-bold mb-1">Priority</span>
-            <input type="number" class="input input-xs input-bordered w-full font-mono font-semibold" bind:value={swapPriority} />
+            <div class="join w-full">
+              <button class="btn btn-xs join-item btn-neutral font-bold" onclick={() => swapPriority = Number(swapPriority) - 1}>-</button>
+              <input type="text" class="input input-xs join-item input-bordered w-full text-center font-mono font-semibold" bind:value={swapPriority} />
+              <button class="btn btn-xs join-item btn-neutral font-bold" onclick={() => swapPriority = Number(swapPriority) + 1}>+</button>
+            </div>
           </label>
         </div>
 
