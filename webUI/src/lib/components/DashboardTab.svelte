@@ -1,6 +1,5 @@
 <script lang="ts">
   import { Database, Loader2, CheckCircle2, AlertTriangle } from 'lucide-svelte';
-  import { Tooltip } from 'bits-ui';
   import HealthStrip from './HealthStrip.svelte';
   import ZramGaugesList from './ZramGaugesList.svelte';
   import SystemPressure from './SystemPressure.svelte';
@@ -96,20 +95,15 @@
           <div class="flex items-center gap-3 bg-base-200/30 border border-base-content/5 p-3 rounded-xl">
             <span class="text-xs font-semibold uppercase tracking-wider text-base-content/50">Readiness:</span>
             
-            <Tooltip.Root>
-              <Tooltip.Trigger class="badge badge-sm {hibernation.ready ? 'badge-primary' : 'badge-warning animate-pulse'} font-semibold gap-1 cursor-help shrink-0">
+            <div class="tooltip tooltip-right text-xs font-normal normal-case before:max-w-xs before:whitespace-normal" data-tip={hibernation.message}>
+              <span class="badge badge-sm {hibernation.ready ? 'badge-primary' : 'badge-warning animate-pulse'} font-semibold gap-1 cursor-help shrink-0">
                 {#if hibernation.ready}
                   <CheckCircle2 size={12} /> Ready
                 {:else}
                   <AlertTriangle size={12} /> Config Needed
                 {/if}
-              </Tooltip.Trigger>
-              <Tooltip.Portal>
-                <Tooltip.Content class="z-50 max-w-xs rounded-xl border border-base-content/10 bg-neutral text-neutral-content p-3 text-xs shadow-lg">
-                  {hibernation.message}
-                </Tooltip.Content>
-              </Tooltip.Portal>
-            </Tooltip.Root>
+              </span>
+            </div>
           </div>
 
           <!-- Swap Tiers list -->

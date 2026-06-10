@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { Tooltip } from 'bits-ui';
-  import { Sliders, Info, Loader2, HardDrive, ShieldAlert } from 'lucide-svelte';
+  import { Sliders, Info, Loader2, ShieldAlert } from 'lucide-svelte';
   import Select from './Select.svelte';
   import { sendToPython } from '../bridge';
 
@@ -129,14 +128,9 @@
           <div class="flex justify-between items-center mb-1.5">
             <span class="text-xs font-semibold text-base-content/60 flex items-center gap-1.5">
               Swappiness
-              <Tooltip.Root>
-                <Tooltip.Trigger class="cursor-help text-base-content/40 hover:text-base-content"><Info size={13} /></Tooltip.Trigger>
-                <Tooltip.Portal>
-                  <Tooltip.Content class="z-50 max-w-xs rounded-xl border border-base-content/10 bg-neutral text-neutral-content p-3 text-xs shadow-lg">
-                    Controls how aggressively the kernel swaps memory pages. Lower values reduce swapping (preferring RAM), higher values swap early.
-                  </Tooltip.Content>
-                </Tooltip.Portal>
-              </Tooltip.Root>
+              <div class="tooltip tooltip-right tooltip-primary text-xs font-normal normal-case before:max-w-xs before:whitespace-normal" data-tip="Controls how aggressively the kernel swaps memory pages. Lower values reduce swapping (preferring RAM), higher values swap early.">
+                <Info class="cursor-help text-base-content/40 hover:text-base-content" size={13} />
+              </div>
             </span>
             <div class="flex items-center gap-1.5">
               {#if loadingSwappiness}
@@ -161,14 +155,9 @@
           <div class="flex justify-between items-center mb-1.5">
             <span class="text-xs font-semibold text-base-content/60 flex items-center gap-1.5">
               VFS Cache Pressure
-              <Tooltip.Root>
-                <Tooltip.Trigger class="cursor-help text-base-content/40 hover:text-base-content"><Info size={13} /></Tooltip.Trigger>
-                <Tooltip.Portal>
-                  <Tooltip.Content class="z-50 max-w-xs rounded-xl border border-base-content/10 bg-neutral text-neutral-content p-3 text-xs shadow-lg">
-                    Controls the kernel's tendency to reclaim memory used for directory and inode cache. Lower values retain cache, higher values reclaim aggressively.
-                  </Tooltip.Content>
-                </Tooltip.Portal>
-              </Tooltip.Root>
+              <div class="tooltip tooltip-right tooltip-secondary text-xs font-normal normal-case before:max-w-xs before:whitespace-normal" data-tip="Controls the kernel's tendency to reclaim memory used for directory and inode cache. Lower values retain cache, higher values reclaim aggressively.">
+                <Info class="cursor-help text-base-content/40 hover:text-base-content" size={13} />
+              </div>
             </span>
             <div class="flex items-center gap-1.5">
               {#if loadingVfsCachePressure}
@@ -193,14 +182,9 @@
           <div class="flex justify-between items-center mb-1.5">
             <span class="text-xs font-semibold text-base-content/60 flex items-center gap-1.5">
               CPU Governor
-              <Tooltip.Root>
-                <Tooltip.Trigger class="cursor-help text-base-content/40 hover:text-base-content"><Info size={13} /></Tooltip.Trigger>
-                <Tooltip.Portal>
-                  <Tooltip.Content class="z-50 max-w-xs rounded-xl border border-base-content/10 bg-neutral text-neutral-content p-3 text-xs shadow-lg">
-                    CPU scaling governor. 'performance' forces maximum frequency, 'powersave' balances dynamically.
-                  </Tooltip.Content>
-                </Tooltip.Portal>
-              </Tooltip.Root>
+              <div class="tooltip tooltip-left tooltip-accent text-xs font-normal normal-case before:max-w-xs before:whitespace-normal" data-tip="CPU scaling governor. 'performance' forces maximum frequency, 'powersave' balances dynamically.">
+                <Info class="cursor-help text-base-content/40 hover:text-base-content" size={13} />
+              </div>
             </span>
             {#if loadingCpuGovernor}
               <Loader2 class="animate-spin text-accent" size={12} />
@@ -231,14 +215,9 @@
           <div class="flex items-center justify-between text-xs">
             <span class="font-semibold text-base-content/70 flex items-center gap-1.5">
               Kernel ZSwap Cache
-              <Tooltip.Root>
-                <Tooltip.Trigger class="cursor-help text-base-content/40 hover:text-base-content"><Info size={13} /></Tooltip.Trigger>
-                <Tooltip.Portal>
-                  <Tooltip.Content class="z-50 max-w-xs rounded-xl border border-base-content/10 bg-neutral text-neutral-content p-3 text-xs shadow-lg">
-                    ZSwap acts as a compressed writeback cache for swaps. When ZRAM is configured, keeping ZSwap enabled wastes CPU cycles compressing pages twice. Disabling is recommended.
-                  </Tooltip.Content>
-                </Tooltip.Portal>
-              </Tooltip.Root>
+              <div class="tooltip tooltip-right tooltip-primary text-xs font-normal normal-case before:max-w-xs before:whitespace-normal" data-tip="ZSwap acts as a compressed writeback cache for swaps. When ZRAM is configured, keeping ZSwap enabled wastes CPU cycles compressing pages twice. Disabling is recommended.">
+                <Info class="cursor-help text-base-content/40 hover:text-base-content" size={13} />
+              </div>
             </span>
             <div class="flex items-center gap-2">
               {#if loadingZswap}
@@ -258,14 +237,9 @@
           <div class="flex items-center justify-between text-xs border-t border-base-content/5 pt-2.5">
             <span class="font-semibold text-base-content/70 flex items-center gap-1.5">
               Pressure Stall Information (PSI)
-              <Tooltip.Root>
-                <Tooltip.Trigger class="cursor-help text-base-content/40 hover:text-base-content"><Info size={13} /></Tooltip.Trigger>
-                <Tooltip.Portal>
-                  <Tooltip.Content class="z-50 max-w-xs rounded-xl border border-base-content/10 bg-neutral text-neutral-content p-3 text-xs shadow-lg">
-                    Enables the kernel PSI subsystem to report CPU, Memory, and I/O pressure stall telemetry. Required for dashboard pressure charts.
-                  </Tooltip.Content>
-                </Tooltip.Portal>
-              </Tooltip.Root>
+              <div class="tooltip tooltip-right tooltip-primary text-xs font-normal normal-case before:max-w-xs before:whitespace-normal" data-tip="Enables the kernel PSI subsystem to report CPU, Memory, and I/O pressure stall telemetry. Required for dashboard pressure charts.">
+                <Info class="cursor-help text-base-content/40 hover:text-base-content" size={13} />
+              </div>
             </span>
             <div class="flex items-center gap-2">
               {#if loadingPsi}

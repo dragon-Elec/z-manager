@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { Tooltip } from 'bits-ui';
   import { 
     Database, HelpCircle, CheckCircle2, AlertTriangle, XCircle, Plus, Loader2 
   } from 'lucide-svelte';
