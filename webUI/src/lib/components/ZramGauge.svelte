@@ -83,15 +83,13 @@
 >
   
   <!-- Writeback Icon + Stats (Top Left) -->
-  {#if backingDev && backingDev !== 'none' && backingDev !== 'None Selected'}
+  {#if backingDev && backingDev !== 'none' && backingDev !== 'None Selected' && backingDev !== 'none selected'}
     <div 
-      class="absolute top-2 left-2 flex items-center gap-1 text-[10px] font-condensed text-base-content/60"
-      title="Writeback: {backingDev} ({formatSize(bdUsed)} / {formatSize(bdLimit)})"
+      class="absolute top-2 left-2 flex items-center gap-1 text-[10px] font-condensed text-base-content/60 bg-base-300/40 px-1.5 py-0.5 rounded-md border border-base-content/5"
+      title="Writeback: {backingDev} ({wbNum} pages written)"
     >
-      <HardDrive size={13} class="opacity-60" />
-      {#if bdLimit > 0}
-        <span>{formatSizeCompact(bdUsed)}/{formatSizeCompact(bdLimit)}</span>
-      {/if}
+      <HardDrive size={11} class="opacity-60" />
+      <span>{formatSizeCompact(wbNum * 4096)}</span>
     </div>
   {/if}
 
