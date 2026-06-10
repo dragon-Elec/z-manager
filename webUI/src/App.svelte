@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { 
-    LayoutDashboard, Gauge, Database, Sliders, Settings, ShieldAlert 
+    LayoutDashboard, Gauge, Database, Sliders, Settings, ShieldAlert,
+    ChevronLeft, ChevronRight
   } from 'lucide-svelte';
   import { Tooltip } from 'bits-ui';
   
@@ -23,6 +24,7 @@
   let backendConnected = $state(false);
   let themeMode = $state('system');
   let settingsOpen = $state(false);
+  let sidebarExpanded = $state(true);
 
   // Telemetry Data
   let health = $state<{
@@ -106,6 +108,9 @@
     if (typeof window !== 'undefined' && !window.webkit?.messageHandlers?.zmanager) {
       initSidecarBridge(8000);
     }
+
+    // Load sidebar expansion state
+    sidebarExpanded = localStorage.getItem('sidebar-expanded') !== 'false';
 
     // Lock pinch-to-zoom gestures
     document.addEventListener('touchmove', (event) => {
@@ -195,6 +200,11 @@
     activeTab = 'zram';
   }
 
+  function toggleSidebar() {
+    sidebarExpanded = !sidebarExpanded;
+    localStorage.setItem('sidebar-expanded', String(sidebarExpanded));
+  }
+
   // Sidebar dot color class
   let healthDotClass = $derived.by(() => {
     if (!health.sysfs_root_accessible || !health.systemd_available) {
@@ -208,68 +218,172 @@
 </script>
 
 <Tooltip.Provider>
-<div class="flex flex-row min-h-screen bg-base-100 text-base-content relative z-10">
+<!-- Lock viewport height to h-screen and prevent parent scrolling -->
+<div class="flex flex-row h-screen max-h-screen overflow-hidden bg-base-100 text-base-content relative z-10">
   
-  <!-- Sidebar Navigation -->
-  <aside class="w-44 bg-base-200 border-r border-base-content/10 p-3 flex flex-col justify-between shrink-0 select-none">
-    <div class="flex flex-col gap-4">
+  <!-- Sidebar Navigation (Resizable: w-44 or w-14) -->
+  <aside class="h-full bg-base-200 border-r border-base-content/10 p-3 flex flex-col justify-between shrink-0 select-none transition-all duration-300 {sidebarExpanded ? 'w-44' : 'w-14 items-center'}">
+    <div class="flex flex-col gap-4 w-full">
       <!-- Sidebar Header -->
-      <div class="flex items-center gap-2.5 px-1 py-2">
-        <span class="w-3 h-3 rounded-full {healthDotClass} transition-colors duration-500 shadow-sm"></span>
-        <h1 class="text-lg font-bold tracking-tight font-sans">Z-Manager</h1>
-      </div>
+      {#if sidebarExpanded}
+        <div class="flex items-center justify-between px-1 py-2 w-full">
+          <div class="flex items-center gap-2.5">
+            <span class="w-3 h-3 rounded-full {healthDotClass} transition-colors duration-500 shadow-sm shrink-0"></span>
+            <h1 class="text-lg font-bold tracking-tight font-sans">Z-Manager</h1>
+          </div>
+          <button class="btn btn-2xs btn-ghost btn-circle text-base-content/50 hover:text-base-content" onclick={toggleSidebar} aria-label="Collapse Sidebar">
+            <ChevronLeft size={14} />
+          </button>
+        </div>
+      {:else}
+        <div class="flex flex-col items-center gap-3 py-2 w-full">
+          <span class="w-3 h-3 rounded-full {healthDotClass} transition-colors duration-500 shadow-sm"></span>
+          <button class="btn btn-2xs btn-ghost btn-circle text-base-content/50 hover:text-base-content" onclick={toggleSidebar} aria-label="Expand Sidebar">
+            <ChevronRight size={14} />
+          </button>
+        </div>
+      {/if}
       
       <!-- Navigation Menu -->
-      <ul role="tablist" class="menu p-0 gap-1 text-sm">
+      <ul role="tablist" class="menu p-0 gap-1 text-sm w-full">
+        <!-- Dashboard Tab -->
         <li>
-          <button 
-            role="tab"
-            class="font-semibold flex items-center gap-2 px-3 py-2 rounded-xl transition-all {activeTab === 'dashboard' ? 'active bg-primary text-primary-content' : 'text-base-content/70 hover:text-base-content hover:bg-base-300/50'}" 
-            onclick={() => activeTab = 'dashboard'}
-          >
-            <LayoutDashboard size={16} /> Dashboard
-          </button>
+          {#if sidebarExpanded}
+            <button 
+              role="tab"
+              class="font-semibold flex items-center gap-2 px-3 py-2 rounded-xl transition-all {activeTab === 'dashboard' ? 'active bg-primary text-primary-content' : 'text-base-content/70 hover:text-base-content hover:bg-base-300/50'}" 
+              onclick={() => activeTab = 'dashboard'}
+            >
+              <LayoutDashboard size={16} /> Dashboard
+            </button>
+          {:else}
+            <Tooltip.Root>
+              <Tooltip.Trigger 
+                role="tab"
+                class="btn btn-sm flex items-center justify-center rounded-xl p-0 transition-all w-8 h-8 min-h-0 border-0 {activeTab === 'dashboard' ? 'bg-primary text-primary-content hover:bg-primary' : 'bg-transparent text-base-content/70 hover:bg-base-300/50 hover:text-base-content'}"
+                onclick={() => activeTab = 'dashboard'}
+              >
+                <LayoutDashboard size={16} />
+              </Tooltip.Trigger>
+              <Tooltip.Portal>
+                <Tooltip.Content class="z-50 rounded-xl border border-base-content/10 bg-neutral text-neutral-content px-3 py-1.5 text-xs shadow-lg" side="right">
+                  Dashboard
+                </Tooltip.Content>
+              </Tooltip.Portal>
+            </Tooltip.Root>
+          {/if}
         </li>
+
+        <!-- ZRAM Config Tab -->
         <li>
-          <button 
-            role="tab"
-            class="font-semibold flex items-center gap-2 px-3 py-2 rounded-xl transition-all {activeTab === 'zram' ? 'active bg-primary text-primary-content' : 'text-base-content/70 hover:text-base-content hover:bg-base-300/50'}" 
-            onclick={() => activeTab = 'zram'}
-          >
-            <Gauge size={16} /> ZRAM Config
-          </button>
+          {#if sidebarExpanded}
+            <button 
+              role="tab"
+              class="font-semibold flex items-center gap-2 px-3 py-2 rounded-xl transition-all {activeTab === 'zram' ? 'active bg-primary text-primary-content' : 'text-base-content/70 hover:text-base-content hover:bg-base-300/50'}" 
+              onclick={() => activeTab = 'zram'}
+            >
+              <Gauge size={16} /> ZRAM Config
+            </button>
+          {:else}
+            <Tooltip.Root>
+              <Tooltip.Trigger 
+                role="tab"
+                class="btn btn-sm flex items-center justify-center rounded-xl p-0 transition-all w-8 h-8 min-h-0 border-0 {activeTab === 'zram' ? 'bg-primary text-primary-content hover:bg-primary' : 'bg-transparent text-base-content/70 hover:bg-base-300/50 hover:text-base-content'}"
+                onclick={() => activeTab = 'zram'}
+              >
+                <Gauge size={16} />
+              </Tooltip.Trigger>
+              <Tooltip.Portal>
+                <Tooltip.Content class="z-50 rounded-xl border border-base-content/10 bg-neutral text-neutral-content px-3 py-1.5 text-xs shadow-lg" side="right">
+                  ZRAM Configuration
+                </Tooltip.Content>
+              </Tooltip.Portal>
+            </Tooltip.Root>
+          {/if}
         </li>
+
+        <!-- Hibernation Tab -->
         <li>
-          <button 
-            role="tab"
-            class="font-semibold flex items-center gap-2 px-3 py-2 rounded-xl transition-all {activeTab === 'hibernation' ? 'active bg-primary text-primary-content' : 'text-base-content/70 hover:text-base-content hover:bg-base-300/50'}" 
-            onclick={() => activeTab = 'hibernation'}
-          >
-            <Database size={16} /> Hibernation
-          </button>
+          {#if sidebarExpanded}
+            <button 
+              role="tab"
+              class="font-semibold flex items-center gap-2 px-3 py-2 rounded-xl transition-all {activeTab === 'hibernation' ? 'active bg-primary text-primary-content' : 'text-base-content/70 hover:text-base-content hover:bg-base-300/50'}" 
+              onclick={() => activeTab = 'hibernation'}
+            >
+              <Database size={16} /> Hibernation
+            </button>
+          {:else}
+            <Tooltip.Root>
+              <Tooltip.Trigger 
+                role="tab"
+                class="btn btn-sm flex items-center justify-center rounded-xl p-0 transition-all w-8 h-8 min-h-0 border-0 {activeTab === 'hibernation' ? 'bg-primary text-primary-content hover:bg-primary' : 'bg-transparent text-base-content/70 hover:bg-base-300/50 hover:text-base-content'}"
+                onclick={() => activeTab = 'hibernation'}
+              >
+                <Database size={16} />
+              </Tooltip.Trigger>
+              <Tooltip.Portal>
+                <Tooltip.Content class="z-50 rounded-xl border border-base-content/10 bg-neutral text-neutral-content px-3 py-1.5 text-xs shadow-lg" side="right">
+                  Hibernation
+                </Tooltip.Content>
+              </Tooltip.Portal>
+            </Tooltip.Root>
+          {/if}
         </li>
+
+        <!-- Tuning Tab -->
         <li>
-          <button 
-            role="tab"
-            class="font-semibold flex items-center gap-2 px-3 py-2 rounded-xl transition-all {activeTab === 'tuning' ? 'active bg-primary text-primary-content' : 'text-base-content/70 hover:text-base-content hover:bg-base-300/50'}" 
-            onclick={() => activeTab = 'tuning'}
-          >
-            <Sliders size={16} /> Tuning
-          </button>
+          {#if sidebarExpanded}
+            <button 
+              role="tab"
+              class="font-semibold flex items-center gap-2 px-3 py-2 rounded-xl transition-all {activeTab === 'tuning' ? 'active bg-primary text-primary-content' : 'text-base-content/70 hover:text-base-content hover:bg-base-300/50'}" 
+              onclick={() => activeTab = 'tuning'}
+            >
+              <Sliders size={16} /> Tuning
+            </button>
+          {:else}
+            <Tooltip.Root>
+              <Tooltip.Trigger 
+                role="tab"
+                class="btn btn-sm flex items-center justify-center rounded-xl p-0 transition-all w-8 h-8 min-h-0 border-0 {activeTab === 'tuning' ? 'bg-primary text-primary-content hover:bg-primary' : 'bg-transparent text-base-content/70 hover:bg-base-300/50 hover:text-base-content'}"
+                onclick={() => activeTab = 'tuning'}
+              >
+                <Sliders size={16} />
+              </Tooltip.Trigger>
+              <Tooltip.Portal>
+                <Tooltip.Content class="z-50 rounded-xl border border-base-content/10 bg-neutral text-neutral-content px-3 py-1.5 text-xs shadow-lg" side="right">
+                  System Tuning
+                </Tooltip.Content>
+              </Tooltip.Portal>
+            </Tooltip.Root>
+          {/if}
         </li>
       </ul>
     </div>
 
     <!-- Sidebar Footer -->
-    <div class="border-t border-base-content/10 pt-3 flex flex-col gap-2">
-      <div class="flex items-center justify-between">
-        <div class="flex flex-col gap-0.5 text-2xs text-base-content/40">
-          <div class="flex items-center gap-1.5">
-            <span class="inline-block w-1.5 h-1.5 rounded-full {backendConnected ? 'bg-primary' : 'bg-error'}"></span>
-            <span>{backendConnected ? 'Connected' : 'Offline'}</span>
+    <div class="border-t border-base-content/10 pt-3 flex flex-col gap-2 w-full items-center">
+      <div class="flex items-center justify-between w-full {sidebarExpanded ? 'flex-row' : 'flex-col gap-2'}">
+        {#if sidebarExpanded}
+          <div class="flex flex-col gap-0.5 text-2xs text-base-content/40">
+            <div class="flex items-center gap-1.5">
+              <span class="inline-block w-1.5 h-1.5 rounded-full {backendConnected ? 'bg-primary' : 'bg-error'}"></span>
+              <span>{backendConnected ? 'Connected' : 'Offline'}</span>
+            </div>
+            <span>v0.9.0-beta</span>
           </div>
-          <span>v0.9.0-beta</span>
-        </div>
+        {:else}
+          <Tooltip.Root>
+            <Tooltip.Trigger class="cursor-default">
+              <span class="inline-block w-2.5 h-2.5 rounded-full {backendConnected ? 'bg-primary' : 'bg-error'}"></span>
+            </Tooltip.Trigger>
+            <Tooltip.Portal>
+              <Tooltip.Content class="z-50 rounded-xl border border-base-content/10 bg-neutral text-neutral-content px-3 py-1.5 text-xs shadow-lg" side="right">
+                {backendConnected ? 'Connected' : 'Offline'}
+              </Tooltip.Content>
+            </Tooltip.Portal>
+          </Tooltip.Root>
+        {/if}
+
         <button 
           class="btn btn-xs btn-ghost btn-circle text-base-content/70 hover:text-base-content"
           onclick={() => settingsOpen = true}
@@ -281,8 +395,8 @@
     </div>
   </aside>
 
-  <!-- Main Content Spoke (Tighter padding: p-4 md:p-5) -->
-  <main class="flex-1 p-4 md:p-5 overflow-y-auto max-w-5xl">
+  <!-- Main Content Spoke (Independent scrolling h-full overflow-y-auto) -->
+  <main class="flex-1 h-full overflow-y-auto p-4 md:p-5 max-w-5xl">
     {#if activeTab === 'dashboard'}
       <DashboardTab 
         {health} 
