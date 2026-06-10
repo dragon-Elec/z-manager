@@ -3,6 +3,30 @@
   themes: all;
 }
 
+@plugin "daisyui/theme" {
+  name: "nord-dark";
+  --color-primary: #88c0d0;
+  --color-primary-content: #2e3440;
+  --color-secondary: #81a1c1;
+  --color-secondary-content: #d8dee9;
+  --color-accent: #8fbcbb;
+  --color-accent-content: #2e3440;
+  --color-neutral: #3b4252;
+  --color-neutral-content: #d8dee9;
+  --color-base-100: #2e3440;
+  --color-base-200: #3b4252;
+  --color-base-300: #434c5e;
+  --color-base-content: #d8dee9;
+  --color-info: #5e81ac;
+  --color-info-content: #eceff4;
+  --color-success: #a3be8c;
+  --color-success-content: #2e3440;
+  --color-warning: #ebcb8b;
+  --color-warning-content: #2e3440;
+  --color-error: #bf616a;
+  --color-error-content: #eceff4;
+}
+
 html, body {
   margin: 0;
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;

@@ -132,10 +132,10 @@
 
   let activeTheme = $derived.by(() => {
     if (themeMode === 'system') {
-      return systemIsDark ? 'forest' : 'nord';
+      return systemIsDark ? 'nord-dark' : 'nord';
     }
     if (themeMode === 'dark') {
-      return 'forest';
+      return 'nord-dark';
     }
     if (themeMode === 'light') {
       return 'nord';
