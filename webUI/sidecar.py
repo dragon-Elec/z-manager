@@ -127,9 +127,12 @@ def handle_action(action, payload):
             swappiness = payload.get("swappiness")
             vfs_cache_pressure = payload.get("vfs_cache_pressure")
             cpu_governor = payload.get("cpu_governor")
+            zswap_enabled = payload.get("zswap_enabled")
+            psi_enabled = payload.get("psi_enabled")
             
             success = True
             errors = []
+            grub_changed = False
             
             # 1. Apply sysctl values
             sysctl_settings = {}
@@ -151,8 +154,29 @@ def handle_action(action, payload):
                     success = False
                     errors.append(f"Failed to set CPU governor to {cpu_governor}")
                     
+            # 3. Apply ZSwap GRUB configuration
+            if zswap_enabled is not None:
+                res = boot_config.set_zswap_in_grub(zswap_enabled)
+                if not res.success:
+                    success = False
+                    errors.append(res.message)
+                elif res.changed:
+                    grub_changed = True
+                    
+            # 4. Apply PSI GRUB configuration
+            if psi_enabled is not None:
+                res = boot_config.set_psi_in_grub(psi_enabled)
+                if not res.success:
+                    success = False
+                    errors.append(res.message)
+                elif res.changed:
+                    grub_changed = True
+                    
             if success:
-                return {"status": "success", "message": "Tuning settings applied successfully."}
+                msg = "Tuning settings applied successfully."
+                if grub_changed:
+                    msg += " GRUB configuration updated. Please run 'Regenerate Bootloader' under the Hibernation tab to apply persistently."
+                return {"status": "success", "message": msg}
             else:
                 return {"status": "error", "message": "; ".join(errors)}
         
@@ -375,6 +399,9 @@ def get_telemetry_data():
         tuning_data["vfs_cache_pressure"] = runtime.get_vfs_cache_pressure()
         tuning_data["cpu_governor"] = runtime.get_current_cpu_governor()
         tuning_data["available_governors"] = runtime.get_available_cpu_governors()
+        from core.utils.kernel_cmdline import is_kernel_param_active
+        tuning_data["zswap_active"] = not is_kernel_param_active("zswap.enabled=0")
+        tuning_data["psi_active"] = is_kernel_param_active("psi=1")
     except Exception as e:
         sys.stderr.write(f"[Sidecar Telemetry] Error getting tuning settings: {e}\n")
         sys.stderr.flush()
