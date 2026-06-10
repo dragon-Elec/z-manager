@@ -25,7 +25,7 @@
   let themeMode = $state('system');
   let settingsOpen = $state(false);
   let sidebarExpanded = $state(true);
-
+  let updateTick = $state(0);
   // Telemetry Data
   let health = $state<{
     zramctl_available: boolean;
@@ -165,6 +165,7 @@
       if (data.hibernation) hibernation = data.hibernation;
       if (data.psi) psi = data.psi;
       if (data.tuning) tuning = data.tuning;
+      updateTick += 1;
     });
 
     onPython('connection_status', (connected) => {
@@ -397,7 +398,7 @@
 
   <!-- Main Content Spoke (Independent scrolling h-full overflow-y-auto) -->
   <main class="flex-1 h-full overflow-y-auto p-4 md:p-5">
-    <div class="max-w-5xl mx-auto w-full flex flex-col gap-4">
+    <div class="w-full flex flex-col gap-4">
       {#if activeTab === 'dashboard'}
         <DashboardTab 
           {health} 
@@ -407,6 +408,7 @@
           {hibernation} 
           {psi} 
           {backendConnected} 
+          {updateTick}
           onConfigureDevice={handleConfigureDevice} 
           onManageHibernation={() => activeTab = 'hibernation'} 
         />

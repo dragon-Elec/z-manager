@@ -1,16 +1,18 @@
 <script lang="ts">
   import { untrack } from 'svelte';
 
-  let { value = 0, label = "", colorClass = "stroke-primary" } = $props<{
+  let { value = 0, label = "", colorClass = "stroke-primary", updateTick = 0 } = $props<{
     value: number;
     label: string;
     colorClass?: string;
+    updateTick?: number;
   }>();
 
   let history = $state<number[]>([]);
 
   // Push new value to history and keep last 60 points (60 seconds)
   $effect(() => {
+    const tick = updateTick;
     const currentVal = value;
     untrack(() => {
       history = [...history, currentVal].slice(-60);
@@ -35,13 +37,13 @@
 
 <div class="flex items-center justify-between gap-4 w-full">
   <div class="flex flex-col">
-    <span class="text-xs uppercase tracking-wider text-base-content/50 font-semibold">{label}</span>
+    <span class="text-[10px] uppercase tracking-wider text-base-content/50 font-semibold">{label}</span>
     <span class="text-xl font-mono font-bold">{value.toFixed(2)}%</span>
   </div>
   
-  <div class="flex-1 max-w-[200px] h-[40px] relative">
+  <div class="flex-1 max-w-[320px] h-[40px] relative">
     {#if history.length > 1}
-      <svg class="w-full h-full overflow-visible" viewBox="0 0 200 40">
+      <svg class="w-full h-full overflow-visible" viewBox="0 0 200 40" preserveAspectRatio="none">
         <!-- Area fill under sparkline -->
         <path
           d="{pathData} L 200,40 L 0,40 Z"

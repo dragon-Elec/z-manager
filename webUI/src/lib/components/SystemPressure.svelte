@@ -3,14 +3,14 @@
   import { Activity, HelpCircle, Info, X } from 'lucide-svelte';
   import { Dialog } from 'bits-ui';
 
-  let { psi } = $props<{
+  let { psi, updateTick } = $props<{
     psi: any;
+    updateTick: number;
   }>();
 
   let dialogOpen = $state(false);
 </script>
-
-<div class="card bg-base-100 border border-base-content/10 shadow-sm p-4 flex flex-col gap-4">
+<div class="card bg-base-100 border border-base-content/10 shadow-sm p-4 flex flex-col gap-4 min-w-[380px]">
   <div class="flex items-center justify-between">
     <div class="flex items-center gap-3">
       <Activity class="text-primary" size={22} />
@@ -36,6 +36,7 @@
         value={psi?.cpu?.some ?? 0} 
         label="CPU Stall (Some)" 
         colorClass="stroke-secondary"
+        {updateTick}
       />
       <span class="text-[10px] text-base-content/40 font-semibold uppercase px-1">CPU has no 'Full' stall metric</span>
     </div>
@@ -49,6 +50,7 @@
           value={psi?.memory?.some ?? 0} 
           label="Memory Stall (Some)" 
           colorClass={psi?.memory?.some > 15 ? 'stroke-warning' : 'stroke-primary'}
+          {updateTick}
         />
         <span class="text-[10px] text-base-content/40 px-1">Tasks delayed waiting for RAM</span>
       </div>
@@ -57,6 +59,7 @@
           value={psi?.memory?.full ?? 0} 
           label="Memory Stall (Full)" 
           colorClass={psi?.memory?.full > 5 ? 'stroke-error animate-pulse' : 'stroke-secondary'}
+          {updateTick}
         />
         <span class="text-[10px] text-base-content/40 px-1">All tasks blocked (Active Thrashing indicator)</span>
       </div>
@@ -71,6 +74,7 @@
           value={psi?.io?.some ?? 0} 
           label="I/O Stall (Some)" 
           colorClass="stroke-accent"
+          {updateTick}
         />
         <span class="text-[10px] text-base-content/40 px-1">Tasks delayed waiting for Disk/Swap read/write</span>
       </div>
@@ -79,6 +83,7 @@
           value={psi?.io?.full ?? 0} 
           label="I/O Stall (Full)" 
           colorClass="stroke-warning"
+          {updateTick}
         />
         <span class="text-[10px] text-base-content/40 px-1">All tasks blocked waiting for storage operations</span>
       </div>

@@ -73,6 +73,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Z-Manager (Qt)")
         self.resize(1024, 768)
+        self.setMinimumSize(800, 600)
 
         # Resolve sidecar path
         self.sidecar_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "sidecar.py"))

@@ -13,6 +13,7 @@
     hibernation,
     psi,
     backendConnected,
+    updateTick,
     onConfigureDevice,
     onManageHibernation
   } = $props<{
@@ -23,14 +24,15 @@
     hibernation: any;
     psi: any;
     backendConnected: boolean;
+    updateTick: number;
     onConfigureDevice: (deviceName: string) => void;
     onManageHibernation: () => void;
   }>();
 </script>
 
-<div class="flex flex-col gap-4 animate-fade-in">
+<div class="flex flex-col gap-4 animate-fade-in w-full">
   
-  <!-- Zone A: Health Strip -->
+  <!-- Zone A: Health Strip (Full Width) -->
   <HealthStrip 
     {health} 
     {ram} 
@@ -39,43 +41,41 @@
     {backendConnected} 
   />
 
-  <!-- Flexible Bento Grid Layout -->
-  <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
-    
-    <!-- Zone B: ZRAM Live Telemetry (Spans 2 columns on large screens for wide monitoring) -->
-    <div class="lg:col-span-2 card bg-base-100 border border-base-content/10 shadow-sm p-4 flex flex-col gap-4">
-      <div class="flex items-center justify-between">
-        <div>
-          <h2 class="text-md font-bold">ZRAM Live Telemetry</h2>
-          <p class="text-xs text-base-content/60">Hot Tier · Fast volatile RAM compression</p>
-        </div>
-        <button 
-          class="btn btn-xs btn-ghost font-semibold"
-          onclick={() => onConfigureDevice('')}
-        >
-          Configure
-        </button>
+  <!-- Zone B: ZRAM Live Telemetry (Full Width) -->
+  <div class="card bg-base-100 border border-base-content/10 shadow-sm p-4 flex flex-col gap-4 w-full">
+    <div class="flex items-center justify-between">
+      <div>
+        <h2 class="text-md font-bold">ZRAM Live Telemetry</h2>
+        <p class="text-xs text-base-content/60">Hot Tier · Fast volatile RAM compression</p>
       </div>
-
-      {#if devices.length > 0}
-        <ZramGaugesList 
-          {devices} 
-          onConfigureDevice={onConfigureDevice} 
-        />
-      {:else}
-        <div class="py-8 flex flex-col items-center justify-center text-center w-full">
-          <Loader2 class="animate-spin text-primary mb-2" size={20} />
-          <p class="text-xs text-base-content/60">Waiting for ZRAM telemetry...</p>
-        </div>
-      {/if}
+      <button 
+        class="btn btn-xs btn-ghost font-semibold"
+        onclick={() => onConfigureDevice('')}
+      >
+        Configure
+      </button>
     </div>
 
-    <!-- Right Column (Stacked Cards: Cold Tier & System Pressure) -->
-    <div class="lg:col-span-1 flex flex-col gap-4">
-      
-      <!-- Zone C: Cold Tier & Swap Summary -->
-      <div class="card bg-base-100 border border-base-content/10 shadow-sm p-4 flex flex-col gap-4">
-        <div class="flex items-center justify-between">
+    {#if devices.length > 0}
+      <ZramGaugesList 
+        {devices} 
+        onConfigureDevice={onConfigureDevice} 
+      />
+    {:else}
+      <div class="py-8 flex flex-col items-center justify-center text-center w-full">
+        <Loader2 class="animate-spin text-primary mb-2" size={20} />
+        <p class="text-xs text-base-content/60">Waiting for ZRAM telemetry...</p>
+      </div>
+    {/if}
+  </div>
+
+  <!-- Row 3: Cold Tier & System Pressure (50/50 Split, Equal Height) -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch w-full">
+    
+    <!-- Zone C: Cold Tier & Swap Summary (Stretched) -->
+    <div class="card bg-base-100 border border-base-content/10 shadow-sm p-4 flex flex-col justify-between gap-4 min-w-[300px]">
+      <div>
+        <div class="flex items-center justify-between border-b border-base-content/5 pb-2 mb-3">
           <div class="flex items-center gap-2">
             <Database class="text-secondary" size={20} />
             <div>
@@ -84,7 +84,7 @@
             </div>
           </div>
           <button 
-            class="btn btn-xs btn-ghost font-semibold"
+            class="btn btn-xs btn-ghost font-semibold animate-pulse-once"
             onclick={onManageHibernation}
           >
             Manage
@@ -116,9 +116,9 @@
           <div class="flex flex-col gap-1.5 bg-base-200/30 border border-base-content/5 p-3 rounded-xl">
             <span class="text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-0.5">Active Swap Tiers</span>
             {#each swaps as swap}
-              <div class="flex items-center justify-between text-xs font-mono">
-                <span class="font-bold text-base-content/80">{swap.name}</span>
-                <span class="text-base-content/60">{swap.used} / {swap.size} (Pri {swap.priority})</span>
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs font-mono w-full min-w-0">
+                <span class="font-bold text-base-content/80 truncate max-w-[120px]" title={swap.name}>{swap.name}</span>
+                <span class="text-base-content/60 text-right shrink-0">{swap.used} / {swap.size} (Pri {swap.priority})</span>
               </div>
             {:else}
               <span class="text-xs text-base-content/40 italic">No disk swap active</span>
@@ -126,11 +126,10 @@
           </div>
         </div>
       </div>
-
-      <!-- Zone D: System Pressure -->
-      <SystemPressure {psi} />
-
     </div>
+
+    <!-- Zone D: System Pressure (Equal Height Card) -->
+    <SystemPressure {psi} {updateTick} />
 
   </div>
 </div>
