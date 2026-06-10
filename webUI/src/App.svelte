@@ -592,13 +592,13 @@
               </button>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="flex flex-col gap-4">
               <!-- Readiness Badge -->
               <div class="flex items-center gap-3 bg-base-200/30 border border-base-content/5 p-4 rounded-2xl">
                 <span class="text-xs font-semibold uppercase tracking-wider text-base-content/50">Readiness:</span>
                 
                 <Tooltip.Root>
-                  <Tooltip.Trigger class="badge badge-lg {hibernation.ready ? 'badge-primary' : 'badge-warning animate-pulse'} font-semibold gap-1.5 cursor-help">
+                  <Tooltip.Trigger class="badge badge-lg {hibernation.ready ? 'badge-primary' : 'badge-warning animate-pulse'} font-semibold gap-1.5 cursor-help shrink-0">
                     {#if hibernation.ready}
                       <CheckCircle2 size={14} /> Ready
                     {:else}
