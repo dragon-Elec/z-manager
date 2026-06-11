@@ -20,7 +20,9 @@ from core.utils.units import parse_size_to_bytes
 from core import health
 from modules import psi
 from modules import runtime
+from modules import profiles
 from core import boot_config
+from core.config import read_zram_config
 from core.device_management import configurator as zram_configurator
 from core.hibernation import configurator as hibernate_configurator
 from core.hibernation.prober import check_hibernation_readiness
@@ -172,6 +174,16 @@ def handle_action(action, payload):
                 elif res.changed:
                     grub_changed = True
                     
+            # 5. Apply Block Device I/O Scheduler
+            io_sched_payload = payload.get("io_scheduler")
+            if io_sched_payload:
+                dev_name = io_sched_payload.get("device")
+                sched_val = io_sched_payload.get("scheduler")
+                if dev_name and sched_val:
+                    io_success = runtime.set_io_scheduler(dev_name, sched_val)
+                    if not io_success:
+                        success = False
+                        errors.append(f"Failed to set I/O scheduler to {sched_val} for {dev_name}")
             if success:
                 msg = "Tuning settings applied successfully."
                 if grub_changed:
@@ -184,7 +196,7 @@ def handle_action(action, payload):
             device = payload.get("device", "zram0")
             algo = payload.get("algo", "zstd")
             size = payload.get("size", "1G")
-            backingDev = payload.get("backingDev")
+            backingDev = payload.get("backingDev") or payload.get("backing_dev")
             
             # Convert empty string or 'none' backingDev to None
             if backingDev in ("", "none", "None Selected", "none selected"):
@@ -199,11 +211,93 @@ def handle_action(action, payload):
             else:
                 updates["writeback-device"] = None
             
+            swapPriority = payload.get("swapPriority")
+            if swapPriority is not None:
+                updates["swap-priority"] = swapPriority
+                
+            hostMemoryLimit = payload.get("hostMemoryLimit") or payload.get("host_memory_limit")
+            if hostMemoryLimit in ("", "none", "None"):
+                updates["host-memory-limit"] = None
+            elif hostMemoryLimit is not None:
+                if isinstance(hostMemoryLimit, int) or (isinstance(hostMemoryLimit, str) and hostMemoryLimit.isdigit()):
+                    updates["host-memory-limit"] = f"{hostMemoryLimit}M"
+                else:
+                    updates["host-memory-limit"] = hostMemoryLimit
+                    
+            fsType = payload.get("fsType") or payload.get("fs_type")
+            mountPoint = payload.get("mountPoint") or payload.get("mount_point")
+            if fsType in ("", "none", "None") or fsType == "swap":
+                updates["fs-type"] = None
+                updates["mount-point"] = None
+            else:
+                updates["fs-type"] = fsType
+                updates["mount-point"] = mountPoint or None
+            
             res = zram_configurator.apply_device_config(device, updates, restart_service=True)
             if res.success:
                 return {"status": "success", "message": f"Device {device} configured and restarted."}
             else:
                 return {"status": "error", "message": res.message}
+
+        elif action == "create_zram":
+            # Auto-detect next available zram name
+            devices = prober.list_devices()
+            existing_names = {dev.name for dev in devices if dev.name.startswith("zram")}
+            next_idx = 0
+            while f"zram{next_idx}" in existing_names:
+                next_idx += 1
+            device = f"zram{next_idx}"
+            
+            algo = payload.get("algo", "zstd")
+            size = payload.get("size", "2G")
+            swapPriority = payload.get("swapPriority", 100)
+            backingDev = payload.get("backingDev") or payload.get("backing_dev")
+            if backingDev in ("", "none", "None Selected", "none selected"):
+                backingDev = None
+                
+            updates = {
+                "compression-algorithm": algo,
+                "zram-size": size,
+                "swap-priority": str(swapPriority)
+            }
+            if backingDev is not None:
+                updates["writeback-device"] = backingDev
+                
+            hostMemoryLimit = payload.get("hostMemoryLimit") or payload.get("host_memory_limit")
+            if hostMemoryLimit not in ("", "none", "None", None):
+                if isinstance(hostMemoryLimit, int) or (isinstance(hostMemoryLimit, str) and hostMemoryLimit.isdigit()):
+                    updates["host-memory-limit"] = f"{hostMemoryLimit}M"
+                else:
+                    updates["host-memory-limit"] = hostMemoryLimit
+                    
+            fsType = payload.get("fsType") or payload.get("fs_type")
+            mountPoint = payload.get("mountPoint") or payload.get("mount_point")
+            if fsType not in ("", "none", "None", "swap", None):
+                updates["fs-type"] = fsType
+                updates["mount-point"] = mountPoint or None
+                
+            res = zram_configurator.apply_device_config(device, updates, restart_service=True)
+            if res.success:
+                return {"status": "success", "message": f"Device {device} created and started."}
+            else:
+                return {"status": "error", "message": res.message}
+
+        elif action == "clear_writeback":
+            device = payload.get("device")
+            if not device:
+                return {"status": "error", "message": "Missing device name"}
+            
+            # Persistently remove from config file first
+            res_persist = zram_configurator.persist_writeback(device, None, apply_now=False)
+            if not res_persist.success:
+                return {"status": "error", "message": f"Failed to persist writeback removal: {res_persist.message}"}
+                
+            # Perform live swapoff/reset/reconfigure
+            res_live = zram_configurator.clear_writeback(device, force=True)
+            if res_live.success:
+                return {"status": "success", "message": f"Writeback cleared live and persistently for {device}."}
+            else:
+                return {"status": "error", "message": f"Writeback cleared persistently, but live change failed: {res_live.info.get('error', 'unknown error')}"}
         
         elif action == "reset_zram":
             device = payload.get("device", "zram0")
@@ -220,6 +314,32 @@ def handle_action(action, payload):
                 return {"status": "success", "message": f"Device {device} config removed."}
             else:
                 return {"status": "error", "message": res.message}
+        
+        elif action == "list_profiles":
+            return {"status": "success", "profiles": profiles.get_all_profiles()}
+        
+        elif action == "list_block_devices":
+            from core.utils.block import list_block_devices
+            return {"status": "success", "devices": list_block_devices()}
+        
+        elif action == "save_profile":
+            name = payload.get("name")
+            data = payload.get("data")
+            if not name or not data:
+                return {"status": "error", "message": "Missing name or data"}
+            if profiles.save_profile(name, data):
+                return {"status": "success", "message": f"Profile '{name}' saved successfully."}
+            else:
+                return {"status": "error", "message": f"Failed to save profile '{name}'."}
+        
+        elif action == "delete_profile":
+            name = payload.get("name")
+            if not name:
+                return {"status": "error", "message": "Missing name"}
+            if profiles.delete_profile(name):
+                return {"status": "success", "message": f"Profile '{name}' deleted successfully."}
+            else:
+                return {"status": "error", "message": f"Failed to delete profile '{name}'."}
         
         elif action == "setup_hibernation":
             swap_path = payload.get("swap_path", "/swapfile")
@@ -238,6 +358,65 @@ def handle_action(action, payload):
                 return {"status": "success", "message": "Boot parameters updated successfully."}
             else:
                 return {"status": "error", "message": msg}
+        
+        elif action == "delete_hibernation_swap":
+            swap_path = payload.get("swap_path")
+            if not swap_path:
+                return {"status": "error", "message": "Missing swap_path"}
+            from core.hibernation.provisioner import delete_swap
+            res = delete_swap(swap_path)
+            if res.success:
+                return {"status": "success", "message": res.message}
+            else:
+                return {"status": "error", "message": res.message}
+
+        elif action == "apply_hibernation_policy":
+            minimize_image = payload.get("minimize_image", False)
+            from core.hibernation.configurator import apply_hibernation_policy
+            ok, msg = apply_hibernation_policy(minimize_image)
+            if ok:
+                return {"status": "success", "message": msg}
+            else:
+                return {"status": "error", "message": msg}
+        
+        elif action == "apply_sysctl_profile":
+            enable = payload.get("enable", False)
+            res = boot_config.apply_sysctl_profile(enable)
+            if res.success:
+                return {"status": "success", "message": res.message}
+            else:
+                return {"status": "error", "message": res.message}
+
+        elif action == "get_zram_config_raw":
+            from core.config import get_active_config_path
+            path = get_active_config_path()
+            content = ""
+            if path and path.exists():
+                try:
+                    content = path.read_text(encoding="utf-8")
+                except Exception as e:
+                    content = f"# Error reading config file: {e}"
+            else:
+                content = "# No configuration file found at standard paths.\n# It will be created when you add a ZRAM device."
+            return {"status": "success", "content": content}
+        
+        elif action == "get_journal_logs":
+            unit = payload.get("unit", "systemd-zram-setup@zram0.service")
+            count = int(payload.get("count", 50))
+            from modules.journal import list_zram_logs
+            try:
+                records = list_zram_logs(unit=unit, count=count)
+                logs_data = []
+                for r in records:
+                    logs_data.append({
+                        "timestamp": r.timestamp.isoformat(),
+                        "priority": r.priority,
+                        "message": r.message,
+                        "fields": r.fields
+                    })
+                return {"status": "success", "logs": logs_data}
+            except Exception as e:
+                return {"status": "error", "message": f"Failed to get journal logs: {e}"}
         
         return {"status": "error", "message": f"Unknown action: {action}"}
     except Exception as e:
@@ -272,6 +451,22 @@ def get_telemetry_data():
             
             wb_stats = prober.get_writeback_status(dev.name)
             
+            swap_priority_val = None
+            host_mem_limit_val = None
+            fs_type_val = None
+            mount_point_val = None
+            try:
+                cfg = read_zram_config()
+                if dev.name in cfg:
+                    sp = cfg[dev.name].get("swap-priority")
+                    if sp is not None:
+                        swap_priority_val = int(sp)
+                    host_mem_limit_val = cfg[dev.name].get("host-memory-limit")
+                    fs_type_val = cfg[dev.name].get("fs-type")
+                    mount_point_val = cfg[dev.name].get("mount-point")
+            except Exception:
+                pass
+
             devices_data.append({
                 "name": dev.name,
                 "algo": dev.algorithm or "zstd",
@@ -284,7 +479,11 @@ def get_telemetry_data():
                 "isSwap": is_swap,
                 "backingDev": wb_stats.backing_dev if wb_stats else None,
                 "wbNum": int(wb_stats.num_writeback or 0) if wb_stats else 0,
-                "wbFailed": int(wb_stats.writeback_failed or 0) if wb_stats else 0
+                "wbFailed": int(wb_stats.writeback_failed or 0) if wb_stats else 0,
+                "swapPriority": swap_priority_val,
+                "hostMemLimit": host_mem_limit_val,
+                "fsType": fs_type_val,
+                "mountPoint": mount_point_val
             })
     except Exception as e:
         print(f"[Sidecar Telemetry] Error listing devices: {e}")
@@ -350,9 +549,36 @@ def get_telemetry_data():
             "recommended_swap_bytes": hr.recommended_swap_bytes,
             "message": hr.message
         }
+        
+        # Bootloader/initramfs/resume swap detection
+        try:
+            from core.utils.bootloader import detect_bootloader, detect_initramfs_system
+            from core.utils.swap import detect_resume_swap
+            hibernation_data["bootloader"] = detect_bootloader()
+            hibernation_data["initramfs"] = detect_initramfs_system()
+            hibernation_data["resume_swap"] = detect_resume_swap()
+        except Exception as e:
+            sys.stderr.write(f"[Sidecar Telemetry] Error detecting bootloader/swaps: {e}\n")
+            sys.stderr.flush()
+            hibernation_data["bootloader"] = "unknown"
+            hibernation_data["initramfs"] = "unknown"
+            hibernation_data["resume_swap"] = None
     except Exception as e:
         sys.stderr.write(f"[Sidecar Telemetry] Error getting hibernation readiness: {e}\n")
         sys.stderr.flush()
+
+    minimize_image = False
+    try:
+        conf_path = "/etc/tmpfiles.d/99-z-manager-hibernation.conf"
+        if os.path.exists(conf_path):
+            with open(conf_path, "r") as f:
+                content = f.read()
+                if "image_size - - - - 0" in content:
+                    minimize_image = True
+    except Exception as e:
+        sys.stderr.write(f"[Sidecar Telemetry] Error checking minimize_image: {e}\n")
+        sys.stderr.flush()
+    hibernation_data["minimize_image"] = minimize_image
 
     # System Health
     health_data = {
@@ -402,6 +628,31 @@ def get_telemetry_data():
         from core.utils.kernel_cmdline import is_kernel_param_active
         tuning_data["zswap_active"] = not is_kernel_param_active("zswap.enabled=0")
         tuning_data["psi_active"] = is_kernel_param_active("psi=1")
+
+        performance_profile_active = False
+        try:
+            sysctl_conf_path = Path("/etc/sysctl.d/99-z-manager.conf")
+            if sysctl_conf_path.exists():
+                content = sysctl_conf_path.read_text(encoding="utf-8")
+                if "vm.swappiness = 180" in content:
+                    performance_profile_active = True
+        except Exception:
+            pass
+        tuning_data["performance_profile_active"] = performance_profile_active
+        
+        # Block devices I/O schedulers
+        io_schedulers = []
+        if os.path.exists("/sys/block/"):
+            for dev in os.listdir("/sys/block/"):
+                if not dev.startswith(("loop", "zram", "dm-", "ram")):
+                    avail = runtime.get_available_io_schedulers(dev)
+                    if avail:
+                        io_schedulers.append({
+                            "device": dev,
+                            "current": runtime.get_current_io_scheduler(dev),
+                            "available": avail
+                        })
+        tuning_data["io_schedulers"] = io_schedulers
     except Exception as e:
         sys.stderr.write(f"[Sidecar Telemetry] Error getting tuning settings: {e}\n")
         sys.stderr.flush()

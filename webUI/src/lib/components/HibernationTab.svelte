@@ -1,8 +1,8 @@
 <script lang="ts">
   import { 
-    Database, HelpCircle, CheckCircle2, AlertTriangle, XCircle, Plus, Loader2 
+    Database, HelpCircle, CheckCircle2, AlertTriangle, XCircle, Plus, Loader2, Trash2 
   } from 'lucide-svelte';
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { formatSize } from '../utils';
   import { sendToPython } from '../bridge';
 
@@ -28,6 +28,62 @@
   // Power policy settings
   let lidCloseHibernate = $state(false);
   let hibernateDelay = $state(30);
+  let minimizeImage = $state(false);
+  let applyingPolicy = $state(false);
+  let deletingSwap = $state<string | null>(null);
+
+  let nonZramSwaps = $derived((swaps || []).filter(s => s && s.name && !s.name.startsWith('/dev/zram')));
+
+  $effect(() => {
+    const currentMin = hibernation?.minimize_image;
+    untrack(() => {
+      if (currentMin !== undefined) {
+        minimizeImage = currentMin;
+      }
+    });
+  });
+
+  async function handleMinimizeChange(e: Event) {
+    const target = e.target as HTMLInputElement;
+    const value = target.checked;
+    applyingPolicy = true;
+    try {
+      const data = await sendToPython('apply_hibernation_policy', { minimize_image: value });
+      if (data.status === 'success') {
+        showToast('success', data.message);
+      } else {
+        showToast('error', data.message);
+        minimizeImage = !value;
+      }
+    } catch (err: any) {
+      showToast('error', `Failed to apply policy: ${err.message}`);
+      minimizeImage = !value;
+    } finally {
+      applyingPolicy = false;
+    }
+  }
+
+  function deleteSwap(swapPathToDelete: string) {
+    requestConfirmation(
+      'Delete Swap?',
+      `Are you sure you want to delete and disable the swap space at ${swapPathToDelete}? This requires root privileges.`,
+      async () => {
+        deletingSwap = swapPathToDelete;
+        try {
+          const data = await sendToPython('delete_hibernation_swap', { swap_path: swapPathToDelete });
+          if (data.status === 'success') {
+            showToast('success', data.message);
+          } else {
+            showToast('error', data.message);
+          }
+        } catch (e: any) {
+          showToast('error', `Deletion failed: ${e.message}`);
+        } finally {
+          deletingSwap = null;
+        }
+      }
+    );
+  }
 
   // Sync default swap size with recommended bytes if available
   $effect(() => {
@@ -159,9 +215,12 @@
             {/if}
             <div>
               <span class="font-medium text-xs">Resume Parameters</span>
-              <p class="text-3xs text-base-content/60">
+              <div class="text-3xs text-base-content/60 leading-normal">
                 Kernel commandline must include valid resume partition UUID and offset.
-              </p>
+                {#if hibernation.resume_swap}
+                  <span class="block mt-0.5 font-mono text-[10px] text-primary">Resume swap: {hibernation.resume_swap}</span>
+                {/if}
+              </div>
             </div>
           </li>
         </ul>
@@ -174,6 +233,16 @@
           <div class="flex items-center justify-between">
             <span class="text-xs font-semibold text-base-content/70">Hibernate on lid close</span>
             <input type="checkbox" class="toggle toggle-secondary toggle-sm" bind:checked={lidCloseHibernate} onchange={savePowerPolicy} />
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-base-content/70">Minimize Hibernation Image</span>
+            <input 
+              type="checkbox" 
+              class="toggle toggle-primary toggle-sm" 
+              checked={minimizeImage} 
+              disabled={applyingPolicy}
+              onchange={handleMinimizeChange} 
+            />
           </div>
           <div class="flex flex-col gap-2">
             <div class="flex justify-between text-2xs font-semibold text-base-content/60">
@@ -188,6 +257,45 @@
 
     <!-- Right Column: Swap Manager & Boot Config -->
     <div class="flex flex-col gap-4">
+      <!-- Active Swaps Manager -->
+      <div class="bg-base-200/40 border border-base-content/5 rounded-xl p-4 flex flex-col gap-3 relative">
+        {#if deletingSwap}
+          <div class="absolute inset-0 bg-base-100/50 rounded-xl flex items-center justify-center z-10">
+            <Loader2 class="animate-spin text-error" size={20} />
+          </div>
+        {/if}
+
+        <h3 class="text-xs uppercase tracking-wider text-base-content/50 font-bold flex items-center gap-2 border-b border-base-content/5 pb-2">
+          Active Swaps Manager
+        </h3>
+
+        {#if nonZramSwaps.length === 0}
+          <p class="text-3xs text-base-content/60 italic">No active file or partition swaps.</p>
+        {:else}
+          <div class="divide-y divide-base-content/5">
+            {#each nonZramSwaps as swap}
+              <div class="flex items-center justify-between py-2 text-xs">
+                <div class="flex flex-col min-w-0 flex-1 pr-2">
+                  <span class="font-mono font-semibold truncate text-base-content/80 text-xs" title={swap.name}>
+                    {swap.name}
+                  </span>
+                  <span class="text-3xs text-base-content/50">
+                    Size: {swap.size} | Priority: {swap.priority}
+                  </span>
+                </div>
+                <button
+                  class="btn btn-xs btn-error btn-outline"
+                  onclick={() => deleteSwap(swap.name)}
+                >
+                  <Trash2 size={12} />
+                  Delete
+                </button>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      </div>
+
       <!-- Swap Manager -->
       <div class="bg-base-200/40 border border-base-content/5 rounded-xl p-4 flex flex-col gap-3 relative">
         {#if loadingHibernate}
@@ -245,8 +353,20 @@
           Bootloader Integration
         </h3>
 
-        <div class="text-3xs text-base-content/60 leading-relaxed space-y-1">
+        <div class="text-3xs text-base-content/60 leading-relaxed space-y-2">
           <p>To finalize hibernation resume settings, the bootloader configuration must be updated and initramfs regenerated.</p>
+          
+          <div class="flex flex-col gap-1 bg-base-300/30 p-2 rounded-lg border border-base-content/5 font-medium">
+            <div class="flex justify-between">
+              <span>Detected Bootloader:</span>
+              <span class="font-mono text-primary font-bold uppercase">{hibernation.bootloader || 'unknown'}</span>
+            </div>
+            <div class="flex justify-between border-t border-base-content/5 pt-1 mt-1">
+              <span>Detected Initramfs:</span>
+              <span class="font-mono text-secondary font-bold uppercase">{hibernation.initramfs || 'unknown'}</span>
+            </div>
+          </div>
+
           <p class="font-mono bg-base-300/50 p-1.5 rounded border border-base-content/5">
             resume=UUID={hibernation.secure_boot === 'disabled' ? '...' : 'UUID'}
           </p>
