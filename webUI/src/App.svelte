@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { 
     LayoutDashboard, Gauge, Database, Sliders, Settings, ShieldAlert,
-    ChevronLeft, ChevronRight
+    ChevronLeft, ChevronRight, Terminal
   } from 'lucide-svelte';
   import { Tooltip } from 'bits-ui';
   
@@ -11,6 +11,7 @@
   import ZramConfigTab from './lib/components/ZramConfigTab.svelte';
   import HibernationTab from './lib/components/HibernationTab.svelte';
   import TuningTab from './lib/components/TuningTab.svelte';
+  import LogsTab from './lib/components/LogsTab.svelte';
   
   // Components
   import SettingsDrawer from './lib/components/SettingsDrawer.svelte';
@@ -20,7 +21,7 @@
   import { initSidecarBridge, onPython } from './lib/bridge';
 
   // Global UI State
-  let activeTab = $state<'dashboard' | 'zram' | 'hibernation' | 'tuning'>('dashboard');
+  let activeTab = $state<'dashboard' | 'zram' | 'hibernation' | 'tuning' | 'logs'>('dashboard');
   let backendConnected = $state(false);
   let themeMode = $state('system');
   let settingsOpen = $state(false);
@@ -135,25 +136,56 @@
       themeMode = localStorage.getItem('theme-mode') || 'system';
     }
 
-    // Parse available themes dynamically from css rules
-    try {
-      const themes = new Set<string>();
-      for (const sheet of Array.from(document.styleSheets)) {
-        try {
-          for (const rule of Array.from(sheet.cssRules)) {
-            if (rule instanceof CSSStyleRule && rule.selectorText.includes('[data-theme=')) {
-              const match = rule.selectorText.match(/\[data-theme=["']?([^"']+)["']?\]/);
-              if (match && match[1]) {
-                themes.add(match[1]);
+    // Parse available themes dynamically from css rules with retry for HMR injection
+    let themeRetries = 0;
+    function parseThemes() {
+      try {
+        const themes = new Set<string>();
+        const sheets = Array.from(document.styleSheets);
+        console.log(`[Theme Debug] Stylesheets count: ${sheets.length}`);
+        
+        function traverse(rulesList: CSSRule[]) {
+          for (const rule of rulesList) {
+            if ('selectorText' in rule && typeof rule.selectorText === 'string') {
+              const selector = rule.selectorText;
+              if (selector.includes('data-theme')) {
+                const match = selector.match(/\[data-theme=["']?([^"']+)["']?\]/);
+                if (match && match[1]) {
+                  themes.add(match[1]);
+                }
               }
             }
+            if ('cssRules' in rule && rule.cssRules) {
+              try {
+                traverse(Array.from(rule.cssRules));
+              } catch (err) {}
+            }
           }
-        } catch (e) {}
+        }
+
+        for (let i = 0; i < sheets.length; i++) {
+          const sheet = sheets[i];
+          try {
+            const rules = Array.from(sheet.cssRules || []);
+            console.log(`[Theme Debug] Sheet ${i} has ${rules.length} top-level rules.`);
+            traverse(rules);
+          } catch (e) {
+            console.log(`[Theme Debug] Error reading sheet ${i} rules: ${e.message}`);
+          }
+        }
+        console.log(`[Theme Debug] Detected themes size: ${themes.size}`);
+        if (themes.size > 0) {
+          availableThemes = Array.from(themes).sort();
+          console.log(`[Theme Debug] Populated availableThemes: ${availableThemes.join(', ')}`);
+        } else if (themeRetries < 20) {
+          themeRetries++;
+          setTimeout(parseThemes, 100);
+        }
+      } catch (e) {
+        console.error("[Theme] Failed to parse themes from stylesheet:", e);
       }
-      availableThemes = Array.from(themes).sort();
-    } catch (e) {
-      console.error("[Theme] Failed to parse themes from stylesheet:", e);
     }
+    parseThemes();
 
     // Bind sidecar telemetry events
     onPython('dashboard_update', (data) => {
@@ -358,6 +390,34 @@
             </Tooltip.Root>
           {/if}
         </li>
+
+        <!-- Logs Tab -->
+        <li>
+          {#if sidebarExpanded}
+            <button 
+              role="tab"
+              class="font-semibold flex items-center gap-2 px-3 py-2 rounded-xl transition-all {activeTab === 'logs' ? 'active bg-primary text-primary-content' : 'text-base-content/70 hover:text-base-content hover:bg-base-300/50'}" 
+              onclick={() => activeTab = 'logs'}
+            >
+              <Terminal size={16} /> Logs
+            </button>
+          {:else}
+            <Tooltip.Root>
+              <Tooltip.Trigger 
+                role="tab"
+                class="btn btn-sm flex items-center justify-center rounded-xl p-0 transition-all w-8 h-8 min-h-0 border-0 {activeTab === 'logs' ? 'bg-primary text-primary-content hover:bg-primary' : 'bg-transparent text-base-content/70 hover:bg-base-300/50 hover:text-base-content'}"
+                onclick={() => activeTab = 'logs'}
+              >
+                <Terminal size={16} />
+              </Tooltip.Trigger>
+              <Tooltip.Portal>
+                <Tooltip.Content class="z-50 rounded-xl border border-base-content/10 bg-neutral text-neutral-content px-3 py-1.5 text-xs shadow-lg" side="right">
+                  System Journal Logs
+                </Tooltip.Content>
+              </Tooltip.Portal>
+            </Tooltip.Root>
+          {/if}
+        </li>
       </ul>
     </div>
 
@@ -430,6 +490,11 @@
           {:else if activeTab === 'tuning'}
             <TuningTab 
               {tuning} 
+              {showToast} 
+            />
+          {:else if activeTab === 'logs'}
+            <LogsTab 
+              {devices} 
               {showToast} 
             />
           {/if}

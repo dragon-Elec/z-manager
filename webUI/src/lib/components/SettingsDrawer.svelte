@@ -22,11 +22,11 @@
     const items = [
       { value: 'system', label: 'System (Auto)' },
       { value: 'light', label: 'Light (Nord)' },
-      { value: 'dark', label: 'Dark (Forest)' }
+      { value: 'dark', label: 'Dark (Nord-Dark)' }
     ];
     
     availableThemes.forEach(theme => {
-      if (theme !== 'light' && theme !== 'dark') {
+      if (theme !== 'light' && theme !== 'dark' && theme !== 'nord' && theme !== 'nord-dark') {
         items.push({
           value: theme,
           label: theme.charAt(0).toUpperCase() + theme.slice(1)
