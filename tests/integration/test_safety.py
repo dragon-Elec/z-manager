@@ -1,6 +1,9 @@
+import pytest
 from tests.test_base import *
 import os
 from core.utils.block import check_device_safety
+
+pytestmark = pytest.mark.privileged
 
 class TestDeviceSafety(BaseTestCase):
     def test_zram0_safety(self):
