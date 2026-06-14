@@ -24,12 +24,20 @@
   let localCpuGovernor = $state('powersave');
   let localZswapActive = $state(true);
   let localPsiActive = $state(true);
+  let localPerformanceProfileActive = $state(false);
+  
+  // Local state for block device I/O schedulers
+  let loadingIoSchedulers = $state<Record<string, boolean>>({});
+  let lastIoSchedulerChange = $state<Record<string, number>>({});
+  let localIoSchedulers = $state<Record<string, string>>({});
 
   let loadingSwappiness = $state(false);
   let loadingVfsCachePressure = $state(false);
   let loadingCpuGovernor = $state(false);
   let loadingZswap = $state(false);
   let loadingPsi = $state(false);
+  let loadingPerformanceProfile = $state(false);
+  let lastPerformanceProfileChange = 0;
 
   // Sync local controls with incoming tuning telemetry, obeying cooldowns
   $effect(() => {
@@ -49,6 +57,21 @@
       }
       if (!loadingPsi && (now - lastPsiChange > 2000) && tuning.psi_active !== undefined) {
         localPsiActive = tuning.psi_active;
+      }
+      if (!loadingPerformanceProfile && (now - lastPerformanceProfileChange > 2000) && tuning.performance_profile_active !== undefined) {
+        localPerformanceProfileActive = tuning.performance_profile_active;
+      }
+      
+      // Sync I/O Schedulers
+      if (tuning.io_schedulers) {
+        tuning.io_schedulers.forEach((sched: any) => {
+          const dev = sched.device;
+          const lastChange = lastIoSchedulerChange[dev] || 0;
+          const isLoading = loadingIoSchedulers[dev] || false;
+          if (!isLoading && (now - lastChange > 2000)) {
+            localIoSchedulers[dev] = sched.current;
+          }
+        });
       }
     }
   });
@@ -105,6 +128,43 @@
     } finally {
       if (type === 'zswap_enabled') loadingZswap = false;
       if (type === 'psi_enabled') loadingPsi = false;
+    }
+  }
+
+  async function togglePerformanceProfile(value: boolean) {
+    loadingPerformanceProfile = true;
+    lastPerformanceProfileChange = Date.now();
+    try {
+      const data = await sendToPython('apply_sysctl_profile', { enable: value });
+      if (data.status === 'success') {
+        showToast('success', data.message);
+      } else {
+        showToast('error', data.message);
+      }
+    } catch (e: any) {
+      showToast('error', `Failed to apply performance profile: ${e.message}`);
+    } finally {
+      loadingPerformanceProfile = false;
+    }
+  }
+
+  async function applyIoSchedulerChange(device: string, scheduler: string) {
+    loadingIoSchedulers[device] = true;
+    lastIoSchedulerChange[device] = Date.now();
+
+    try {
+      const data = await sendToPython('apply_tuning', {
+        io_scheduler: { device, scheduler }
+      });
+      if (data.status === 'success') {
+        showToast('success', data.message);
+      } else {
+        showToast('error', data.message);
+      }
+    } catch (e: any) {
+      showToast('error', `Failed to set I/O scheduler: ${e.message}`);
+    } finally {
+      loadingIoSchedulers[device] = false;
     }
   }
 </script>
@@ -254,6 +314,28 @@
               />
             </div>
           </div>
+
+          <!-- Pop!_OS Performance Profile toggle -->
+          <div class="flex items-center justify-between text-xs border-t border-base-content/5 pt-2.5">
+            <span class="font-semibold text-base-content/70 flex items-center gap-1.5">
+              Pop!_OS Performance Profile
+              <div class="tooltip tooltip-right tooltip-primary text-xs font-normal normal-case before:max-w-xs before:whitespace-normal" data-tip="Applies sysctl optimization parameters recommended for ZRAM systems (swappiness=180, disabling watermark boost) to prevent UI micro-stutters.">
+                <Info class="cursor-help text-base-content/40 hover:text-base-content" size={13} />
+              </div>
+            </span>
+            <div class="flex items-center gap-2">
+              {#if loadingPerformanceProfile}
+                <Loader2 class="animate-spin text-primary" size={12} />
+              {/if}
+              <input 
+                type="checkbox" 
+                class="toggle toggle-primary toggle-xs" 
+                bind:checked={localPerformanceProfileActive} 
+                onchange={() => togglePerformanceProfile(localPerformanceProfileActive)} 
+                disabled={loadingPerformanceProfile}
+              />
+            </div>
+          </div>
         </div>
 
         <!-- GRUB Warning/Reminder Card -->
@@ -268,5 +350,41 @@
         </div>
       </div>
     </div>
+
+    <!-- Section 3: I/O Schedulers -->
+    {#if tuning?.io_schedulers && tuning.io_schedulers.length > 0}
+      <div class="border-t border-base-content/10 pt-4 animate-fade-in">
+        <h3 class="text-xs uppercase tracking-wider text-base-content/50 font-bold mb-2.5">Block Device I/O Schedulers</h3>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {#each tuning.io_schedulers as sched}
+            {@const dev = sched.device}
+            <div class="bg-base-200/20 p-3 rounded-xl border border-base-content/5 flex items-center justify-between gap-4">
+              <div class="flex flex-col min-w-0">
+                <span class="font-bold text-xs font-mono text-primary flex items-center gap-1.5 truncate">
+                  {dev}
+                  <div class="tooltip tooltip-right tooltip-primary text-xs font-normal normal-case before:max-w-xs before:whitespace-normal" data-tip="Active I/O queueing algorithm for this drive. schedulers like 'none' are standard for fast NVMe SSDs; 'bfq' or 'mq-deadline' are used for SATA SSDs/HDDs.">
+                    <Info class="cursor-help text-base-content/40 hover:text-base-content" size={13} />
+                  </div>
+                </span>
+                <span class="text-3xs text-base-content/50 truncate">Storage controller queue scheduler</span>
+              </div>
+              
+              <div class="flex items-center gap-2 w-44 shrink-0">
+                {#if loadingIoSchedulers[dev]}
+                  <Loader2 class="animate-spin text-primary" size={12} />
+                {/if}
+                <Select 
+                  bind:value={localIoSchedulers[dev]}
+                  disabled={loadingIoSchedulers[dev]}
+                  onchange={(val) => applyIoSchedulerChange(dev, val)}
+                  items={sched.available.map((s: string) => ({ value: s, label: s }))}
+                />
+              </div>
+            </div>
+          {/each}
+        </div>
+      </div>
+    {/if}
   </div>
 </div>

@@ -163,11 +163,11 @@ pub fn run() {
                                 });
 
                          if let Some(web_view) = webview_widget {
-                             // Enable smooth scrolling for a native desktop feel
+                             // Disable smooth scrolling to prevent fractional blur on WebKitGTK
                              use webkit2gtk::{WebViewExt, SettingsExt};
                              if let Some(settings) = WebViewExt::settings(&web_view) {
-                                 SettingsExt::set_enable_smooth_scrolling(&settings, true);
-                                 println!("[Rust] Enabled WebKitGTK smooth scrolling");
+                                 SettingsExt::set_enable_smooth_scrolling(&settings, false);
+                                 println!("[Rust] Disabled WebKitGTK smooth scrolling");
                              }
 
                              unsafe {

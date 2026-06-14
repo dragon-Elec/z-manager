@@ -54,7 +54,7 @@ const ZManagerWindow = GObject.registerClass({
         settings.set_enable_write_console_messages_to_stdout(true); // Print console logs to terminal
         settings.set_allow_file_access_from_file_urls(true);
         settings.set_allow_universal_access_from_file_urls(true);
-        settings.set_enable_smooth_scrolling(true); // Enable smooth scrolling for a native desktop feel
+        settings.set_enable_smooth_scrolling(false); // Disable smooth scrolling to prevent fractional blur on WebKitGTK
         settings.set_zoom_text_only(false);
         this.webview.set_zoom_level(1.0);
 

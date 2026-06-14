@@ -477,6 +477,7 @@
           {#if activeTab === 'zram'}
             <ZramConfigTab 
               {devices} 
+              {ram}
               {showToast} 
               {requestConfirmation} 
             />
