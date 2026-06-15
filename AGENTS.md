@@ -4,14 +4,21 @@ Technical decisions, environment constraints, and development guidelines.
 
 ## Developer Commands
 
-- **Tauri (primary):** `pnpm tauri dev` / `pnpm tauri build` — both run inside `webUI/`.
-  `beforeDevCommand` auto-starts Vite; `beforeBuildCommand` auto-builds.
-- **PyGObject/WebKitGTK shell (legacy):**
+- **PyGObject/WebKitGTK shell (primary):**
   1. `cd webUI && pnpm dev` (starts Vite dev server)
   2. `ZMAN_DEV=1 python3 webUI/server.py` (opens a GTK4 window with WebKitGTK webview)
+- **Tauri (legacy/alternative):** `pnpm tauri dev` / `pnpm tauri build` — both run inside `webUI/`.
+  `beforeDevCommand` auto-starts Vite; `beforeBuildCommand` auto-builds.
+- **PySide6 / WebEngine (Qt) shell (development / default):**
+  1. `cd webUI && pnpm dev` (starts Vite dev server)
+  2. `ZMAN_DEV=1 python3 webUI/server_qt.py` (opens a Qt window with WebEngine webview)
+  2. `ZMAN_DEV=1 python3 webUI/server.py` (opens a GTK4 window with WebKitGTK webview)
+- **PySide6 / WebEngine (Qt) shell (development / default):**
+  1. `cd webUI && pnpm dev` (starts Vite dev server)
+  2. `ZMAN_DEV=1 python3 ui/main.py` (or the corresponding launcher script for the Qt shell)
 - **Frontend-only build:** `pnpm build` in `webUI/` — uses `vite-plugin-singlefile` to produce a self-contained `dist/index.html`.
 - **Python unit tests:** `pytest` from root. All privileged system commands are mocked; no root needed. Integration tests targeting real system state are tagged `@pytest.mark.integration`.
-
+- **Dual-Mode Shell:** Primary = PyGObject/WebKitGTK shell (`server.py`). Legacy/Alternative = Tauri Rust shell.
 ## Architecture & IPC
 
 - **Dual-Mode Shell:** Primary = Tauri Rust shell. Legacy = PyGObject/WebKitGTK shell (`server.py`).
@@ -44,3 +51,5 @@ Technical decisions, environment constraints, and development guidelines.
 - **Component strategy:** DaisyUI 5 for themed native components (card, badge, range, select, toggle, btn). Bits UI for portal-based menus/tooltips/dialogs to avoid WebKitGTK viewport clipping.
 - **Tooltip provider:** Requires `<Tooltip.Provider>` wrapping the app container in `App.svelte` to prevent runtime startup crash.
 - **State mutation in effects:** Wrap `$state` reads and mutations inside the same `$effect` block with Svelte 5's `untrack` to prevent `effect_update_depth_exceeded`.
+
+- **Component Stack Constraint:** Always prioritize DaisyUI 5 for visual theme components and Bits UI for headless/portal behavior providers (modals, dropdowns, menus) to prevent layout breakages under WebKitGTK and ensure native-grade desktop behavior without building from scratch.

@@ -7,6 +7,7 @@
   import { onMount } from 'svelte';
   import { Dialog } from 'bits-ui';
   import Select from './Select.svelte';
+  import ZramAdvancedView from './ZramAdvancedView.svelte';
   import { formatBytesToSizeString } from '../utils';
   import { sendToPython } from '../bridge';
 
@@ -272,7 +273,7 @@
   // Sync form state from telemetry
   $effect(() => {
     if (devices) {
-      devices.forEach((dev) => {
+      devices.forEach((dev: any) => {
         const existing = zramForms[dev.name];
         if (!existing) {
           zramForms[dev.name] = {
@@ -552,9 +553,9 @@
           <div class="flex flex-col gap-1 w-full md:w-64">
             <div class="flex justify-between text-xs font-mono font-bold text-base-content/70">
               <span>Usage</span>
-              <span>{formatBytesToSizeString(devices.reduce((acc, d) => acc + (d.origBytes || 0), 0))} / {formatBytesToSizeString(devices.reduce((acc, d) => acc + (d.totalBytes || 0), 0))}</span>
+              <span>{formatBytesToSizeString(devices.reduce((acc: number, d: any) => acc + (d.origBytes || 0), 0))} / {formatBytesToSizeString(devices.reduce((acc: number, d: any) => acc + (d.totalBytes || 0), 0))}</span>
             </div>
-            <progress class="progress progress-primary w-full" value={devices.reduce((acc, d) => acc + (d.origBytes || 0), 0)} max={devices.reduce((acc, d) => acc + (d.totalBytes || 0), 0) || 1}></progress>
+            <progress class="progress progress-primary w-full" value={devices.reduce((acc: number, d: any) => acc + (d.origBytes || 0), 0)} max={devices.reduce((acc: number, d: any) => acc + (d.totalBytes || 0), 0) || 1}></progress>
           </div>
         {/if}
       </div>
@@ -662,458 +663,66 @@
       {/if}
     </div>
   {:else}
-    <!-- ADVANCED VIEW: MASTER-DETAIL SPLIT PANEL -->
-    <div class="flex flex-col gap-3 mt-2 animate-fade-in">
-      
-      <!-- Global Actions Bar -->
-      <div class="flex justify-between items-center mb-2">
-        <div class="flex gap-2">
-          <button class="btn btn-sm btn-outline gap-1.5" disabled>
-            <Settings size={14} /> Global Defaults
-          </button>
-        </div>
-        <button class="btn btn-sm btn-primary gap-1.5" onclick={() => isCreateModalOpen = true}>
-          <Plus size={14} /> New ZRAM Device
-        </button>
-      </div>
-
-      <div class="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
-        
-        <!-- Left Column: Master List (2/5) -->
-        <div class="lg:col-span-2 flex flex-col gap-3">
-          {#if devices.length === 0}
-            <div class="py-12 flex flex-col items-center justify-center text-center w-full bg-base-200/20 border border-base-content/5 rounded-2xl">
-              <Info size={28} class="mb-2 opacity-50 text-base-content/40" />
-              <p class="text-xs text-base-content/60 font-semibold">No active ZRAM devices configured.</p>
-            </div>
-          {:else}
-            {#each devices as dev}
-              <button 
-                class="card bg-base-100 border-2 transition-all text-left {selectedDeviceName === dev.name ? 'border-primary shadow-sm' : 'border-base-content/10 hover:border-primary/30'}"
-                onclick={() => selectedDeviceName = dev.name}
-              >
-                <div class="card-body p-4 flex flex-col gap-2">
-                  <div class="flex justify-between items-center">
-                    <div class="flex items-center gap-2">
-                      <Cpu class={selectedDeviceName === dev.name ? 'text-primary' : 'text-base-content/50'} size={16} />
-                      <span class="font-mono font-bold text-sm">{dev.name}</span>
-                    </div>
-                    <span class="text-[10px] font-mono text-base-content/60">{formatBytesToSizeString(dev.totalBytes)} • {dev.algo || 'zstd'}</span>
-                  </div>
-                  <!-- Realtime Utilization Gauge -->
-                  <div class="flex flex-col gap-1">
-                    <div class="flex justify-between text-[10px] font-mono text-base-content/60">
-                      <span>Usage: {formatBytesToSizeString(dev.origBytes)} / {formatBytesToSizeString(dev.totalBytes)}</span>
-                      <span>{dev.totalBytes ? Math.round((dev.origBytes / dev.totalBytes) * 100) : 0}%</span>
-                    </div>
-                    <progress class="progress progress-primary h-1.5 w-full" value={dev.origBytes || 0} max={dev.totalBytes || 1}></progress>
-                  </div>
-                </div>
-              </button>
-            {/each}
-          {/if}
-        </div>
-
-        <!-- Right Column: Detail Inspector (3/5) -->
-        <div class="lg:col-span-3 card bg-base-100 border border-base-content/10 shadow-sm">
-          {#if selectedDeviceName && zramForms[selectedDeviceName]}
-            {@const form = zramForms[selectedDeviceName]}
-            {@const dev = devices.find(d => d.name === selectedDeviceName) || {}}
-            <div class="card-body p-5 flex flex-col gap-4 relative">
-              {#if form.loading}
-                <div class="absolute inset-0 bg-base-100/50 rounded-2xl flex items-center justify-center z-10">
-                  <Loader2 class="animate-spin text-primary" size={20} />
-                </div>
-              {/if}
-
-              <!-- Inspector Header -->
-              <div class="flex justify-between items-center border-b border-base-content/5 pb-4">
-                <div>
-                  <h3 class="font-mono text-lg font-black text-primary">{selectedDeviceName} Configuration</h3>
-                  <p class="text-xs text-base-content/50 mt-0.5">Modify parameters and apply changes live & persistently.</p>
-                </div>
-                <div class="flex gap-2">
-                  <button class="btn btn-sm btn-neutral btn-soft font-bold" onclick={() => resetZramDevice(selectedDeviceName)}>Reset</button>
-                  <button class="btn btn-sm btn-error btn-soft font-bold" onclick={() => removeZramDevice(selectedDeviceName)}>Remove</button>
-                </div>
-              </div>
-
-              <!-- Tabs -->
-              <div class="tabs tabs-box bg-base-200/50 p-1 rounded-xl flex mt-1">
-                <button class="tab flex-1 text-sm font-semibold py-2 {activeInspectorTab === 'alloc' ? 'tab-active' : ''}" onclick={() => activeInspectorTab = 'alloc'}>Allocation</button>
-                <button class="tab flex-1 text-sm font-semibold py-2 {activeInspectorTab === 'perf' ? 'tab-active' : ''}" onclick={() => activeInspectorTab = 'perf'}>Performance & Writeback</button>
-                <button class="tab flex-1 text-sm font-semibold py-2 {activeInspectorTab === 'mount' ? 'tab-active' : ''}" onclick={() => activeInspectorTab = 'mount'}>Mount & FS</button>
-              </div>
-
-              <!-- Tab Contents -->
-              <div class="min-h-[240px] py-4">
-                
-                <!-- Tab 1: Allocation -->
-                {#if activeInspectorTab === 'alloc'}
-                  <div class="flex flex-col gap-5 animate-fade-in">
-                    <label class="form-control w-full">
-                      <span class="text-xs font-semibold text-base-content/80 mb-1.5">Apply Profile</span>
-                      <Select 
-                        value={selectedProfiles[selectedDeviceName] || ''}
-                        items={profileItems}
-                        onchange={(val) => {
-                          selectedProfiles[selectedDeviceName] = val;
-                          applyProfile(selectedDeviceName, val);
-                        }}
-                      />
-                    </label>
-
-                    <div class="grid grid-cols-2 gap-5">
-                      <label class="form-control w-full">
-                        <span class="text-xs font-semibold text-base-content/80 mb-1.5">Algorithm</span>
-                        <Select 
-                          bind:value={form.algo}
-                          items={[
-                            { value: 'zstd', label: 'zstd (Recommended)' },
-                            { value: 'lz4', label: 'lz4 (Fastest)' },
-                            { value: 'lzo', label: 'lzo' },
-                            { value: 'deflate', label: 'deflate' }
-                          ]}
-                        />
-                      </label>
-                      <label class="form-control w-full">
-                        <span class="text-xs font-semibold text-base-content/80 mb-1.5">Disk Size</span>
-                        <input type="text" class="input input-sm input-bordered w-full font-mono font-semibold" placeholder="e.g. 4G" bind:value={form.size} />
-                      </label>
-                    </div>
-                    <label class="form-control w-full">
-                      <span class="text-xs font-semibold text-base-content/80 mb-1.5">Host Memory Limit</span>
-                      <input type="text" class="input input-sm input-bordered w-full font-mono font-semibold" placeholder="none" bind:value={form.hostMemLimit} />
-                      <span class="text-[10px] text-base-content/50 mt-1.5">Optional hard limit on physical RAM usage (e.g. 2G or 2048M).</span>
-                    </label>
-                  </div>
-                {/if}
-
-                <!-- Tab 2: Performance & Writeback -->
-                {#if activeInspectorTab === 'perf'}
-                  <div class="flex flex-col gap-5 animate-fade-in">
-                    <div class="flex flex-col gap-1.5">
-                      <label class="form-control w-full">
-                        <span class="text-xs font-semibold text-base-content/80 mb-1.5">Writeback Backing Device</span>
-                        <Select 
-                          bind:value={form.backingDev}
-                          items={blockDeviceItems}
-                        />
-                      </label>
-                      {#if dev.backingDev && dev.backingDev !== 'none'}
-                        <button 
-                          type="button"
-                          class="btn btn-xs btn-error btn-soft self-end font-semibold mt-1"
-                          onclick={() => clearWriteback(selectedDeviceName)}
-                        >
-                          Clear Writeback Device
-                        </button>
-                      {/if}
-                    </div>
-                    <label class="form-control w-full">
-                      <span class="text-xs font-semibold text-base-content/80 mb-1.5">Swap Priority</span>
-                      <div class="join w-full">
-                        <button class="btn btn-sm join-item btn-neutral font-bold" onclick={() => form.swapPriority = Math.max(-1000, Number(form.swapPriority || 0) - 10)}>-</button>
-                        <input type="text" class="input input-sm join-item input-bordered w-full text-center font-mono font-semibold" bind:value={form.swapPriority} />
-                        <button class="btn btn-sm join-item btn-neutral font-bold" onclick={() => form.swapPriority = Math.min(1000, Number(form.swapPriority || 0) + 10)}>+</button>
-                      </div>
-                    </label>
-                  </div>
-                {/if}
-
-                <!-- Tab 3: Mount & FS -->
-                {#if activeInspectorTab === 'mount'}
-                  <div class="flex flex-col gap-5 animate-fade-in">
-                    <label class="form-control w-full">
-                      <span class="text-xs font-semibold text-base-content/80 mb-1.5">Filesystem Type</span>
-                      <Select 
-                        bind:value={form.fsType}
-                        items={[
-                          { value: 'swap', label: 'swap (Default)' },
-                          { value: 'ext4', label: 'ext4' },
-                          { value: 'ext2', label: 'ext2' },
-                          { value: 'tmpfs', label: 'tmpfs' }
-                        ]}
-                      />
-                    </label>
-                    {#if form.fsType && form.fsType !== 'swap'}
-                      <label class="form-control w-full">
-                        <span class="text-xs font-semibold text-base-content/80 mb-1.5">Mount Point</span>
-                        <input type="text" class="input input-sm input-bordered w-full font-mono font-semibold" placeholder="e.g. /tmp" bind:value={form.mountPoint} />
-                      </label>
-                    {/if}
-                  </div>
-                {/if}
-
-              </div>
-
-              <!-- Apply Button -->
-              <div class="border-t border-base-content/10 pt-4 flex justify-end">
-                <button 
-                  class="btn btn-sm btn-primary font-bold gap-1.5 px-6"
-                  onclick={() => applyZramConfig(selectedDeviceName)}
-                >
-                  <Save size={16} /> Apply & Restart
-                </button>
-              </div>
-
-            </div>
-          {:else}
-            <div class="card-body p-5 flex flex-col items-center justify-center text-center min-h-[300px]">
-              <HardDrive size={32} class="mb-2 opacity-30 text-base-content/40" />
-              <p class="text-sm text-base-content/60 font-semibold">Select a device to configure</p>
-            </div>
-          {/if}
-        </div>
-
-      </div>
-    </div>
+    <ZramAdvancedView
+      {devices}
+      {availableProfiles}
+      {blockDevices}
+      loadProfiles={loadProfiles}
+      loadBlockDevices={loadBlockDevices}
+      applyZramConfig={async (deviceName, formVals: any) => {
+        // Adapt payload to existing API
+        const data = await sendToPython('configure_zram', {
+          device: deviceName,
+          size: formVals.size,
+          algo: formVals.algo,
+          backingDev: formVals.backingDev === 'none' ? null : formVals.backingDev,
+          swapPriority: formVals.swapPriority,
+          hostMemoryLimit: formVals.hostMemoryLimit || null,
+          fsType: formVals.fsType || null,
+          mountPoint: formVals.mountPoint || null
+        });
+        if (data.status === 'success') {
+          showToast('success', data.message);
+        } else {
+          throw new Error(data.message);
+        }
+      }}
+      clearWriteback={async (deviceName) => { await clearWriteback(deviceName); }}
+      resetZramDevice={async (deviceName) => { await resetZramDevice(deviceName); }}
+      removeZramDevice={async (deviceName) => { await removeZramDevice(deviceName); }}
+      createZramDevice={async (formVals: any) => {
+        const data = await sendToPython('create_zram', {
+          size: formVals.size,
+          algo: formVals.algo,
+          swapPriority: formVals.swapPriority,
+          backingDev: formVals.backingDev === 'none' ? null : formVals.backingDev,
+          hostMemoryLimit: formVals.hostMemoryLimit || null,
+          fsType: formVals.fsType || null,
+          mountPoint: formVals.mountPoint || null
+        });
+        if (data.status === 'success') {
+          showToast('success', data.message);
+        } else {
+          throw new Error(data.message);
+        }
+      }}
+      addCustomProfile={async (name, dataObj) => {
+        const data = await sendToPython('save_profile', {
+          name,
+          data: dataObj
+        });
+        if (data.status === 'success') {
+          showToast('success', data.message);
+        } else {
+          throw new Error(data.message);
+        }
+      }}
+      deleteProfile={deleteProfile}
+      {showToast}
+      {requestConfirmation}
+    />
   {/if}
 </div>
-
-{#if isAdvancedMode}
-<!-- Profiles Manager Section -->
-<div class="card bg-base-100 border border-base-content/10 shadow-sm p-4 flex flex-col gap-4 mt-6">
-  <div class="flex items-center justify-between border-b border-base-content/5 pb-2">
-    <div class="flex items-center gap-3">
-      <RefreshCw class="text-primary" size={20} />
-      <div>
-        <h2 class="text-md font-bold">Profiles Manager</h2>
-        <p class="text-xs text-base-content/60">Manage pre-defined and custom ZRAM configuration profiles</p>
-      </div>
-    </div>
-    <button class="btn btn-2xs btn-circle btn-ghost" onclick={loadProfiles} title="Refresh Profiles">
-      <RefreshCw size={14} class={loadingProfiles ? 'animate-spin' : ''} />
-    </button>
-  </div>
-
-  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-    <!-- List of available profiles -->
-    <div class="lg:col-span-2 flex flex-col gap-2.5 max-h-[360px] overflow-y-auto pr-1">
-      {#each Object.entries(availableProfiles) as [name, data]}
-        {@const isSystem = systemProfileNames.includes(name)}
-        <div class="bg-base-200/40 border border-base-content/5 rounded-xl p-3.5 flex justify-between items-start gap-4">
-          <div class="flex flex-col gap-1">
-            <div class="flex items-center gap-2">
-              <span class="font-bold text-sm">{name}</span>
-              {#if isSystem}
-                <span class="badge badge-xs badge-neutral font-bold uppercase tracking-wider">System</span>
-              {:else}
-                <span class="badge badge-xs badge-primary badge-outline font-bold uppercase tracking-wider">Custom</span>
-              {/if}
-            </div>
-            {#if data.description}
-              <p class="text-xs text-base-content/60">{data.description}</p>
-            {/if}
-            <div class="flex flex-wrap gap-x-4 gap-y-1 mt-1.5 text-3xs font-mono uppercase tracking-wider text-base-content/50 font-bold">
-              <span>Size: <span class="text-base-content font-semibold">{data['zram-size']}</span></span>
-              <span>Algo: <span class="text-base-content font-semibold">{data['compression-algorithm']}</span></span>
-              <span>Priority: <span class="text-base-content font-semibold">{data['swap-priority']}</span></span>
-            </div>
-          </div>
-
-          {#if !isSystem}
-            <button 
-              class="btn btn-xs btn-error btn-square btn-soft" 
-              onclick={() => deleteProfile(name)}
-              title="Delete Profile"
-            >
-              <Trash2 size={13} />
-            </button>
-          {/if}
-        </div>
-      {:else}
-        <div class="py-12 flex flex-col items-center justify-center text-center w-full bg-base-200/20 border border-base-content/5 rounded-2xl">
-          <Info size={24} class="mb-2 opacity-50 text-base-content/40" />
-          <p class="text-xs text-base-content/60 font-semibold">No profiles found.</p>
-        </div>
-      {/each}
-    </div>
-
-    <!-- Add custom profile form -->
-    <div class="bg-base-200/40 border border-base-content/5 rounded-xl p-4 flex flex-col gap-4 relative">
-      {#if loadingProfiles}
-        <div class="absolute inset-0 bg-base-100/50 rounded-xl flex items-center justify-center z-10">
-          <Loader2 class="animate-spin text-primary" size={20} />
-        </div>
-      {/if}
-      <h3 class="text-sm font-bold flex items-center gap-2 border-b border-base-content/5 pb-2">
-        <Plus size={16} class="text-primary" /> Add Custom Profile
-      </h3>
-
-      <div class="flex flex-col gap-4">
-        <label class="form-control">
-          <span class="text-xs font-semibold text-base-content/80 mb-1.5">Profile Name</span>
-          <input type="text" class="input input-sm input-bordered w-full font-semibold" placeholder="e.g. My Profile" bind:value={customProfileName} />
-        </label>
-
-        <label class="form-control">
-          <span class="text-xs font-semibold text-base-content/80 mb-1.5">Description</span>
-          <input type="text" class="input input-sm input-bordered w-full font-semibold" placeholder="e.g. Optimized for low-end device" bind:value={customProfileDesc} />
-        </label>
-
-        <div class="grid grid-cols-2 gap-4">
-          <label class="form-control">
-            <span class="text-xs font-semibold text-base-content/80 mb-1.5">Algorithm</span>
-            <Select 
-              bind:value={customProfileAlgo}
-              items={[
-                { value: 'zstd', label: 'zstd' },
-                { value: 'lz4', label: 'lz4' },
-                { value: 'lzo', label: 'lzo' },
-                { value: 'deflate', label: 'deflate' }
-              ]}
-            />
-          </label>
-
-          <label class="form-control">
-            <span class="text-xs font-semibold text-base-content/80 mb-1.5">Size</span>
-            <input type="text" class="input input-sm input-bordered w-full font-mono font-semibold" placeholder="e.g. 2G" bind:value={customProfileSize} />
-          </label>
-        </div>
-
-        <label class="form-control">
-          <span class="text-xs font-semibold text-base-content/80 mb-1.5">Swap Priority</span>
-          <div class="join w-full">
-            <button type="button" class="btn btn-sm join-item btn-neutral font-bold" onclick={() => customProfileSwapPriority = Math.max(-1000, Number(customProfileSwapPriority) - 10)}>-</button>
-            <input type="text" class="input input-sm join-item input-bordered w-full text-center font-mono font-semibold" bind:value={customProfileSwapPriority} />
-            <button type="button" class="btn btn-sm join-item btn-neutral font-bold" onclick={() => customProfileSwapPriority = Math.min(1000, Number(customProfileSwapPriority) + 10)}>+</button>
-          </div>
-        </label>
-
-        <button 
-          class="btn btn-sm btn-primary w-full mt-2 font-bold"
-          onclick={addCustomProfile}
-        >
-          Save Profile
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
-{/if}
-
-<!-- Create New ZRAM Device Dialog -->
-<Dialog.Root bind:open={isCreateModalOpen}>
-  <Dialog.Portal>
-    <Dialog.Overlay class="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm" />
-    <Dialog.Content class="fixed inset-0 m-auto z-50 h-fit w-full max-w-md rounded-2xl border border-base-content/10 bg-base-100 p-6 shadow-xl flex flex-col gap-5 text-left">
-      <div class="flex justify-between items-center border-b border-base-content/5 pb-3">
-        <Dialog.Title class="text-lg font-bold flex items-center gap-2">
-          <Plus size={18} class="text-primary" /> Create ZRAM Device
-        </Dialog.Title>
-        <Dialog.Close class="btn btn-sm btn-ghost btn-circle">
-          <X size={16} />
-        </Dialog.Close>
-      </div>
-
-      <div class="flex flex-col gap-4 relative">
-        {#if loadingNewDevice}
-          <div class="absolute inset-0 bg-base-100/50 rounded-2xl flex items-center justify-center z-10">
-            <Loader2 class="animate-spin text-primary" size={24} />
-          </div>
-        {/if}
-
-        <label class="form-control">
-          <span class="text-xs font-semibold text-base-content/80 mb-1.5">Apply Profile</span>
-          <Select 
-            value={newDeviceProfile}
-            items={profileItems}
-            onchange={(val) => {
-              newDeviceProfile = val;
-              applyNewDeviceProfile(val);
-            }}
-          />
-        </label>
-
-        <div class="grid grid-cols-2 gap-4">
-          <label class="form-control">
-            <span class="text-xs font-semibold text-base-content/80 mb-1.5">Algorithm</span>
-            <Select 
-              bind:value={newDeviceAlgo}
-              items={[
-                { value: 'zstd', label: 'zstd (Recommended)' },
-                { value: 'lz4', label: 'lz4 (Fastest)' },
-                { value: 'lzo', label: 'lzo' },
-                { value: 'deflate', label: 'deflate' }
-              ]}
-            />
-          </label>
-
-          <label class="form-control">
-            <span class="text-xs font-semibold text-base-content/80 mb-1.5">Size</span>
-            <input type="text" class="input input-sm input-bordered w-full font-mono font-semibold" placeholder="e.g. 2G" bind:value={newDeviceSize} />
-          </label>
-        </div>
-
-        <!-- Progressive Disclosure Fold for New Device Advanced Options -->
-        <div class="flex flex-col gap-2">
-          <button 
-            type="button"
-            class="btn btn-xs btn-ghost justify-start gap-1 p-0 hover:bg-transparent font-bold text-xs text-base-content/60"
-            onclick={() => showNewAdvancedOptions = !showNewAdvancedOptions}
-          >
-            <span>{showNewAdvancedOptions ? '▼ Hide Advanced Options' : '▶ Show Advanced Options'}</span>
-          </button>
-          
-          {#if showNewAdvancedOptions}
-            <div class="flex flex-col gap-4 animate-fade-in bg-base-300/30 p-4 rounded-xl border border-base-content/5 mt-1">
-              <label class="form-control w-full">
-                <span class="text-xs font-semibold text-base-content/80 mb-1.5">Writeback Backing Device</span>
-                <Select 
-                  bind:value={newDeviceBackingDev}
-                  items={blockDeviceItems}
-                />
-              </label>
-
-              <label class="form-control w-full">
-                <span class="text-xs font-semibold text-base-content/80 mb-1.5">Swap Priority</span>
-                <div class="join w-full">
-                  <button type="button" class="btn btn-sm join-item btn-neutral font-bold" onclick={() => newDeviceSwapPriority = Math.max(-1000, Number(newDeviceSwapPriority) - 10)}>-</button>
-                  <input type="text" class="input input-sm join-item input-bordered w-full text-center font-mono font-semibold" bind:value={newDeviceSwapPriority} />
-                  <button type="button" class="btn btn-sm join-item btn-neutral font-bold" onclick={() => newDeviceSwapPriority = Math.min(1000, Number(newDeviceSwapPriority) + 10)}>+</button>
-                </div>
-              </label>
-
-              <label class="form-control w-full">
-                <span class="text-xs font-semibold text-base-content/80 mb-1.5">Host Memory Limit</span>
-                <input type="text" class="input input-sm input-bordered w-full font-mono font-semibold" placeholder="none" bind:value={newDeviceHostMemLimit} />
-                <span class="text-[10px] text-base-content/50 mt-1.5">Optional hard limit on physical RAM usage (e.g. 2G or 2048M).</span>
-              </label>
-
-              <label class="form-control w-full">
-                <span class="text-xs font-semibold text-base-content/80 mb-1.5">Filesystem Type</span>
-                <Select 
-                  bind:value={newDeviceFsType}
-                  items={[
-                    { value: 'swap', label: 'swap (Default)' },
-                    { value: 'ext4', label: 'ext4' },
-                    { value: 'ext2', label: 'ext2' },
-                    { value: 'tmpfs', label: 'tmpfs' }
-                  ]}
-                />
-              </label>
-
-              {#if newDeviceFsType !== 'swap'}
-                <label class="form-control w-full">
-                  <span class="text-xs font-semibold text-base-content/80 mb-1.5">Mount Point</span>
-                  <input type="text" class="input input-sm input-bordered w-full font-mono font-semibold" placeholder="e.g. /tmp" bind:value={newDeviceMountPoint} />
-                </label>
-              {/if}
-            </div>
-          {/if}
-        </div>
-
-        <div class="flex justify-end gap-2 mt-2 pt-3 border-t border-base-content/5">
-          <Dialog.Close class="btn btn-sm btn-neutral btn-outline">Cancel</Dialog.Close>
-          <button class="btn btn-sm btn-primary font-bold" onclick={createZramDevice}>
-            Create Device
-          </button>
-        </div>
-      </div>
-    </Dialog.Content>
-  </Dialog.Portal>
-</Dialog.Root>
 
 <!-- ZRAM Config Viewer Dialog -->
 <Dialog.Root bind:open={configDialogOpen}>

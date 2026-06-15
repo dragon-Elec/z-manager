@@ -20,7 +20,7 @@
   let open = $state(false);
 
   let selectedLabel = $derived(
-    items.find((item) => item.value === value)?.label ?? placeholder
+    items.find((item: { value: string; label: string }) => item.value === value)?.label ?? placeholder
   );
 
   function handleValueChange(val: string) {
