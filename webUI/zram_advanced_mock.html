@@ -1,0 +1,1096 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="nord">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ZRAM Advanced View Mockup</title>
+  <!-- Tailwind CSS v4 CDN -->
+  <script src="https://unpkg.com/@tailwindcss/browser@4"></script>
+  <!-- DaisyUI 5 CDN -->
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5.0.0-beta.8/daisyui.css" rel="stylesheet" type="text/css" />
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      user-select: none;
+    }
+    /* Custom scrollbar styling for native feel */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(0, 0, 0, 0.15);
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(0, 0, 0, 0.3);
+    }
+    /* CSS containment to prevent subpixel rendering blur */
+    .card-widget, .inspector-pane, .sidebar-pane {
+      contain: paint layout;
+      box-sizing: border-box;
+    }
+  </style>
+</head>
+<body class="bg-base-300 text-base-content min-h-screen flex items-center justify-center p-4">
+
+  <!-- Main App Container (Simulating Tauri Window) -->
+  <div class="w-full max-w-5xl h-[680px] bg-base-100 rounded-3xl border border-base-content/10 shadow-2xl flex flex-col overflow-hidden">
+    
+    <!-- Top Header / Global Action Bar -->
+    <div class="px-6 py-4 border-b border-base-content/5 flex justify-between items-center bg-base-200/30 shrink-0">
+      <div class="flex items-center gap-3">
+        <div class="p-2 bg-primary/10 rounded-xl text-primary">
+          <i data-lucide="sliders" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <h1 class="text-md font-black tracking-tight">ZRAM Advanced Configuration</h1>
+          <p class="text-[10px] text-base-content/50">Fine-tune compressed swap devices & profiles</p>
+        </div>
+      </div>
+      
+      <div class="flex items-center gap-3">
+        <button class="btn btn-xs btn-outline btn-neutral font-bold gap-1.5" onclick="openGlobalSettings()">
+          <i data-lucide="settings" class="w-3.5 h-3.5"></i> Global Defaults
+        </button>
+        <button class="btn btn-xs btn-outline btn-neutral font-bold gap-1.5" onclick="openRawConfig()">
+          <i data-lucide="eye" class="w-3.5 h-3.5"></i> Raw Config
+        </button>
+        <div class="h-4 w-[1px] bg-base-content/10"></div>
+        <label class="flex items-center gap-2 cursor-pointer">
+          <span class="text-xs font-bold text-base-content/70">Advanced Mode</span>
+          <input type="checkbox" class="toggle toggle-sm toggle-primary" checked disabled />
+        </label>
+      </div>
+    </div>
+
+    <!-- Main Workspace (Split Panel) -->
+    <div class="flex-1 flex overflow-hidden min-h-0">
+      
+      <!-- Left Sidebar: Master List (2/5 Width) -->
+      <div class="w-[340px] border-r border-base-content/5 flex flex-col bg-base-200/10 sidebar-pane">
+        <!-- Sidebar Header -->
+        <div class="p-4 border-b border-base-content/5 flex justify-between items-center shrink-0">
+          <span class="text-xs font-bold uppercase tracking-wider text-base-content/50">Devices</span>
+          <button class="btn btn-xs btn-primary gap-1 font-bold" onclick="addNewDevice()">
+            <i data-lucide="plus" class="w-3 h-3"></i> New Device
+          </button>
+        </div>
+        
+        <!-- Scrollable Device List -->
+        <div id="device-list" class="flex-1 overflow-y-auto p-3 flex flex-col gap-2.5">
+          
+          <!-- Device 1 (Selected, Active) -->
+          <div id="card-zram0" class="card-widget bg-base-100 border-2 border-primary shadow-sm rounded-2xl p-3.5 cursor-pointer transition-all flex flex-col gap-3" onclick="selectDevice('zram0')">
+            <div class="flex justify-between items-start">
+              <div class="flex items-center gap-2">
+                <i data-lucide="cpu" class="text-primary w-4 h-4"></i>
+                <span class="font-mono font-bold text-sm">zram0</span>
+                <span class="badge badge-xs badge-success font-bold uppercase tracking-wider">Active</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <span id="badge-zram0-unsaved" class="badge badge-xs badge-warning font-bold uppercase tracking-wider hidden">Unsaved</span>
+                <span class="text-[10px] font-mono text-base-content/50">4G • zstd</span>
+              </div>
+            </div>
+            
+            <!-- Mini SVG Gauge (Dual Arc Snake) -->
+            <div class="flex items-center gap-4 bg-base-200/30 p-2 rounded-xl border border-base-content/5">
+              <div class="w-12 h-12 shrink-0 relative">
+                <svg class="w-full h-full -rotate-180" viewBox="0 0 100 100">
+                  <circle cx="50" cy="50" r="40" fill="none" class="stroke-base-content/10" stroke-width="8" />
+                  <!-- Ghost Arc (Original Size: 75%) -->
+                  <circle cx="50" cy="50" r="40" fill="none" class="stroke-primary/20" stroke-width="8" stroke-dasharray="188.4 251.2" stroke-linecap="round" />
+                  <!-- Solid Arc (Compressed Size: 30%) -->
+                  <circle cx="50" cy="50" r="40" fill="none" class="stroke-primary" stroke-width="8" stroke-dasharray="75.4 251.2" stroke-linecap="round" />
+                </svg>
+                <div class="absolute inset-0 flex items-center justify-center text-[10px] font-bold">2.5x</div>
+              </div>
+              <div class="flex-1 flex flex-col gap-0.5 min-w-0">
+                <div class="flex justify-between text-[10px] font-mono text-base-content/60">
+                  <span>Usage</span>
+                  <span>1.2G / 4.0G</span>
+                </div>
+                <progress class="progress progress-primary h-1.5 w-full" value="30" max="100"></progress>
+              </div>
+            </div>
+          </div>
+
+          <!-- Device 2 (Inactive, Unsaved) -->
+          <div id="card-zram1" class="card-widget bg-base-100 border border-base-content/10 hover:border-primary/30 rounded-2xl p-3.5 cursor-pointer transition-all flex flex-col gap-3" onclick="selectDevice('zram1')">
+            <div class="flex justify-between items-start">
+              <div class="flex items-center gap-2">
+                <i data-lucide="cpu" class="text-base-content/40 w-4 h-4"></i>
+                <span class="font-mono font-bold text-sm">zram1</span>
+                <span class="badge badge-xs badge-neutral font-bold uppercase tracking-wider">Inactive</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <span id="badge-zram1-unsaved" class="badge badge-xs badge-warning font-bold uppercase tracking-wider">Unsaved</span>
+                <span class="text-[10px] font-mono text-base-content/50">2G • lz4</span>
+              </div>
+            </div>
+            
+            <!-- Mini SVG Gauge (Empty/Inactive) -->
+            <div class="flex items-center gap-4 bg-base-200/30 p-2 rounded-xl border border-base-content/5 opacity-60">
+              <div class="w-12 h-12 shrink-0 relative">
+                <svg class="w-full h-full -rotate-180" viewBox="0 0 100 100">
+                  <circle cx="50" cy="50" r="40" fill="none" class="stroke-base-content/10" stroke-width="8" />
+                </svg>
+                <div class="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-base-content/40">0.0x</div>
+              </div>
+              <div class="flex-1 flex flex-col gap-0.5 min-w-0">
+                <div class="flex justify-between text-[10px] font-mono text-base-content/40">
+                  <span>Usage</span>
+                  <span>0B / 2.0G</span>
+                </div>
+                <progress class="progress progress-neutral h-1.5 w-full" value="0" max="100"></progress>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Right Column: Detail Inspector (3/5 Width) -->
+      <div class="flex-1 flex flex-col bg-base-100 inspector-pane overflow-hidden">
+        
+        <!-- Inspector Header -->
+        <div class="px-6 py-4 border-b border-base-content/5 flex justify-between items-center bg-base-200/10 shrink-0">
+          <div>
+            <h2 id="inspector-title" class="font-mono text-md font-black text-primary">zram0 Configuration</h2>
+            <p class="text-[10px] text-base-content/50">Configure allocation, performance, and mount options</p>
+          </div>
+          <div class="flex gap-2">
+            <button class="btn btn-xs btn-neutral btn-soft font-bold" onclick="resetDevice()">Reset</button>
+            <button class="btn btn-xs btn-error btn-soft font-bold" onclick="removeDevice()">Remove</button>
+          </div>
+        </div>
+
+        <!-- Tab Bar -->
+        <div class="px-6 pt-3 bg-base-200/10 shrink-0">
+          <div class="tabs tabs-box bg-base-200/60 p-1 rounded-xl flex">
+            <button id="tab-btn-profiles" class="tab tab-active flex-1 text-xs font-bold py-1.5" onclick="switchTab('profiles')">
+              <i data-lucide="sparkles" class="w-3.5 h-3.5 mr-1.5"></i> Profiles
+            </button>
+            <button id="tab-btn-alloc" class="tab flex-1 text-xs font-bold py-1.5" onclick="switchTab('alloc')">
+              <i data-lucide="cpu" class="w-3.5 h-3.5 mr-1.5"></i> Allocation
+            </button>
+            <button id="tab-btn-perf" class="tab flex-1 text-xs font-bold py-1.5" onclick="switchTab('perf')">
+              <i data-lucide="activity" class="w-3.5 h-3.5 mr-1.5"></i> Performance
+            </button>
+            <button id="tab-btn-mount" class="tab flex-1 text-xs font-bold py-1.5" onclick="switchTab('mount')">
+              <i data-lucide="hard-drive" class="w-3.5 h-3.5 mr-1.5"></i> Mount & FS
+            </button>
+          </div>
+        </div>
+
+        <!-- Scrollable Tab Content Area -->
+        <div class="flex-1 overflow-y-auto p-6 min-h-0">
+          
+          <!-- Tab 1: Profiles -->
+          <div id="tab-content-profiles" class="flex flex-col gap-5">
+            <div class="grid grid-cols-3 gap-3">
+              <!-- Desktop Profile Card -->
+              <button class="card bg-base-200/40 border-2 border-primary/40 hover:border-primary p-3 text-center flex flex-col items-center gap-2 transition-all" onclick="applyPreset('desktop')">
+                <div class="p-2 bg-primary/10 rounded-xl text-primary">
+                  <i data-lucide="gamepad-2" class="w-6 h-6"></i>
+                </div>
+                <div>
+                  <h4 class="font-bold text-xs">Desktop / Gaming</h4>
+                  <p class="text-[9px] text-base-content/50 mt-0.5">100% RAM · zstd · Pri 100</p>
+                </div>
+              </button>
+
+              <!-- Server Profile Card -->
+              <button class="card bg-base-200/40 border border-base-content/10 hover:border-primary p-3 text-center flex flex-col items-center gap-2 transition-all" onclick="applyPreset('server')">
+                <div class="p-2 bg-info/10 rounded-xl text-info">
+                  <i data-lucide="server" class="w-6 h-6"></i>
+                </div>
+                <div>
+                  <h4 class="font-bold text-xs">Server</h4>
+                  <p class="text-[9px] text-base-content/50 mt-0.5">50% RAM · lz4 · Pri 100</p>
+                </div>
+              </button>
+
+              <!-- Power Saver Profile Card -->
+              <button class="card bg-base-200/40 border border-base-content/10 hover:border-primary p-3 text-center flex flex-col items-center gap-2 transition-all" onclick="applyPreset('power')">
+                <div class="p-2 bg-warning/10 rounded-xl text-warning">
+                  <i data-lucide="battery" class="w-6 h-6"></i>
+                </div>
+                <div>
+                  <h4 class="font-bold text-xs">Power Saver</h4>
+                  <p class="text-[9px] text-base-content/50 mt-0.5">50% RAM · zstd · Pri 50</p>
+                </div>
+              </button>
+            </div>
+
+            <!-- Save as Profile Button -->
+            <div class="border-t border-base-content/5 pt-4 flex flex-col gap-4">
+              <button id="btn-save-profile" class="btn btn-sm btn-outline btn-neutral font-bold gap-1.5 self-start" onclick="toggleSaveProfileForm()">
+                <i data-lucide="plus" class="w-4 h-4"></i> Save Current Config as Profile
+              </button>
+
+              <!-- Inline Save Profile Form (Hidden by default) -->
+              <div id="save-profile-form" class="hidden bg-base-200/40 border border-base-content/5 rounded-2xl p-4 flex flex-col gap-4 animate-fade-in">
+                <h4 class="text-xs font-bold flex items-center gap-2">
+                  <i data-lucide="save" class="text-primary w-4 h-4"></i> Create Custom Profile
+                </h4>
+                <div class="grid grid-cols-2 gap-4">
+                  <label class="form-control w-full">
+                    <span class="text-[10px] font-bold uppercase tracking-wider text-base-content/50 mb-1">Profile Name</span>
+                    <input type="text" id="profile-name" class="input input-xs input-bordered w-full font-semibold" placeholder="e.g. Heavy Multitasking" />
+                  </label>
+                  <label class="form-control w-full">
+                    <span class="text-[10px] font-bold uppercase tracking-wider text-base-content/50 mb-1">Description</span>
+                    <input type="text" id="profile-desc" class="input input-xs input-bordered w-full font-semibold" placeholder="e.g. Optimized for 32GB RAM" />
+                  </label>
+                </div>
+
+                <!-- Rich Icon Picker -->
+                <div class="flex flex-col gap-1.5">
+                  <span class="text-[10px] font-bold uppercase tracking-wider text-base-content/50">Select Profile Icon</span>
+                  <div class="grid grid-cols-8 gap-2 bg-base-100 p-2.5 rounded-xl border border-base-content/5">
+                    <button class="btn btn-xs btn-square btn-primary" onclick="selectProfileIcon('gamepad-2', this)"><i data-lucide="gamepad-2" class="w-4 h-4"></i></button>
+                    <button class="btn btn-xs btn-square btn-ghost" onclick="selectProfileIcon('server', this)"><i data-lucide="server" class="w-4 h-4"></i></button>
+                    <button class="btn btn-xs btn-square btn-ghost" onclick="selectProfileIcon('battery', this)"><i data-lucide="battery" class="w-4 h-4"></i></button>
+                    <button class="btn btn-xs btn-square btn-ghost" onclick="selectProfileIcon('cpu', this)"><i data-lucide="cpu" class="w-4 h-4"></i></button>
+                    <button class="btn btn-xs btn-square btn-ghost" onclick="selectProfileIcon('database', this)"><i data-lucide="database" class="w-4 h-4"></i></button>
+                    <button class="btn btn-xs btn-square btn-ghost" onclick="selectProfileIcon('hard-drive', this)"><i data-lucide="hard-drive" class="w-4 h-4"></i></button>
+                    <button class="btn btn-xs btn-square btn-ghost" onclick="selectProfileIcon('zap', this)"><i data-lucide="zap" class="w-4 h-4"></i></button>
+                    <button class="btn btn-xs btn-square btn-ghost" onclick="selectProfileIcon('shield', this)"><i data-lucide="shield" class="w-4 h-4"></i></button>
+                    <button class="btn btn-xs btn-square btn-ghost" onclick="selectProfileIcon('activity', this)"><i data-lucide="activity" class="w-4 h-4"></i></button>
+                    <button class="btn btn-xs btn-square btn-ghost" onclick="selectProfileIcon('terminal', this)"><i data-lucide="terminal" class="w-4 h-4"></i></button>
+                    <button class="btn btn-xs btn-square btn-ghost" onclick="selectProfileIcon('settings', this)"><i data-lucide="settings" class="w-4 h-4"></i></button>
+                    <button class="btn btn-xs btn-square btn-ghost" onclick="selectProfileIcon('box', this)"><i data-lucide="box" class="w-4 h-4"></i></button>
+                    <button class="btn btn-xs btn-square btn-ghost" onclick="selectProfileIcon('scale', this)"><i data-lucide="scale" class="w-4 h-4"></i></button>
+                    <button class="btn btn-xs btn-square btn-ghost" onclick="selectProfileIcon('gauge', this)"><i data-lucide="gauge" class="w-4 h-4"></i></button>
+                    <button class="btn btn-xs btn-square btn-ghost" onclick="selectProfileIcon('sliders', this)"><i data-lucide="sliders" class="w-4 h-4"></i></button>
+                    <button class="btn btn-xs btn-square btn-ghost" onclick="selectProfileIcon('info', this)"><i data-lucide="info" class="w-4 h-4"></i></button>
+                  </div>
+                </div>
+
+                <div class="flex justify-end gap-2 mt-1">
+                  <button class="btn btn-xs btn-neutral btn-outline" onclick="toggleSaveProfileForm()">Cancel</button>
+                  <button class="btn btn-xs btn-primary font-bold" onclick="saveCustomProfile()">Save Profile</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 2: Allocation -->
+          <div id="tab-content-alloc" class="hidden flex flex-col gap-4">
+            <!-- Adwaita-style Grouped Rows -->
+            <div class="bg-base-200/30 border border-base-content/5 rounded-2xl overflow-hidden flex flex-col">
+              
+              <!-- Row 1: Size Mode -->
+              <div class="px-4 py-3 border-b border-base-content/5 flex justify-between items-center gap-4">
+                <div class="flex flex-col">
+                  <span class="text-xs font-bold">Size Mode</span>
+                  <span class="text-[10px] text-base-content/50">How ZRAM disk size is calculated</span>
+                </div>
+                <select id="size-mode" class="select select-xs select-bordered w-48 font-semibold" onchange="onSizeModeChanged(this.value)">
+                  <option value="fraction">Fraction of RAM (Recommended)</option>
+                  <option value="equal">Equal to RAM (100%)</option>
+                  <option value="custom">Custom Size</option>
+                </select>
+              </div>
+
+              <!-- Row 2: Custom Size (Conditional) -->
+              <div id="row-custom-size" class="px-4 py-3 border-b border-base-content/5 flex justify-between items-center gap-4 hidden">
+                <div class="flex flex-col">
+                  <span class="text-xs font-bold">Custom Size</span>
+                  <span class="text-[10px] text-base-content/50">Specify size (e.g. 4G, 512M)</span>
+                </div>
+                <div class="flex flex-col items-end gap-1">
+                  <input type="text" id="custom-size-input" class="input input-xs input-bordered w-48 font-mono font-semibold text-right" value="4G" oninput="validateSize(this)" />
+                  <span id="size-error" class="text-[9px] text-error font-semibold hidden">Invalid size format (e.g. 2G, 512M)</span>
+                </div>
+              </div>
+
+              <!-- Row 3: Algorithm -->
+              <div class="px-4 py-3 border-b border-base-content/5 flex justify-between items-center gap-4">
+                <div class="flex flex-col">
+                  <span class="text-xs font-bold">Compression Algorithm</span>
+                  <span class="text-[10px] text-base-content/50">Trade-off between speed and ratio</span>
+                </div>
+                <select id="algo-select" class="select select-xs select-bordered w-48 font-semibold" onchange="onAlgoChanged(this.value)">
+                  <option value="zstd">zstd (Recommended)</option>
+                  <option value="lz4">lz4 (Fastest)</option>
+                  <option value="lzo-rle">lzo-rle</option>
+                  <option value="custom">Custom...</option>
+                </select>
+              </div>
+
+              <!-- Row 4: Custom Algorithm (Conditional) -->
+              <div id="row-custom-algo" class="px-4 py-3 border-b border-base-content/5 flex justify-between items-center gap-4 hidden">
+                <div class="flex flex-col">
+                  <span class="text-xs font-bold">Custom Algorithm</span>
+                  <span class="text-[10px] text-base-content/50">Kernel-supported compression module</span>
+                </div>
+                <input type="text" id="custom-algo-input" class="input input-xs input-bordered w-48 font-mono font-semibold text-right" placeholder="e.g. deflate" oninput="markDirtyField('custom_algo')" />
+              </div>
+
+              <!-- Row 5: Host Memory Limit -->
+              <div class="px-4 py-3 border-b border-base-content/5 flex justify-between items-center gap-4">
+                <div class="flex flex-col">
+                  <span class="text-xs font-bold">Host Memory Limit</span>
+                  <span class="text-[10px] text-base-content/50">Limit physical RAM usage of this device</span>
+                </div>
+                <div class="flex items-center gap-3">
+                  <input type="checkbox" id="host-limit-toggle" class="toggle toggle-sm toggle-primary" onchange="toggleHostLimit(this.checked)" />
+                  <div id="host-limit-input-container" class="hidden flex flex-col items-end gap-1">
+                    <input type="text" id="host-limit-input" class="input input-xs input-bordered w-32 font-mono font-semibold text-right" placeholder="e.g. 2G" oninput="validateHostLimit(this)" />
+                    <span id="host-limit-error" class="text-[9px] text-error font-semibold hidden">Invalid format</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Row 6: Resident Limit -->
+              <div class="px-4 py-3 flex justify-between items-center gap-4">
+                <div class="flex flex-col">
+                  <span class="text-xs font-bold">Resident Limit</span>
+                  <span class="text-[10px] text-base-content/50">Hard limit on memory footprint</span>
+                </div>
+                <input type="text" id="resident-limit-input" class="input input-xs input-bordered w-48 font-mono font-semibold text-right" placeholder="none" oninput="markDirtyField('resident_limit')" />
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Tab 3: Performance -->
+          <div id="tab-content-perf" class="hidden flex flex-col gap-4">
+            <div class="bg-base-200/30 border border-base-content/5 rounded-2xl overflow-hidden flex flex-col">
+              
+              <!-- Row 1: Swap Priority -->
+              <div class="px-4 py-3 border-b border-base-content/5 flex justify-between items-center gap-4">
+                <div class="flex flex-col">
+                  <span class="text-xs font-bold">Swap Priority</span>
+                  <span class="text-[10px] text-base-content/50">Higher priority swap is used first</span>
+                </div>
+                <div class="join w-48">
+                  <button class="btn btn-xs join-item btn-neutral font-bold" onclick="adjustPriority(-10)">-</button>
+                  <input type="text" id="priority-input" class="input input-xs join-item input-bordered w-full text-center font-mono font-semibold" value="100" oninput="validatePriority(this)" />
+                  <button class="btn btn-xs join-item btn-neutral font-bold" onclick="adjustPriority(10)">+</button>
+                </div>
+              </div>
+
+              <!-- Row 2: Writeback Backing Device -->
+              <div class="px-4 py-3 border-b border-base-content/5 flex justify-between items-center gap-4">
+                <div class="flex flex-col">
+                  <span class="text-xs font-bold">Writeback Backing Device</span>
+                  <span class="text-[10px] text-base-content/50">Physical block device for idle page writeback</span>
+                </div>
+                <div class="flex flex-col items-end gap-1">
+                  <select id="backing-dev-select" class="select select-xs select-bordered w-48 font-semibold" onchange="onBackingDevChanged(this.value)">
+                    <option value="none">None (Disable Writeback)</option>
+                    <option value="/dev/sda3">/dev/sda3 (120G - SSD)</option>
+                    <option value="/dev/nvme0n1p4">/dev/nvme0n1p4 (250G - NVMe)</option>
+                    <option value="/dev/sdb1" disabled>/dev/sdb1 (Mounted - ext4)</option>
+                  </select>
+                  <span class="text-[9px] text-base-content/40">Mounted/active partitions are disabled for safety.</span>
+                </div>
+              </div>
+
+              <!-- Row 3: Extra Options -->
+              <div class="px-4 py-3 flex justify-between items-center gap-4">
+                <div class="flex flex-col">
+                  <span class="text-xs font-bold">Extra Options</span>
+                  <span class="text-[10px] text-base-content/50">Raw parameters passed to zramctl</span>
+                </div>
+                <input type="text" id="extra-options-input" class="input input-xs input-bordered w-48 font-mono font-semibold text-right" placeholder="none" oninput="markDirtyField('options')" />
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Tab 4: Mount & FS -->
+          <div id="tab-content-mount" class="hidden flex flex-col gap-4">
+            <div class="bg-base-200/30 border border-base-content/5 rounded-2xl overflow-hidden flex flex-col">
+              
+              <!-- Row 1: FS Mode -->
+              <div class="px-4 py-3 border-b border-base-content/5 flex justify-between items-center gap-4">
+                <div class="flex flex-col">
+                  <span class="text-xs font-bold">Filesystem Mode</span>
+                  <span class="text-[10px] text-base-content/50">Use ZRAM as swap space or mountable disk</span>
+                </div>
+                <input type="checkbox" id="fs-mode-toggle" class="toggle toggle-sm toggle-primary" onchange="toggleFsMode(this.checked)" />
+              </div>
+
+              <!-- Row 2: FS Type (Conditional) -->
+              <div id="row-fs-type" class="px-4 py-3 border-b border-base-content/5 flex justify-between items-center gap-4 hidden">
+                <div class="flex flex-col">
+                  <span class="text-xs font-bold">Filesystem Type</span>
+                  <span class="text-[10px] text-base-content/50">Format type for mountable disk</span>
+                </div>
+                <select id="fs-type-select" class="select select-xs select-bordered w-48 font-semibold" onchange="markDirtyField('fs_type')">
+                  <option value="ext4">ext4 (Default)</option>
+                  <option value="btrfs">btrfs</option>
+                  <option value="ext2">ext2</option>
+                  <option value="tmpfs">tmpfs</option>
+                </select>
+              </div>
+
+              <!-- Row 3: Mount Point (Conditional) -->
+              <div id="row-mount-point" class="px-4 py-3 flex justify-between items-center gap-4 hidden">
+                <div class="flex flex-col">
+                  <span class="text-xs font-bold">Mount Point</span>
+                  <span class="text-[10px] text-base-content/50">Absolute path to mount directory</span>
+                </div>
+                <div class="flex flex-col items-end gap-1">
+                  <input type="text" id="mount-point-input" class="input input-xs input-bordered w-48 font-mono font-semibold text-right" value="/tmp/zram_fs" oninput="validateMountPoint(this)" />
+                  <span id="mount-point-error" class="text-[9px] text-error font-semibold hidden">Must be an absolute path</span>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Sticky Action Footer -->
+        <div class="px-6 py-4 border-t border-base-content/5 bg-base-200/30 flex justify-between items-center shrink-0">
+          <!-- Segmented Apply Mode Selector -->
+          <div class="join bg-base-100 border border-base-content/10 p-0.5 rounded-xl">
+            <button id="mode-live" class="btn btn-2xs join-item btn-ghost font-bold px-2.5" onclick="setApplyMode('live')">Live Only</button>
+            <button id="mode-persist" class="btn btn-2xs join-item btn-ghost font-bold px-2.5" onclick="setApplyMode('persist')">Persist Only</button>
+            <button id="mode-both" class="btn btn-2xs join-item btn-primary font-bold px-2.5" onclick="setApplyMode('both')">Persist + Restart</button>
+          </div>
+          
+          <div class="flex gap-2">
+            <button id="btn-revert" class="btn btn-xs btn-neutral btn-outline font-bold" onclick="revertChanges()" disabled>Revert</button>
+            <button id="btn-apply" class="btn btn-xs btn-primary font-bold gap-1.5" onclick="triggerApply()" disabled>
+              <i data-lucide="save" class="w-3.5 h-3.5"></i> Apply Changes
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Modal 1: Unified Diff Confirmation Dialog -->
+  <div id="modal-diff" class="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm flex items-center justify-center hidden">
+    <div class="w-full max-w-lg bg-base-100 rounded-2xl border border-base-content/10 shadow-2xl flex flex-col overflow-hidden animate-fade-in">
+      <div class="px-6 py-4 border-b border-base-content/5 flex justify-between items-center bg-base-200/30">
+        <div class="flex items-center gap-2">
+          <i data-lucide="git-commit" class="text-primary w-5 h-5"></i>
+          <h3 class="font-bold text-sm">Confirm Configuration Changes</h3>
+        </div>
+        <button class="btn btn-xs btn-ghost btn-circle" onclick="closeDiffModal()"><i data-lucide="x" class="w-4 h-4"></i></button>
+      </div>
+      
+      <div class="p-6 flex flex-col gap-4">
+        <p class="text-xs text-base-content/70">Review the unified diff of <code class="font-mono bg-base-200 px-1 py-0.5 rounded">/etc/systemd/zram-generator.conf</code> before writing to disk:</p>
+        
+        <!-- Unified Diff Viewer -->
+        <pre class="bg-base-300 p-4 rounded-xl font-mono text-[10px] overflow-x-auto text-left max-h-[240px] border border-base-content/5">
+<span class="text-base-content/40">@@ -5,8 +5,8 @@</span>
+ [zram0]
+-zram-size = ram / 2
+-compression-algorithm = lz4
++zram-size = 4G
++compression-algorithm = zstd
+ swap-priority = 100
++writeback-device = /dev/nvme0n1p4
+        </pre>
+      </div>
+      
+      <div class="px-6 py-4 border-t border-base-content/5 bg-base-200/30 flex justify-end gap-2">
+        <button class="btn btn-xs btn-neutral btn-outline" onclick="closeDiffModal()">Cancel</button>
+        <button class="btn btn-xs btn-primary font-bold" onclick="confirmApply()">Confirm & Write</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 2: Global Defaults Dialog -->
+  <div id="modal-global" class="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm flex items-center justify-center hidden">
+    <div class="w-full max-w-md bg-base-100 rounded-2xl border border-base-content/10 shadow-2xl flex flex-col overflow-hidden animate-fade-in">
+      <div class="px-6 py-4 border-b border-base-content/5 flex justify-between items-center bg-base-200/30">
+        <div class="flex items-center gap-2">
+          <i data-lucide="settings" class="text-primary w-5 h-5"></i>
+          <h3 class="font-bold text-sm">Global Generator Defaults</h3>
+        </div>
+        <button class="btn btn-xs btn-ghost btn-circle" onclick="closeGlobalSettings()"><i data-lucide="x" class="w-4 h-4"></i></button>
+      </div>
+      
+      <div class="p-6 flex flex-col gap-4">
+        <div class="bg-base-200/30 border border-base-content/5 rounded-2xl overflow-hidden flex flex-col">
+          <div class="px-4 py-3 border-b border-base-content/5 flex justify-between items-center gap-4">
+            <div class="flex flex-col">
+              <span class="text-xs font-bold">Default Algorithm</span>
+              <span class="text-[10px] text-base-content/50">Fallback algorithm for all devices</span>
+            </div>
+            <select class="select select-xs select-bordered w-36 font-semibold">
+              <option>zstd</option>
+              <option>lz4</option>
+            </select>
+          </div>
+          <div class="px-4 py-3 flex justify-between items-center gap-4">
+            <div class="flex flex-col">
+              <span class="text-xs font-bold">Default Size Limit</span>
+              <span class="text-[10px] text-base-content/50">Fallback size limit</span>
+            </div>
+            <input type="text" class="input input-xs input-bordered w-36 font-mono font-semibold text-right" value="2G" />
+          </div>
+        </div>
+      </div>
+      
+      <div class="px-6 py-4 border-t border-base-content/5 bg-base-200/30 flex justify-end gap-2">
+        <button class="btn btn-xs btn-neutral btn-outline" onclick="closeGlobalSettings()">Cancel</button>
+        <button class="btn btn-xs btn-primary font-bold" onclick="closeGlobalSettings()">Save Defaults</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 3: Raw Config Viewer -->
+  <div id="modal-raw" class="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm flex items-center justify-center hidden">
+    <div class="w-full max-w-lg bg-base-100 rounded-2xl border border-base-content/10 shadow-2xl flex flex-col overflow-hidden animate-fade-in">
+      <div class="px-6 py-4 border-b border-base-content/5 flex justify-between items-center bg-base-200/30">
+        <div class="flex items-center gap-2">
+          <i data-lucide="eye" class="text-primary w-5 h-5"></i>
+          <h3 class="font-bold text-sm">zram-generator.conf</h3>
+        </div>
+        <button class="btn btn-xs btn-ghost btn-circle" onclick="closeRawConfig()"><i data-lucide="x" class="w-4 h-4"></i></button>
+      </div>
+      
+      <div class="p-6 flex flex-col gap-4">
+        <pre class="bg-base-300 p-4 rounded-xl font-mono text-[10px] overflow-x-auto text-left max-h-[300px] border border-base-content/5">
+# This file is managed by Z-Manager.
+# Manual edits may be overwritten.
+
+[zram0]
+zram-size = ram / 2
+compression-algorithm = zstd
+swap-priority = 100
+
+[zram1]
+zram-size = 2G
+compression-algorithm = lz4
+swap-priority = 50
+        </pre>
+      </div>
+      
+      <div class="px-6 py-4 border-t border-base-content/5 bg-base-200/30 flex justify-end">
+        <button class="btn btn-xs btn-neutral font-bold" onclick="closeRawConfig()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Initialize Lucide Icons
+    lucide.createIcons();
+
+    // State Machine
+    let activeDevice = 'zram0';
+    let activeTab = 'profiles';
+    let applyMode = 'both';
+    let dirtyFields = {
+      zram0: new Set(),
+      zram1: new Set()
+    };
+    let validationErrors = {
+      zram0: new Set(),
+      zram1: new Set()
+    };
+
+    // Device Data Store
+    let deviceData = {
+      zram0: {
+        sizeMode: 'fraction',
+        customSize: '4G',
+        algo: 'zstd',
+        customAlgo: '',
+        hostLimitEnabled: false,
+        hostLimit: '',
+        residentLimit: '',
+        priority: 100,
+        backingDev: 'none',
+        options: '',
+        fsMode: false,
+        fsType: 'ext4',
+        mountPoint: '/tmp/zram_fs'
+      },
+      zram1: {
+        sizeMode: 'custom',
+        customSize: '2G',
+        algo: 'lz4',
+        customAlgo: '',
+        hostLimitEnabled: false,
+        hostLimit: '',
+        residentLimit: '',
+        priority: 50,
+        backingDev: 'none',
+        options: '',
+        fsMode: false,
+        fsType: 'ext4',
+        mountPoint: '/tmp/zram_fs'
+      }
+    };
+
+    // Tab Switching
+    function switchTab(tabId) {
+      // Reset tab buttons
+      ['profiles', 'alloc', 'perf', 'mount'].forEach(t => {
+        document.getElementById('tab-btn-' + t).className = 'tab flex-1 text-xs font-bold py-1.5';
+        document.getElementById('tab-content-' + t).className = 'hidden';
+      });
+      
+      // Activate selected
+      document.getElementById('tab-btn-' + tabId).className = 'tab tab-active flex-1 text-xs font-bold py-1.5';
+      document.getElementById('tab-content-' + tabId).className = 'flex flex-col gap-5';
+      activeTab = tabId;
+    }
+
+    // Device Selection
+    function selectDevice(name) {
+      // Save current form state first
+      saveCurrentFormState();
+
+      // Check if switching to a different device
+      if (activeDevice !== name) {
+        activeDevice = name;
+        
+        // Update selected card borders
+        ['zram0', 'zram1'].forEach(d => {
+          const card = document.getElementById('card-' + d);
+          if (card) {
+            if (d === name) {
+              card.className = 'card-widget bg-base-100 border-2 border-primary shadow-sm rounded-2xl p-3.5 cursor-pointer transition-all flex flex-col gap-3';
+            } else {
+              card.className = 'card-widget bg-base-100 border border-base-content/10 hover:border-primary/30 rounded-2xl p-3.5 cursor-pointer transition-all flex flex-col gap-3';
+            }
+          }
+        });
+
+        // Update inspector title
+        document.getElementById('inspector-title').innerText = name + ' Configuration';
+
+        // Load form state for the selected device
+        loadFormState(name);
+      }
+    }
+
+    // Load Form State from Data Store
+    function loadFormState(name) {
+      const data = deviceData[name];
+      
+      // Allocation Tab
+      document.getElementById('size-mode').value = data.sizeMode;
+      document.getElementById('custom-size-input').value = data.customSize;
+      document.getElementById('algo-select').value = data.algo;
+      document.getElementById('custom-algo-input').value = data.customAlgo;
+      document.getElementById('host-limit-toggle').checked = data.hostLimitEnabled;
+      document.getElementById('host-limit-input').value = data.hostLimit;
+      document.getElementById('resident-limit-input').value = data.residentLimit;
+
+      // Performance Tab
+      document.getElementById('priority-input').value = data.priority;
+      document.getElementById('backing-dev-select').value = data.backingDev;
+      document.getElementById('extra-options-input').value = data.options;
+
+      // Mount Tab
+      document.getElementById('fs-mode-toggle').checked = data.fsMode;
+      document.getElementById('fs-type-select').value = data.fsType;
+      document.getElementById('mount-point-input').value = data.mountPoint;
+
+      // Trigger visibility updates
+      onSizeModeChanged(data.sizeMode);
+      onAlgoChanged(data.algo);
+      toggleHostLimit(data.hostLimitEnabled);
+      toggleFsMode(data.fsMode);
+
+      // Update buttons based on dirty state
+      updateActionButtons();
+    }
+
+    // Save Form State to Data Store
+    function saveCurrentFormState() {
+      const data = deviceData[activeDevice];
+      if (!data) return;
+
+      data.sizeMode = document.getElementById('size-mode').value;
+      data.customSize = document.getElementById('custom-size-input').value;
+      data.algo = document.getElementById('algo-select').value;
+      data.customAlgo = document.getElementById('custom-algo-input').value;
+      data.hostLimitEnabled = document.getElementById('host-limit-toggle').checked;
+      data.hostLimit = document.getElementById('host-limit-input').value;
+      data.residentLimit = document.getElementById('resident-limit-input').value;
+
+      data.priority = parseInt(document.getElementById('priority-input').value) || 100;
+      data.backingDev = document.getElementById('backing-dev-select').value;
+      data.options = document.getElementById('extra-options-input').value;
+
+      data.fsMode = document.getElementById('fs-mode-toggle').checked;
+      data.fsType = document.getElementById('fs-type-select').value;
+      data.mountPoint = document.getElementById('mount-point-input').value;
+    }
+
+    // Visibility Toggles
+    function onSizeModeChanged(val) {
+      const row = document.getElementById('row-custom-size');
+      if (val === 'custom') {
+        row.classList.remove('hidden');
+      } else {
+        row.classList.add('hidden');
+      }
+      markDirtyField('sizeMode');
+    }
+
+    function onAlgoChanged(val) {
+      const row = document.getElementById('row-custom-algo');
+      if (val === 'custom') {
+        row.classList.remove('hidden');
+      } else {
+        row.classList.add('hidden');
+      }
+      markDirtyField('algo');
+    }
+
+    function toggleHostLimit(checked) {
+      const container = document.getElementById('host-limit-input-container');
+      if (checked) {
+        container.classList.remove('hidden');
+      } else {
+        container.classList.add('hidden');
+      }
+      markDirtyField('hostLimitEnabled');
+    }
+
+    function toggleFsMode(checked) {
+      const rowFs = document.getElementById('row-fs-type');
+      const rowMount = document.getElementById('row-mount-point');
+      if (checked) {
+        rowFs.classList.remove('hidden');
+        rowMount.classList.remove('hidden');
+      } else {
+        rowFs.classList.add('hidden');
+        rowMount.classList.add('hidden');
+      }
+      markDirtyField('fsMode');
+    }
+
+    // Validation Logic
+    function validateSize(input) {
+      const val = input.value.trim();
+      const regex = /^\d+(\.\d+)?[GMKgmk]?$/;
+      const error = document.getElementById('size-error');
+      
+      if (val === '' || regex.test(val) || val === 'ram' || val.includes('ram')) {
+        error.classList.add('hidden');
+        input.classList.remove('input-error');
+        validationErrors[activeDevice].delete('size');
+      } else {
+        error.classList.remove('hidden');
+        input.classList.add('input-error');
+        validationErrors[activeDevice].add('size');
+      }
+      markDirtyField('customSize');
+    }
+
+    function validateHostLimit(input) {
+      const val = input.value.trim();
+      const regex = /^\d+(\.\d+)?[GMKgmk]?$/;
+      const error = document.getElementById('host-limit-error');
+      
+      if (val === '' || regex.test(val)) {
+        error.classList.add('hidden');
+        input.classList.remove('input-error');
+        validationErrors[activeDevice].delete('hostLimit');
+      } else {
+        error.classList.remove('hidden');
+        input.classList.add('input-error');
+        validationErrors[activeDevice].add('hostLimit');
+      }
+      markDirtyField('hostLimit');
+    }
+
+    function validatePriority(input) {
+      const val = parseInt(input.value);
+      if (isNaN(val) || val < -1000 || val > 1000) {
+        input.classList.add('input-error');
+        validationErrors[activeDevice].add('priority');
+      } else {
+        input.classList.remove('input-error');
+        validationErrors[activeDevice].delete('priority');
+      }
+      markDirtyField('priority');
+    }
+
+    function validateMountPoint(input) {
+      const val = input.value.trim();
+      const error = document.getElementById('mount-point-error');
+      
+      if (val.startsWith('/')) {
+        error.classList.add('hidden');
+        input.classList.remove('input-error');
+        validationErrors[activeDevice].delete('mountPoint');
+      } else {
+        error.classList.remove('hidden');
+        input.classList.add('input-error');
+        validationErrors[activeDevice].add('mountPoint');
+      }
+      markDirtyField('mountPoint');
+    }
+
+    function adjustPriority(amount) {
+      const input = document.getElementById('priority-input');
+      let val = parseInt(input.value) || 0;
+      val = Math.max(-1000, Math.min(1000, val + amount));
+      input.value = val;
+      validatePriority(input);
+    }
+
+    // State Tracking
+    function markDirtyField(field) {
+      dirtyFields[activeDevice].add(field);
+      updateActionButtons();
+      
+      // Show unsaved badge in sidebar
+      const badge = document.getElementById('badge-' + activeDevice + '-unsaved');
+      if (badge) {
+        badge.classList.remove('hidden');
+      }
+    }
+
+    function updateActionButtons() {
+      const hasChanges = dirtyFields[activeDevice].size > 0;
+      const hasErrors = validationErrors[activeDevice].size > 0;
+
+      document.getElementById('btn-revert').disabled = !hasChanges;
+      document.getElementById('btn-apply').disabled = !hasChanges || hasErrors;
+    }
+
+    function revertChanges() {
+      dirtyFields[activeDevice].clear();
+      validationErrors[activeDevice].clear();
+      
+      // Hide unsaved badge
+      const badge = document.getElementById('badge-' + activeDevice + '-unsaved');
+      if (badge) {
+        badge.classList.add('hidden');
+      }
+
+      // Reset inputs to default values
+      if (activeDevice === 'zram0') {
+        deviceData.zram0 = {
+          sizeMode: 'fraction',
+          customSize: '4G',
+          algo: 'zstd',
+          customAlgo: '',
+          hostLimitEnabled: false,
+          hostLimit: '',
+          residentLimit: '',
+          priority: 100,
+          backingDev: 'none',
+          options: '',
+          fsMode: false,
+          fsType: 'ext4',
+          mountPoint: '/tmp/zram_fs'
+        };
+      } else {
+        deviceData.zram1 = {
+          sizeMode: 'custom',
+          customSize: '2G',
+          algo: 'lz4',
+          customAlgo: '',
+          hostLimitEnabled: false,
+          hostLimit: '',
+          residentLimit: '',
+          priority: 50,
+          backingDev: 'none',
+          options: '',
+          fsMode: false,
+          fsType: 'ext4',
+          mountPoint: '/tmp/zram_fs'
+        };
+      }
+      loadFormState(activeDevice);
+    }
+
+    // Apply Presets
+    function applyPreset(type) {
+      const data = deviceData[activeDevice];
+      if (type === 'desktop') {
+        data.sizeMode = 'equal';
+        data.algo = 'zstd';
+        data.priority = 100;
+      } else if (type === 'server') {
+        data.sizeMode = 'fraction';
+        data.algo = 'lz4';
+        data.priority = 100;
+      } else if (type === 'power') {
+        data.sizeMode = 'fraction';
+        data.algo = 'zstd';
+        data.priority = 50;
+      }
+      loadFormState(activeDevice);
+      markDirtyField('preset');
+    }
+
+    // Save Profile Form Toggle
+    function toggleSaveProfileForm() {
+      const form = document.getElementById('save-profile-form');
+      form.classList.toggle('hidden');
+    }
+
+    let selectedIcon = 'gamepad-2';
+    function selectProfileIcon(iconName, btn) {
+      selectedIcon = iconName;
+      // Reset all buttons in the picker
+      const buttons = btn.parentNode.querySelectorAll('button');
+      buttons.forEach(b => {
+        b.className = 'btn btn-xs btn-square btn-ghost';
+      });
+      btn.className = 'btn btn-xs btn-square btn-primary';
+    }
+
+    function saveCustomProfile() {
+      const name = document.getElementById('profile-name').value.trim();
+      const desc = document.getElementById('profile-desc').value.trim();
+      if (!name) return alert('Profile name is required');
+
+      // Add new profile card dynamically
+      const grid = document.querySelector('#tab-content-profiles .grid');
+      const card = document.createElement('button');
+      card.className = 'card bg-base-200/40 border border-base-content/10 hover:border-primary p-3 text-center flex flex-col items-center gap-2 transition-all';
+      card.onclick = () => applyPreset('custom');
+      card.innerHTML = `
+        <div class="p-2 bg-primary/10 rounded-xl text-primary">
+          <i data-lucide="${selectedIcon}" class="w-6 h-6"></i>
+        </div>
+        <div>
+          <h4 class="font-bold text-xs">${name}</h4>
+          <p class="text-[9px] text-base-content/50 mt-0.5">${desc || 'Custom Profile'}</p>
+        </div>
+      `;
+      grid.appendChild(card);
+      lucide.createIcons();
+      toggleSaveProfileForm();
+    }
+
+    // Apply Mode Selection
+    function setApplyMode(mode) {
+      applyMode = mode;
+      ['live', 'persist', 'both'].forEach(m => {
+        const btn = document.getElementById('mode-' + m);
+        btn.className = 'btn btn-2xs join-item btn-ghost font-bold px-2.5';
+      });
+      document.getElementById('mode-' + mode).className = 'btn btn-2xs join-item btn-primary font-bold px-2.5';
+    }
+
+    // Apply Actions
+    function triggerApply() {
+      if (applyMode === 'live') {
+        // Live only doesn't show diff modal
+        confirmApply();
+      } else {
+        // Show unified diff modal
+        document.getElementById('modal-diff').classList.remove('hidden');
+      }
+    }
+
+    function closeDiffModal() {
+      document.getElementById('modal-diff').classList.add('hidden');
+    }
+
+    function confirmApply() {
+      closeDiffModal();
+      dirtyFields[activeDevice].clear();
+      updateActionButtons();
+      
+      // Hide unsaved badge
+      const badge = document.getElementById('badge-' + activeDevice + '-unsaved');
+      if (badge) {
+        badge.classList.add('hidden');
+      }
+      
+      alert('Changes applied successfully!');
+    }
+
+    // Global Settings Modal
+    function openGlobalSettings() {
+      document.getElementById('modal-global').classList.remove('hidden');
+    }
+    function closeGlobalSettings() {
+      document.getElementById('modal-global').classList.add('hidden');
+    }
+
+    // Raw Config Modal
+    function openRawConfig() {
+      document.getElementById('modal-raw').classList.remove('hidden');
+    }
+    function closeRawConfig() {
+      document.getElementById('modal-raw').classList.add('hidden');
+    }
+
+    // Add New Device
+    function addNewDevice() {
+      const list = document.getElementById('device-list');
+      const name = 'zram' + Object.keys(deviceData).length;
+      
+      deviceData[name] = {
+        sizeMode: 'fraction',
+        customSize: '2G',
+        algo: 'zstd',
+        customAlgo: '',
+        hostLimitEnabled: false,
+        hostLimit: '',
+        residentLimit: '',
+        priority: 100,
+        backingDev: 'none',
+        options: '',
+        fsMode: false,
+        fsType: 'ext4',
+        mountPoint: '/tmp/zram_fs'
+      };
+      dirtyFields[name] = new Set();
+      validationErrors[name] = new Set();
+
+      const card = document.createElement('div');
+      card.id = 'card-' + name;
+      card.className = 'card-widget bg-base-100 border border-base-content/10 hover:border-primary/30 rounded-2xl p-3.5 cursor-pointer transition-all flex flex-col gap-3';
+      card.onclick = () => selectDevice(name);
+      card.innerHTML = `
+        <div class="flex justify-between items-start">
+          <div class="flex items-center gap-2">
+            <i data-lucide="cpu" class="text-base-content/40 w-4 h-4"></i>
+            <span class="font-mono font-bold text-sm">${name}</span>
+            <span class="badge badge-xs badge-neutral font-bold uppercase tracking-wider">Draft</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span id="badge-${name}-unsaved" class="badge badge-xs badge-warning font-bold uppercase tracking-wider">Unsaved</span>
+            <span class="text-[10px] font-mono text-base-content/50">2G • zstd</span>
+          </div>
+        </div>
+        <div class="flex items-center gap-4 bg-base-200/30 p-2 rounded-xl border border-base-content/5 opacity-60">
+          <div class="w-12 h-12 shrink-0 relative">
+            <svg class="w-full h-full -rotate-180" viewBox="0 0 100 100">
+              <circle cx="50" cy="50" r="40" fill="none" class="stroke-base-content/10" stroke-width="8" />
+            </svg>
+            <div class="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-base-content/40">0.0x</div>
+          </div>
+          <div class="flex-1 flex flex-col gap-0.5 min-w-0">
+            <div class="flex justify-between text-[10px] font-mono text-base-content/40">
+              <span>Usage</span>
+              <span>0B / 2.0G</span>
+            </div>
+            <progress class="progress progress-neutral h-1.5 w-full" value="0" max="100"></progress>
+          </div>
+        </div>
+      `;
+      list.appendChild(card);
+      lucide.createIcons();
+      
+      // Mark as dirty immediately since it's a draft
+      markDirtyField('new_device');
+      selectDevice(name);
+    }
+  </script>
+</body>
+</html>
