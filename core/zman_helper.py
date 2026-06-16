@@ -316,8 +316,29 @@ def cmd_remove(path: str) -> int:
         return 1
 
 
+def cmd_read_journal(unit: str, count: str) -> int:
+    """Read journal logs for a specific unit."""
+    if not is_service_allowed(unit):
+        print(f"Error: Service not allowed: {unit}", file=sys.stderr)
+        return 1
+    try:
+        subprocess.run([
+            "journalctl",
+            "--system",
+            "-u",
+            unit,
+            "-n",
+            count,
+            "--no-pager",
+            "--output=short-iso"
+        ], check=True)
+        return 0
+    except Exception as e:
+        print(f"Error reading journal: {e}", file=sys.stderr)
+        return 1
+
+
 def main():
-    if len(sys.argv) < 2:
         return 1
 
     match sys.argv[1:]:
@@ -330,7 +351,8 @@ def main():
         case ["live-apply", device, path]:
             return cmd_live_apply(device, path)
         case ["live-remove", device, path]:
-            return cmd_live_remove(device, path)
+        case ["read-journal", unit, count]:
+            return cmd_read_journal(unit, count)
         case ["sysctl-system"]:
             subprocess.run(["sysctl", "--system"], check=True)
             return 0

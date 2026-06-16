@@ -6,6 +6,7 @@
   } from 'lucide-svelte';
   import { Dialog } from 'bits-ui';
   import Select from './Select.svelte';
+  import ZramProfilesModal from './ZramProfilesModal.svelte';
 
   let {
     devices = [],
@@ -50,10 +51,13 @@
   // Custom forms state mimicking original backend bindings but isolated from live updates
   let forms = $state<Record<string, {
     algo: string;
+    sizeMode: string;
     size: string;
     backingDev: string;
     swapPriority: number;
     hostMemLimit: string;
+    residentLimit: string;
+    options: string;
     fsType: string;
     mountPoint: string;
     loading: boolean;
@@ -67,17 +71,19 @@
   });
 
   // Keep forms synced with incoming telemetry ONLY if the field is not dirty
-  // Keep forms synced with incoming telemetry ONLY if the field is not dirty
   $effect(() => {
     if (devices) {
       devices.forEach((dev: any) => {
         if (!forms[dev.name]) {
           forms[dev.name] = {
             algo: dev.algo || 'zstd',
+            sizeMode: 'custom',
             size: formatBytesToSizeString(dev.totalBytes) || '2G',
             backingDev: dev.backingDev || 'none',
             swapPriority: dev.swapPriority !== undefined ? dev.swapPriority : 100,
             hostMemLimit: dev.hostMemLimit || '',
+            residentLimit: dev.residentLimit || '',
+            options: dev.options || '',
             fsType: dev.fsType || 'swap',
             mountPoint: dev.mountPoint || '',
             loading: false
@@ -94,8 +100,8 @@
             form.swapPriority = dev.swapPriority;
           }
           if (!dirty.hostMemLimit && !form.loading) form.hostMemLimit = dev.hostMemLimit || '';
-          if (!dirty.fsType && !form.loading) form.fsType = dev.fsType || 'swap';
-          if (!dirty.mountPoint && !form.loading) form.mountPoint = dev.mountPoint || '';
+          if (!dirty.residentLimit && !form.loading) form.residentLimit = dev.residentLimit || '';
+          if (!dirty.options && !form.loading) form.options = dev.options || '';
         }
       });
     }
@@ -147,6 +153,8 @@
       form.backingDev = dev.backingDev || 'none';
       form.swapPriority = dev.swapPriority !== undefined ? dev.swapPriority : 100;
       form.hostMemLimit = dev.hostMemLimit || '';
+      form.residentLimit = dev.residentLimit || '';
+      form.options = dev.options || '';
       form.fsType = dev.fsType || 'swap';
       form.mountPoint = dev.mountPoint || '';
       dirtyFields[deviceName] = {};
@@ -178,6 +186,8 @@
         backingDev: form.backingDev === 'none' ? null : form.backingDev,
         swapPriority: Number(form.swapPriority),
         hostMemoryLimit: form.hostMemLimit || null,
+        residentLimit: form.residentLimit || null,
+        options: form.options || null,
         fsType: form.fsType || null,
         mountPoint: form.mountPoint || null,
         mode: applyMode
@@ -315,10 +325,13 @@
     
     forms[proposedName] = {
       algo: 'zstd',
+      sizeMode: 'custom',
       size: '2G',
       backingDev: 'none',
       swapPriority: 100,
       hostMemLimit: '',
+      residentLimit: '',
+      options: '',
       fsType: 'swap',
       mountPoint: '',
       loading: false
@@ -361,6 +374,8 @@
           swapPriority: form.swapPriority,
           backingDev: form.backingDev === 'none' ? null : form.backingDev,
           hostMemoryLimit: form.hostMemLimit || null,
+          residentLimit: form.residentLimit || null,
+          options: form.options || null,
           fsType: form.fsType || null,
           mountPoint: form.mountPoint || null
         });
@@ -393,34 +408,24 @@
     if (lower.includes('battery') || lower.includes('power')) return Battery;
     return Box;
   }
+  export function openProfilesManager() {
+    activeProfileTab = 'list';
+    isProfilesModalOpen = true;
+  }
+
+  export function addZramDevice() {
+    triggerCreateDraft();
+  }
 </script>
 
 <div class="flex flex-col gap-3 mt-2">
-  <!-- Top Navigation & Global Settings row -->
-  <div class="flex justify-between items-center mb-2 px-1">
-    <div class="flex gap-2">
-      <button 
-        class="btn btn-sm btn-outline gap-1.5 font-bold"
-        onclick={() => {
-          activeProfileTab = 'list';
-          isProfilesModalOpen = true;
-        }}
-      >
-        <Settings size={14} /> Profiles Manager
-      </button>
-    </div>
-    <button class="btn btn-sm btn-primary gap-1.5 font-bold" onclick={triggerCreateDraft}>
-      <Plus size={14} /> Add ZRAM Device
-    </button>
-  </div>
-
   <!-- Layout: 3-Zone fixed-height container -->
-  <div class="grid grid-cols-1 lg:grid-cols-5 gap-4 h-[480px] overflow-hidden">
+  <div class="flex h-[550px] overflow-hidden border border-base-content/10 rounded-xl bg-base-100">
     
-    <!-- Sidebar: Devices (2/5) -->
-    <div class="lg:col-span-2 flex flex-col gap-2 overflow-y-auto pr-1 h-full max-h-full scrollbar-thin">
+    <!-- Sidebar: Devices -->
+    <div class="w-72 flex-shrink-0 flex flex-col gap-2 overflow-y-auto p-3 border-r border-base-content/10 bg-base-200/20 scrollbar-thin">
       {#if devices.length === 0}
-        <div class="py-12 flex flex-col items-center justify-center text-center w-full bg-base-200/20 border border-base-content/5 rounded-2xl h-full">
+        <div class="py-12 flex flex-col items-center justify-center text-center w-full h-full">
           <Info size={28} class="mb-2 opacity-50 text-base-content/40" />
           <p class="text-xs text-base-content/60 font-semibold">No active ZRAM devices.</p>
         </div>
@@ -428,10 +433,10 @@
         {#each devices as dev}
           {@const isDirty = dirtyFields[dev.name] && Object.values(dirtyFields[dev.name]).some(v => v === true)}
           <button 
-            class="card bg-base-100 border-2 transition-all text-left {selectedDeviceName === dev.name ? 'border-primary' : 'border-base-content/10 hover:border-primary/30'} flex-shrink-0"
+            class="card bg-base-100 border transition-all text-left {selectedDeviceName === dev.name ? 'border-primary shadow-sm' : 'border-base-content/10 hover:border-primary/30'} flex-shrink-0"
             onclick={() => selectDevice(dev.name)}
           >
-            <div class="card-body p-3.5 flex flex-col gap-1.5">
+            <div class="card-body p-3 flex flex-col gap-2">
               <div class="flex justify-between items-center">
                 <div class="flex items-center gap-1.5">
                   <Cpu class={selectedDeviceName === dev.name ? 'text-primary' : 'text-base-content/50'} size={15} />
@@ -448,13 +453,15 @@
                 <span class="text-[10px] font-mono text-base-content/50 font-bold">{formatBytesToSizeString(dev.totalBytes)}</span>
               </div>
               
-              <!-- Snake-Style Arc Gauge Placeholder: compact progress bar -->
+              <!-- Thick Progress Bar -->
               <div class="flex flex-col gap-1">
                 <div class="flex justify-between text-[10px] font-mono text-base-content/40">
                   <span>Usage: {formatBytesToSizeString(dev.origBytes)} / {formatBytesToSizeString(dev.totalBytes)}</span>
                   <span>{dev.totalBytes ? Math.round((dev.origBytes / dev.totalBytes) * 100) : 0}%</span>
                 </div>
-                <progress class="progress progress-primary h-1.5 w-full bg-base-300" value={dev.origBytes || 0} max={dev.totalBytes || 1}></progress>
+                <div class="h-2 rounded-full bg-base-300 overflow-hidden w-full">
+                  <div class="h-full bg-primary" style="width: {dev.totalBytes ? Math.round((dev.origBytes / dev.totalBytes) * 100) : 0}%"></div>
+                </div>
               </div>
             </div>
           </button>
@@ -462,8 +469,8 @@
       {/if}
     </div>
 
-    <!-- Inspector Detail Pane (3/5) -->
-    <div class="lg:col-span-3 card bg-base-100 border border-base-content/10 shadow-sm overflow-hidden flex flex-col h-full">
+    <!-- Inspector Detail Pane -->
+    <div class="flex-1 flex flex-col relative bg-base-100 overflow-hidden">
       {#if selectedDeviceName && forms[selectedDeviceName]}
         {@const form = forms[selectedDeviceName]}
         {@const dev = devices.find((d: any) => d.name === selectedDeviceName) || {}}
@@ -475,67 +482,77 @@
           {/if}
 
           <!-- Inspector Header -->
-          <div class="p-4 border-b border-base-content/5 flex justify-between items-center gap-4 bg-base-200/10">
+          <div class="p-6 pb-4 flex justify-between items-end max-w-4xl mx-auto w-full">
             <div>
               <div class="flex items-center gap-2">
-                <h3 class="font-mono text-base font-black text-primary">{selectedDeviceName}</h3>
+                <h2 class="text-2xl font-bold font-mono text-primary">{selectedDeviceName}</h2>
                 {#if dev.isDraft}
                   <span class="badge badge-success badge-xs font-semibold py-1">New Device</span>
                 {/if}
               </div>
-              <p class="text-[10px] text-base-content/50">Custom hardware parameters</p>
+              <p class="text-sm text-base-content/60">Custom hardware parameters</p>
             </div>
             
             <div class="flex items-center gap-2">
-              <Select 
-                value=""
-                items={profileItems}
-                onchange={handleProfileSelect}
-              />
+              <span class="text-xs font-bold uppercase tracking-wider text-base-content/60">Apply Profile:</span>
+              <div class="w-48">
+                <Select 
+                  value=""
+                  items={profileItems}
+                  onchange={handleProfileSelect}
+                />
+              </div>
               <button 
-                class="btn btn-xs btn-neutral btn-soft font-bold" 
+                class="btn btn-sm btn-neutral btn-soft font-bold" 
                 onclick={() => revertChanges(selectedDeviceName!)}
                 disabled={!isCurrentDeviceDirty()}
+                title="Revert Changes"
               >
-                Reset
+                <RefreshCw size={14} />
               </button>
               {#if !dev.isDraft}
-                <button class="btn btn-xs btn-error btn-soft font-bold" onclick={() => removeZramDevice(selectedDeviceName!)}>
-                  Remove
+                <button class="btn btn-sm btn-error btn-soft font-bold" onclick={() => removeZramDevice(selectedDeviceName!)} title="Remove Device">
+                  <Trash2 size={14} />
                 </button>
               {/if}
             </div>
           </div>
 
           <!-- Tab Selector Bar -->
-          <div class="tabs tabs-box bg-base-200/50 p-1 rounded-none flex border-b border-base-content/5">
-            <button 
-              class="tab flex-1 text-xs font-bold py-1.5 {activeInspectorTab === 'alloc' ? 'tab-active' : ''}" 
-              onclick={() => activeInspectorTab = 'alloc'}
-            >
-              Allocation
-            </button>
-            <button 
-              class="tab flex-1 text-xs font-bold py-1.5 {activeInspectorTab === 'perf' ? 'tab-active' : ''}" 
-              onclick={() => activeInspectorTab = 'perf'}
-            >
-              Performance
-            </button>
-            <button 
-              class="tab flex-1 text-xs font-bold py-1.5 {activeInspectorTab === 'mount' ? 'tab-active' : ''}" 
-              onclick={() => activeInspectorTab = 'mount'}
-            >
-              Mount & FS
-            </button>
+          <div class="px-6 max-w-4xl mx-auto w-full mb-6">
+            <div class="flex bg-base-200/50 p-1 rounded-lg border border-base-content/10">
+              <button 
+                class="flex-1 text-center py-1.5 text-sm font-bold rounded-md transition-all {activeInspectorTab === 'alloc' ? 'bg-base-100 text-base-content shadow-sm' : 'text-base-content/60 hover:text-base-content'}" 
+                onclick={() => activeInspectorTab = 'alloc'}
+              >
+                Allocation
+              </button>
+              <button 
+                class="flex-1 text-center py-1.5 text-sm font-bold rounded-md transition-all {activeInspectorTab === 'perf' ? 'bg-base-100 text-base-content shadow-sm' : 'text-base-content/60 hover:text-base-content'}" 
+                onclick={() => activeInspectorTab = 'perf'}
+              >
+                Performance
+              </button>
+              <button 
+                class="flex-1 text-center py-1.5 text-sm font-bold rounded-md transition-all {activeInspectorTab === 'mount' ? 'bg-base-100 text-base-content shadow-sm' : 'text-base-content/60 hover:text-base-content'}" 
+                onclick={() => activeInspectorTab = 'mount'}
+              >
+                Mount & FS
+              </button>
+            </div>
           </div>
 
           <!-- Form Content Area -->
-          <div class="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin">
+          <div class="flex-1 overflow-y-auto px-6 pb-24 max-w-4xl mx-auto w-full scrollbar-thin">
             {#if activeInspectorTab === 'alloc'}
-              <div class="space-y-3 animate-fade-in">
-                <div class="grid grid-cols-2 gap-4">
-                  <label class="form-control w-full">
-                    <span class="text-[10px] font-bold uppercase tracking-wider text-base-content/60 mb-1">Compression Algorithm</span>
+              <div class="animate-fade-in bg-base-200/30 border border-base-content/10 rounded-xl overflow-hidden">
+                <!-- Row 1 -->
+                <div class="flex justify-between items-center p-4 border-b border-base-content/10">
+                  <div class="flex flex-col gap-1">
+                    <span class="text-sm font-bold">Compression Algorithm</span>
+                    <span class="text-xs text-base-content/60">Determines compression speed vs ratio.</span>
+                  </div>
+                  <div class="w-56 flex-shrink-0">
                     <Select 
                       bind:value={form.algo}
                       onchange={() => markDirty('algo')}
@@ -546,145 +563,239 @@
                         { value: 'deflate', label: 'deflate' }
                       ]}
                     />
-                  </label>
-                  <label class="form-control w-full">
-                    <span class="text-[10px] font-bold uppercase tracking-wider text-base-content/60 mb-1">Disk Size</span>
+                  </div>
+                </div>
+                <!-- Row 2 -->
+                <div class="flex justify-between items-center p-4 border-b border-base-content/10">
+                  <div class="flex flex-col gap-1">
+                    <span class="text-sm font-bold">ZRAM Block Size</span>
+                    <span class="text-xs text-base-content/60">Virtual uncompressed size of the block device.</span>
+                  </div>
+                  <div class="w-56 flex-shrink-0">
+                    <Select 
+                      bind:value={form.sizeMode}
+                      onchange={(val) => {
+                        if (val === 'half') form.size = 'ram / 2';
+                        else if (val === 'full') form.size = 'ram';
+                        markDirty('size');
+                      }}
+                      items={[
+                        { value: 'half', label: '50% of RAM' },
+                        { value: 'full', label: '100% of RAM' },
+                        { value: 'custom', label: 'Custom' }
+                      ]}
+                    />
+                  </div>
+                </div>
+
+                {#if form.sizeMode === 'custom'}
+                  <!-- Row 2.5 (Custom Size) -->
+                  <div class="flex justify-between items-center p-4 border-b border-base-content/10 bg-base-200/10">
+                    <div class="flex flex-col gap-1">
+                      <span class="text-sm font-bold">Custom Size</span>
+                      <span class="text-xs text-base-content/60">e.g. 8G, 2048M, or min(ram / 2, 4096)</span>
+                    </div>
+                    <div class="w-56 flex-shrink-0">
+                      <input 
+                        type="text" 
+                        class="input input-sm input-bordered w-full font-mono font-bold" 
+                        placeholder="e.g. 4G" 
+                        bind:value={form.size} 
+                        oninput={() => markDirty('size')}
+                      />
+                    </div>
+                  </div>
+                {/if}
+
+                <!-- Row 3 -->
+                <div class="flex justify-between items-center p-4 border-b border-base-content/10">
+                  <div class="flex flex-col gap-1">
+                    <span class="text-sm font-bold">Host Memory Limit</span>
+                    <span class="text-xs text-base-content/60">Only enable if host has enough RAM (e.g. 2048M).</span>
+                  </div>
+                  <div class="w-56 flex-shrink-0">
                     <input 
                       type="text" 
-                      class="input input-xs input-bordered w-full font-mono font-bold" 
-                      placeholder="e.g. 4G" 
-                      bind:value={form.size} 
-                      oninput={() => markDirty('size')}
+                      class="input input-sm input-bordered w-full font-mono font-bold" 
+                      placeholder="none" 
+                      bind:value={form.hostMemLimit} 
+                      oninput={() => markDirty('hostMemLimit')}
                     />
-                  </label>
+                  </div>
                 </div>
-                <label class="form-control w-full">
-                  <span class="text-[10px] font-bold uppercase tracking-wider text-base-content/60 mb-1">Host Memory Limit</span>
-                  <input 
-                    type="text" 
-                    class="input input-xs input-bordered w-full font-mono font-bold" 
-                    placeholder="none" 
-                    bind:value={form.hostMemLimit} 
-                    oninput={() => markDirty('hostMemLimit')}
-                  />
-                  <span class="text-[10px] text-base-content/40 mt-1">Optional hard limit on physical RAM usage (e.g. 2G or 2048M).</span>
-                </label>
+
+                <!-- Row 4 -->
+                <div class="flex justify-between items-center p-4">
+                  <div class="flex flex-col gap-1">
+                    <span class="text-sm font-bold">Resident Memory Limit</span>
+                    <span class="text-xs text-base-content/60">Hard cap on physical RAM usage (e.g. 2G).</span>
+                  </div>
+                  <div class="w-56 flex-shrink-0">
+                    <input 
+                      type="text" 
+                      class="input input-sm input-bordered w-full font-mono font-bold" 
+                      placeholder="none" 
+                      bind:value={form.residentLimit} 
+                      oninput={() => markDirty('residentLimit')}
+                    />
+                  </div>
+                </div>
               </div>
             {/if}
 
             {#if activeInspectorTab === 'perf'}
-              <div class="space-y-3 animate-fade-in">
-                <label class="form-control w-full">
-                  <span class="text-[10px] font-bold uppercase tracking-wider text-base-content/60 mb-1">Writeback Backing Device</span>
-                  <Select 
-                    bind:value={form.backingDev}
-                    onchange={() => markDirty('backingDev')}
-                    items={blockDeviceItems}
-                  />
-                </label>
+              <div class="animate-fade-in bg-base-200/30 border border-base-content/10 rounded-xl overflow-hidden">
+                <!-- Row 1 -->
+                <div class="flex justify-between items-center p-4 border-b border-base-content/10">
+                  <div class="flex flex-col gap-1">
+                    <span class="text-sm font-bold">Writeback Backing Device</span>
+                    <span class="text-xs text-base-content/60">Physical partition for incompressible pages.</span>
+                  </div>
+                  <div class="w-56 flex-shrink-0">
+                    <Select 
+                      bind:value={form.backingDev}
+                      onchange={() => markDirty('backingDev')}
+                      items={blockDeviceItems}
+                    />
+                  </div>
+                </div>
                 
-                <label class="form-control w-full">
-                  <span class="text-[10px] font-bold uppercase tracking-wider text-base-content/60 mb-1">Swap Priority</span>
-                  <div class="join w-full">
-                    <button 
-                      type="button"
-                      class="btn btn-xs join-item btn-neutral font-black" 
-                      onclick={() => { form.swapPriority = Math.max(-1000, Number(form.swapPriority || 0) - 10); markDirty('swapPriority'); }}
-                    >
-                      -
-                    </button>
+                <!-- Row 2 -->
+                <div class="flex justify-between items-center p-4 border-b border-base-content/10">
+                  <div class="flex flex-col gap-1">
+                    <span class="text-sm font-bold">Swap Priority</span>
+                    <span class="text-xs text-base-content/60">Kernel swap priority (-1000 to 1000).</span>
+                  </div>
+                  <div class="w-56 flex-shrink-0">
+                    <div class="join w-full">
+                      <button 
+                        type="button"
+                        class="btn btn-sm join-item btn-neutral font-black" 
+                        onclick={() => { form.swapPriority = Math.max(-1000, Number(form.swapPriority || 0) - 10); markDirty('swapPriority'); }}
+                      >
+                        -
+                      </button>
+                      <input 
+                        type="text" 
+                        class="input input-sm join-item input-bordered w-full text-center font-mono font-bold" 
+                        bind:value={form.swapPriority} 
+                        oninput={() => markDirty('swapPriority')}
+                      />
+                      <button 
+                        type="button"
+                        class="btn btn-sm join-item btn-neutral font-black" 
+                        onclick={() => { form.swapPriority = Math.min(1000, Number(form.swapPriority || 0) + 10); markDirty('swapPriority'); }}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Row 3 -->
+                <div class="flex justify-between items-center p-4">
+                  <div class="flex flex-col gap-1">
+                    <span class="text-sm font-bold">Extra Options</span>
+                    <span class="text-xs text-base-content/60">Additional zram-generator options.</span>
+                  </div>
+                  <div class="w-56 flex-shrink-0">
                     <input 
                       type="text" 
-                      class="input input-xs join-item input-bordered w-full text-center font-mono font-bold" 
-                      bind:value={form.swapPriority} 
-                      oninput={() => markDirty('swapPriority')}
+                      class="input input-sm input-bordered w-full font-mono font-bold" 
+                      placeholder="e.g. writeback-disable" 
+                      bind:value={form.options} 
+                      oninput={() => markDirty('options')}
                     />
-                    <button 
-                      type="button"
-                      class="btn btn-xs join-item btn-neutral font-black" 
-                      onclick={() => { form.swapPriority = Math.min(1000, Number(form.swapPriority || 0) + 10); markDirty('swapPriority'); }}
-                    >
-                      +
-                    </button>
                   </div>
-                </label>
+                </div>
               </div>
             {/if}
 
             {#if activeInspectorTab === 'mount'}
-              <div class="space-y-3 animate-fade-in">
-                <label class="form-control w-full">
-                  <span class="text-[10px] font-bold uppercase tracking-wider text-base-content/60 mb-1">Filesystem Type</span>
-                  <Select 
-                    bind:value={form.fsType}
-                    onchange={() => markDirty('fsType')}
-                    items={[
-                      { value: 'swap', label: 'swap (Default)' },
-                      { value: 'ext4', label: 'ext4' },
-                      { value: 'ext2', label: 'ext2' },
-                      { value: 'tmpfs', label: 'tmpfs' }
-                    ]}
-                  />
-                </label>
-                {#if form.fsType && form.fsType !== 'swap'}
-                  <label class="form-control w-full">
-                    <span class="text-[10px] font-bold uppercase tracking-wider text-base-content/60 mb-1">Mount Point</span>
-                    <input 
-                      type="text" 
-                      class="input input-xs input-bordered w-full font-mono font-bold" 
-                      placeholder="e.g. /tmp" 
-                      bind:value={form.mountPoint} 
-                      oninput={() => markDirty('mountPoint')}
+              <div class="animate-fade-in bg-base-200/30 border border-base-content/10 rounded-xl overflow-hidden">
+                <!-- Row 1 -->
+                <div class="flex justify-between items-center p-4 border-b border-base-content/10">
+                  <div class="flex flex-col gap-1">
+                    <span class="text-sm font-bold">Filesystem Type</span>
+                    <span class="text-xs text-base-content/60">Format device as swap or standard FS.</span>
+                  </div>
+                  <div class="w-56 flex-shrink-0">
+                    <Select 
+                      bind:value={form.fsType}
+                      onchange={() => markDirty('fsType')}
+                      items={[
+                        { value: 'swap', label: 'swap (Default)' },
+                        { value: 'ext4', label: 'ext4' },
+                        { value: 'ext2', label: 'ext2' },
+                        { value: 'tmpfs', label: 'tmpfs' }
+                      ]}
                     />
-                  </label>
+                  </div>
+                </div>
+                
+                {#if form.fsType && form.fsType !== 'swap'}
+                  <!-- Row 2 -->
+                  <div class="flex justify-between items-center p-4">
+                    <div class="flex flex-col gap-1">
+                      <span class="text-sm font-bold">Mount Point</span>
+                      <span class="text-xs text-base-content/60">Absolute path to mount the filesystem.</span>
+                    </div>
+                    <div class="w-56 flex-shrink-0">
+                      <input 
+                        type="text" 
+                        class="input input-sm input-bordered w-full font-mono font-bold" 
+                        placeholder="e.g. /tmp" 
+                        bind:value={form.mountPoint} 
+                        oninput={() => markDirty('mountPoint')}
+                      />
+                    </div>
+                  </div>
                 {/if}
               </div>
             {/if}
           </div>
 
           <!-- Sticky Action Footer -->
-          <div class="p-3 border-t border-base-content/5 flex justify-between items-center gap-4 bg-base-200/10">
-            <div class="flex items-center gap-1.5">
-              <button 
-                class="btn btn-2xs btn-outline font-bold" 
-                onclick={openSaveAsProfile}
-                title="Save current parameters to a profile"
-              >
-                Save as Profile
-              </button>
-              
-              <!-- Apply mode selector -->
-              <div class="join border border-base-content/10 rounded-lg overflow-hidden">
+          <div class="absolute bottom-0 left-0 right-0 p-4 border-t border-base-content/10 flex justify-between items-center gap-4 bg-base-100/90 backdrop-blur z-10">
+            <button 
+              class="btn btn-sm btn-ghost text-error hover:bg-error/20 font-bold" 
+              onclick={() => revertChanges(selectedDeviceName!)}
+              disabled={!isCurrentDeviceDirty()}
+            >
+              <RefreshCw size={14} /> Revert
+            </button>
+            
+            <div class="flex items-center gap-0 rounded-lg overflow-hidden border border-base-content/10">
+              <div class="flex bg-base-300 text-xs font-bold">
                 <button 
                   type="button" 
-                  class="btn btn-3xs join-item font-semibold px-2 {applyMode === 'both' ? 'btn-neutral' : 'btn-ghost'}" 
+                  class="px-3 py-1.5 transition-colors {applyMode === 'both' ? 'bg-base-content text-base-100' : 'hover:bg-base-200'}" 
                   onclick={() => applyMode = 'both'}
                 >
                   Both
                 </button>
                 <button 
                   type="button" 
-                  class="btn btn-3xs join-item font-semibold px-2 {applyMode === 'live' ? 'btn-neutral' : 'btn-ghost'}" 
+                  class="px-3 py-1.5 transition-colors {applyMode === 'live' ? 'bg-base-content text-base-100' : 'hover:bg-base-200'}" 
                   onclick={() => applyMode = 'live'}
                 >
                   Live
                 </button>
                 <button 
                   type="button" 
-                  class="btn btn-3xs join-item font-semibold px-2 {applyMode === 'persist' ? 'btn-neutral' : 'btn-ghost'}" 
+                  class="px-3 py-1.5 transition-colors {applyMode === 'persist' ? 'bg-base-content text-base-100' : 'hover:bg-base-200'}" 
                   onclick={() => applyMode = 'persist'}
                 >
                   Persist
                 </button>
               </div>
+              <button 
+                class="px-4 py-1.5 font-bold flex items-center gap-2 bg-primary text-primary-content hover:bg-primary/90 transition-colors"
+                onclick={() => handleApplyOrSave(selectedDeviceName!)}
+              >
+                <Save size={14} /> Apply Changes
+              </button>
             </div>
-            
-            <button 
-              class="btn btn-xs btn-primary font-bold gap-1 px-4"
-              onclick={() => handleApplyOrSave(selectedDeviceName!)}
-            >
-              <Save size={12} /> Apply Changes
-            </button>
           </div>
         </div>
       {:else}
@@ -697,159 +808,10 @@
 
   </div>
 </div>
-
-<!-- Profiles Manager Bits UI Dialog -->
-<Dialog.Root bind:open={isProfilesModalOpen}>
-  <Dialog.Portal>
-    <Dialog.Overlay class="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm" />
-    <Dialog.Content class="fixed inset-0 m-auto z-50 h-[460px] w-full max-w-2xl rounded-2xl border border-base-content/10 bg-base-100 shadow-xl flex flex-col overflow-hidden text-left outline-none">
-      
-      <!-- Dialog Header -->
-      <div class="p-4 border-b border-base-content/5 flex justify-between items-center bg-base-200/10">
-        <Dialog.Title class="text-sm font-black flex items-center gap-2">
-          <Settings size={18} class="text-primary" /> Profiles Manager
-        </Dialog.Title>
-        <Dialog.Close class="btn btn-xs btn-ghost btn-circle">
-          <X size={14} />
-        </Dialog.Close>
-      </div>
-
-      <!-- Segmented Tab selector -->
-      <div class="tabs tabs-box bg-base-200/30 p-1 flex rounded-none border-b border-base-content/5">
-        <button 
-          class="tab flex-1 text-xs font-bold py-1.5 {activeProfileTab === 'list' ? 'tab-active' : ''}" 
-          onclick={() => activeProfileTab = 'list'}
-        >
-          Available Profiles
-        </button>
-        <button 
-          class="tab flex-1 text-xs font-bold py-1.5 {activeProfileTab === 'create' ? 'tab-active' : ''}" 
-          onclick={() => activeProfileTab = 'create'}
-        >
-          Create Profile
-        </button>
-      </div>
-
-      <!-- Content Area -->
-      <div class="flex-1 overflow-y-auto p-4 scrollbar-thin">
-        {#if activeProfileTab === 'list'}
-          <div class="space-y-2.5 max-h-full">
-            {#each Object.entries(availableProfiles) as [name, data]}
-              {@const isSystem = ['Desktop / Gaming (Recommended)', 'Server (Conservative)'].includes(name)}
-              {@const Icon = getProfileIcon(name, (data as any).icon)}
-              <div class="bg-base-200/40 border border-base-content/5 rounded-xl p-3 flex justify-between items-center gap-4">
-                <div class="flex items-center gap-3">
-                  <div class="p-2 bg-base-100 border border-base-content/5 rounded-lg">
-                    <Icon size={18} class="text-primary" />
-                  </div>
-                  <div class="flex flex-col">
-                    <div class="flex items-center gap-2">
-                      <span class="font-bold text-xs">{name}</span>
-                      {#if isSystem}
-                        <span class="badge badge-[8px] badge-neutral font-bold uppercase py-0.5 px-1">System</span>
-                      {:else}
-                        <span class="badge badge-[8px] badge-primary badge-outline font-bold uppercase py-0.5 px-1">Custom</span>
-                      {/if}
-                    </div>
-                    {#if (data as any).description}
-                      <p class="text-[10px] text-base-content/60 mt-0.5">{(data as any).description}</p>
-                    {/if}
-                    <div class="flex gap-3 mt-1 text-[10px] font-mono text-base-content/40 font-bold uppercase">
-                      <span>Size: <span class="text-base-content">{(data as any)['zram-size']}</span></span>
-                      <span>Algo: <span class="text-base-content">{(data as any)['compression-algorithm']}</span></span>
-                      <span>Priority: <span class="text-base-content">{(data as any)['swap-priority']}</span></span>
-                    </div>
-                  </div>
-                </div>
-
-                {#if !isSystem}
-                  <button 
-                    class="btn btn-xs btn-error btn-square btn-soft" 
-                    onclick={() => deleteProfile(name)}
-                    title="Delete Profile"
-                  >
-                    <Trash2 size={13} />
-                  </button>
-                {/if}
-              </div>
-            {:else}
-              <div class="py-12 flex flex-col items-center justify-center text-center w-full">
-                <Info size={24} class="mb-2 opacity-50 text-base-content/40" />
-                <p class="text-xs text-base-content/60 font-semibold">No profiles registered.</p>
-              </div>
-            {/each}
-          </div>
-        {/if}
-
-        {#if activeProfileTab === 'create'}
-          <div class="space-y-4 max-h-full">
-            <div class="grid grid-cols-2 gap-4">
-              <label class="form-control">
-                <span class="text-[10px] font-bold uppercase tracking-wider text-base-content/60 mb-1">Profile Name</span>
-                <input type="text" class="input input-xs input-bordered w-full font-bold" placeholder="e.g. Gaming Profile" bind:value={customProfileName} />
-              </label>
-
-              <label class="form-control">
-                <span class="text-[10px] font-bold uppercase tracking-wider text-base-content/60 mb-1">Description</span>
-                <input type="text" class="input input-xs input-bordered w-full font-bold" placeholder="High priority zram configurations" bind:value={customProfileDesc} />
-              </label>
-            </div>
-
-            <div class="grid grid-cols-3 gap-4">
-              <label class="form-control">
-                <span class="text-[10px] font-bold uppercase tracking-wider text-base-content/60 mb-1">Algorithm</span>
-                <Select 
-                  bind:value={customProfileAlgo}
-                  items={[
-                    { value: 'zstd', label: 'zstd' },
-                    { value: 'lz4', label: 'lz4' },
-                    { value: 'lzo', label: 'lzo' },
-                    { value: 'deflate', label: 'deflate' }
-                  ]}
-                />
-              </label>
-
-              <label class="form-control">
-                <span class="text-[10px] font-bold uppercase tracking-wider text-base-content/60 mb-1">Size</span>
-                <input type="text" class="input input-xs input-bordered w-full font-mono font-bold" placeholder="e.g. 2G" bind:value={customProfileSize} />
-              </label>
-
-              <label class="form-control">
-                <span class="text-[10px] font-bold uppercase tracking-wider text-base-content/60 mb-1">Priority</span>
-                <input type="number" class="input input-xs input-bordered w-full font-mono font-bold" bind:value={customProfileSwapPriority} />
-              </label>
-            </div>
-
-            <!-- Custom Icon Picker -->
-            <div class="flex flex-col gap-2">
-              <span class="text-[10px] font-bold uppercase tracking-wider text-base-content/60">Choose Profile Icon</span>
-              <div class="grid grid-cols-6 gap-2 bg-base-200/30 p-2.5 rounded-xl border border-base-content/5">
-                {#each availableIcons as icon}
-                  {@const IconComp = icon.component}
-                  <button 
-                    type="button" 
-                    class="btn btn-sm btn-ghost p-1 flex flex-col items-center justify-center gap-1 border-2 {customProfileIcon === icon.name ? 'border-primary bg-primary/5' : 'border-transparent'}"
-                    onclick={() => customProfileIcon = icon.name}
-                    title={icon.label}
-                  >
-                    <IconComp size={16} class={customProfileIcon === icon.name ? 'text-primary' : 'text-base-content/60'} />
-                  </button>
-                {/each}
-              </div>
-            </div>
-
-            <button 
-              class="btn btn-sm btn-primary w-full mt-2 font-bold"
-              onclick={createCustomProfile}
-              disabled={loadingProfileDialog}
-            >
-              {#if loadingProfileDialog}<Loader2 class="animate-spin" size={14} />{/if}
-              Save Profile Template
-            </button>
-          </div>
-        {/if}
-      </div>
-
-    </Dialog.Content>
-  </Dialog.Portal>
-</Dialog.Root>
+<ZramProfilesModal 
+  bind:isProfilesModalOpen
+  {availableProfiles}
+  {addCustomProfile}
+  {deleteProfile}
+  {showToast}
+/>

@@ -34,8 +34,35 @@ def pkexec_daemon_reload() -> tuple[bool, str | None]:
     except Exception as e:
         return False, f"Z-Manager Orchestration Error: {e}"
 
+def pkexec_read_journal(unit: str, count: int) -> tuple[bool, str | None]:
+    """Read journal logs via pkexec."""
+    if is_root():
+        try:
+            cmd = [
+                "journalctl",
+                "--system",
+                "-u",
+                unit,
+                "-n",
+                str(count),
+                "--no-pager",
+                "--output=short-iso",
+            ]
+            res = run(cmd, check=True)
+            return True, res.out
+        except SystemCommandError as e:
+            return False, str(e)
+    
+    helper_path = _get_helper_path()
+    try:
+        proc = subprocess.run(["pkexec", helper_path, "read-journal", unit, str(count)], capture_output=True, text=True)
+        if proc.returncode == 0:
+            return True, proc.stdout
+        return False, proc.stderr.strip() or f"pkexec read-journal failed (code {proc.returncode})"
+    except Exception as e:
+        return False, f"Z-Manager Orchestration Error: {e}"
+
 def pkexec_systemctl(action: str, service: str) -> tuple[bool, str | None]:
-    """systemctl action via pkexec."""
     if is_root():
         try:
             cmd = ["systemctl", action]

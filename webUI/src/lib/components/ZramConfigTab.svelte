@@ -110,6 +110,8 @@
     }
   }
 
+  let advancedViewRef: any = $state();
+
   async function handleSimpleToggle() {
     if (!simpleZramEnabled) {
       simpleLoading = true;
@@ -517,6 +519,20 @@
       </div>
     </div>
     <div class="flex items-center gap-4">
+      {#if isAdvancedMode}
+        <button 
+          class="btn btn-xs btn-outline font-bold gap-1.5"
+          onclick={() => advancedViewRef?.openProfilesManager()}
+        >
+          <Settings size={14} /> Profiles Manager
+        </button>
+        <button 
+          class="btn btn-xs btn-primary font-bold gap-1.5"
+          onclick={() => advancedViewRef?.addZramDevice()}
+        >
+          <Plus size={14} /> Add ZRAM Device
+        </button>
+      {/if}
       <button 
         class="btn btn-xs btn-outline btn-primary font-bold gap-1.5"
         onclick={viewConfigFile}
@@ -664,6 +680,7 @@
     </div>
   {:else}
     <ZramAdvancedView
+      bind:this={advancedViewRef}
       {devices}
       {availableProfiles}
       {blockDevices}

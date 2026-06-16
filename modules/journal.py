@@ -82,6 +82,8 @@ def list_zram_logs(
         buf.reverse()
         return buf
     except (ImportError, Exception):
+        from core.utils.privilege import pkexec_read_journal
+        
         cmd = [
             "journalctl",
             "--system",
@@ -93,8 +95,18 @@ def list_zram_logs(
             "--output=short-iso",
         ]
         jr = run(cmd, check=False)
-        lines = [ln for ln in jr.out.splitlines() if ln.strip()]
+        
+        # If journalctl fails, try with pkexec
+        out_text = jr.out
+        if jr.code != 0:
+            success, pkexec_out = pkexec_read_journal(unit, count)
+            if success and pkexec_out:
+                out_text = pkexec_out
+            else:
+                # If both fail, return empty or error message
+                out_text = pkexec_out or jr.err or ""
 
+        lines = [ln for ln in out_text.splitlines() if ln.strip()]
         records: List[JournalRecord] = []
         for ln in lines:
             ts: datetime = datetime.now().astimezone()
